@@ -1,0 +1,165 @@
+.login-shell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 1.25rem;
+    background: #f8fafc;
+}
+
+.login-panel {
+    width: 100%;
+    max-width: 28rem;
+}
+
+.login-logo {
+    display: flex;
+    justify-content: center;
+}
+
+.login-logo img {
+    width: auto;
+    height: 4.5rem;
+    object-fit: contain;
+}
+
+.login-card {
+    width: 100%;
+    border: 1px solid #e2e8f0;
+    border-radius: 1.125rem;
+    background: #ffffff;
+    padding: 1.75rem 1.5rem 1.5rem;
+    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.06);
+}
+
+.login-card h1 {
+    margin: 1.25rem 0 0;
+    color: #0f172a;
+    font-size: clamp(1.8rem, 4vw, 2.4rem);
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+    text-align: center;
+}
+
+.login-lead {
+    margin: 0.7rem 0 0;
+    color: #64748b;
+    line-height: 1.6;
+    text-align: center;
+}
+
+.form-alert {
+    margin-top: 1rem;
+    border: 1px solid #fecaca;
+    border-radius: 0.9rem;
+    background: #fef2f2;
+    padding: 0.8rem 0.9rem;
+    color: #991b1b;
+}
+
+.field {
+    display: grid;
+    gap: 0.4rem;
+    margin-top: 1rem;
+}
+
+.field label,
+.remember {
+    color: #0f172a;
+    font-weight: 600;
+}
+
+.field input {
+    width: 100%;
+    min-height: 3rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.85rem;
+    background: #ffffff;
+    padding: 0.7rem 0.9rem;
+    color: #0f172a;
+    font: inherit;
+}
+
+.field input:focus {
+    border-color: #2563eb;
+    outline: 3px solid rgba(37, 99, 235, 0.25);
+    outline-offset: 1px;
+}
+
+.password-field {
+    position: relative;
+}
+
+.password-field input {
+    padding-right: 2.85rem;
+}
+
+.password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 0.35rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0.65rem;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+    transform: translateY(-50%);
+}
+
+.password-toggle:hover {
+    color: #123b70;
+    background: #f1f5f9;
+}
+
+.password-toggle:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.35);
+    outline-offset: 1px;
+}
+
+.remember {
+    font: inherit;
+}
+
+.field-error {
+    margin: 0;
+    color: #b91c1c;
+    font-size: 0.92rem;
+}
+
+.remember {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin-top: 1rem;
+    font-weight: 500;
+}
+
+.login-submit {
+    width: 100%;
+    margin-top: 1.15rem;
+}
+
+.back-home {
+    display: inline-block;
+    margin-top: 1rem;
+    color: #2563eb;
+    font-weight: 600;
+}
+
+@media (min-width: 960px) {
+    .login-card {
+        padding: 2rem 2rem 1.75rem;
+    }
+
+    .login-logo img {
+        height: 5rem;
+    }
+}

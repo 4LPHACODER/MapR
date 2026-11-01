@@ -1,0 +1,81 @@
+.workspace-shell {
+    min-height: 100vh;
+    background:
+        radial-gradient(700px 280px at 10% 0%, #eff6ff, rgba(239, 246, 255, 0) 70%),
+        #ffffff;
+}
+
+.workspace-bar,
+.workspace-card {
+    margin-inline: auto;
+    width: min(100% - 2.5rem, 52rem);
+}
+
+.workspace-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 0;
+}
+
+.workspace-bar img {
+    width: auto;
+    height: 4rem;
+}
+
+.workspace-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 1.4rem;
+    background: #ffffff;
+    padding: 1.4rem;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.05);
+}
+
+.workspace-kicker {
+    margin: 0;
+    color: #2563eb;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.workspace-card h1 {
+    margin: 0.4rem 0 0;
+    color: #0f172a;
+    font-size: clamp(1.8rem, 3vw, 2.4rem);
+    letter-spacing: -0.03em;
+}
+
+.workspace-note {
+    margin: 0.8rem 0 0;
+    color: #64748b;
+    line-height: 1.6;
+}
+
+.workspace-meta {
+    display: grid;
+    gap: 0.8rem;
+    margin: 1.3rem 0 0;
+}
+
+.workspace-meta div {
+    border: 1px solid #e2e8f0;
+    border-radius: 0.9rem;
+    padding: 0.8rem 0.9rem;
+}
+
+.workspace-meta dt {
+    color: #64748b;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.workspace-meta dd {
+    margin: 0.25rem 0 0;
+    color: #0f172a;
+    font-weight: 600;
+}

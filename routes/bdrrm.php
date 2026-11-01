@@ -1,0 +1,57 @@
+<?php
+
+use App\Http\Controllers\Bdrrm\BarangayReportController;
+use App\Http\Controllers\Bdrrm\PageController;
+use App\Http\Controllers\Bdrrm\PhotoController;
+use App\Http\Controllers\Shared\ContextController;
+use App\Http\Controllers\Shared\HouseholdController;
+use App\Http\Controllers\Shared\ImportedDocumentController;
+use App\Http\Controllers\Shared\MapDataController;
+use App\Http\Controllers\Shared\PhotoController as SharedPhotoController;
+use App\Http\Controllers\Shared\PreviewController;
+use App\Http\Controllers\Shared\ReportFlagController;
+use App\Http\Controllers\Shared\SignatureAssetController;
+use Illuminate\Support\Facades\Route;
+
+Route::middleware(['auth', 'role:bdrrm', 'field.scope'])->prefix('bdrrm')->group(function () {
+    Route::get('api/summary', [ContextController::class, 'summary']);
+    Route::get('api/navigation', [ContextController::class, 'navigation']);
+    Route::get('api/profile', [ContextController::class, 'profile']);
+    Route::get('api/signature', [SignatureAssetController::class, 'show']);
+    Route::post('api/signature', [SignatureAssetController::class, 'store']);
+    Route::delete('api/signature', [SignatureAssetController::class, 'destroy']);
+    Route::get('api/signature/preview', [SignatureAssetController::class, 'preview']);
+    Route::get('api/documents/{importKey}', [ImportedDocumentController::class, 'download']);
+    Route::get('api/incidents', [ContextController::class, 'incidents']);
+    Route::get('api/submissions', [BarangayReportController::class, 'submissions']);
+    Route::post('api/submissions/{submission}/return', [BarangayReportController::class, 'returnSubmission']);
+    Route::post('api/submissions/{submission}/accept', [BarangayReportController::class, 'acceptSubmission']);
+    Route::get('api/submissions/{submission}', [BarangayReportController::class, 'showSubmission']);
+    Route::get('api/buildings', [BarangayReportController::class, 'buildings']);
+    Route::get('api/reports', [BarangayReportController::class, 'index']);
+    Route::post('api/reports', [BarangayReportController::class, 'store']);
+    Route::get('api/reports/{report}', [BarangayReportController::class, 'show']);
+    Route::patch('api/reports/{report}', [BarangayReportController::class, 'update']);
+    Route::post('api/reports/{report}/sign', [BarangayReportController::class, 'sign']);
+    Route::post('api/reports/{report}/submit', [BarangayReportController::class, 'submit']);
+    Route::post('api/reports/{report}/photos', [PhotoController::class, 'store']);
+    Route::delete('api/reports/{report}/photos/{photo}', [PhotoController::class, 'destroy']);
+    Route::get('api/reports/{report}/photos/{photo}', [SharedPhotoController::class, 'show']);
+    Route::post('api/reports/{report}/classify', [PhotoController::class, 'classify']);
+    Route::get('reports/{report}/preview', [PreviewController::class, 'barangay']);
+    Route::post('api/flags', [ReportFlagController::class, 'store']);
+    Route::post('api/flags/{flag}/resolve', [ReportFlagController::class, 'resolve']);
+    Route::get('api/map/boundaries', [MapDataController::class, 'boundaries']);
+    Route::get('api/map/buildings', [MapDataController::class, 'buildings']);
+    Route::get('api/map/household-locations', [MapDataController::class, 'householdLocations']);
+    Route::get('api/map/households', [MapDataController::class, 'householdMapIndex']);
+    Route::get('api/map/meta', [MapDataController::class, 'meta']);
+    Route::get('api/map/flood', [MapDataController::class, 'flood']);
+    Route::get('api/map/field-damage', [MapDataController::class, 'fieldDamage']);
+    Route::get('api/map/ai-predictions', [MapDataController::class, 'aiPredictions']);
+    Route::get('api/households/search', [HouseholdController::class, 'search']);
+    Route::get('api/households/{household}', [HouseholdController::class, 'show']);
+    Route::get('api/buildings/{building}/households', [HouseholdController::class, 'forBuilding']);
+    Route::get('api/buildings/{building}', [MapDataController::class, 'building']);
+    Route::get('/{any?}', PageController::class)->where('any', '.*')->name('bdrrm.dashboard');
+});
