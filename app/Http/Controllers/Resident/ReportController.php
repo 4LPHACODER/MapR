@@ -70,13 +70,16 @@ class ReportController extends Controller
     {
         $this->reports->rejectForbiddenFields($request);
         $data = $request->validate([
-            'disaster_incident_id' => ['required', 'integer'],
+            'disaster_incident_id' => ['nullable', 'integer'],
+            'reported_incident_type' => ['nullable', 'string', 'max:120'],
             'incident_description' => ['nullable', 'string', 'max:5000'],
             'reported_location' => ['nullable', 'string', 'max:2000'],
             'observed_at' => ['nullable', 'date'],
             'observed_at_approximate' => ['nullable', 'boolean'],
             'latitude' => ['nullable', 'numeric', 'between:4,15'],
             'longitude' => ['nullable', 'numeric', 'between:115,130'],
+            'confirm_affected_building' => ['nullable', 'boolean'],
+            'affected_building_id' => ['nullable', 'integer'],
         ]);
         $id = $this->reports->create($request->user(), $data);
 
@@ -98,12 +101,15 @@ class ReportController extends Controller
         abort_unless($this->policy->update($request->user(), $row), 403);
         $data = $request->validate([
             'disaster_incident_id' => ['sometimes', 'integer'],
+            'reported_incident_type' => ['nullable', 'string', 'max:120'],
             'incident_description' => ['nullable', 'string', 'max:5000'],
             'reported_location' => ['nullable', 'string', 'max:2000'],
             'observed_at' => ['nullable', 'date'],
             'observed_at_approximate' => ['nullable', 'boolean'],
             'latitude' => ['nullable', 'numeric', 'between:4,15'],
             'longitude' => ['nullable', 'numeric', 'between:115,130'],
+            'confirm_affected_building' => ['nullable', 'boolean'],
+            'affected_building_id' => ['nullable', 'integer'],
         ]);
         $this->reports->update($request->user(), $row, $data);
 

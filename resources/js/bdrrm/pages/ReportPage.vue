@@ -1,7 +1,9 @@
 <script setup>
-import { inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import ReviewSignDialog from '../../shared/components/ReviewSignDialog.vue';
+import MapIcon from '../../shared/components/MapIcon.vue';
+import BuildingPicker from '../components/BuildingPicker.vue';
 import ReportWorkspace from '../components/ReportWorkspace.vue';
 
 const apiBase = inject('apiBase');
@@ -11,6 +13,7 @@ const record = ref(null);
 const error = ref('');
 const message = ref('');
 const saving = ref(false);
+const leaving = ref(false);
 const form = reactive({
     disaster_incident_id: '',
     barangay_id: '',
@@ -24,6 +27,12 @@ const form = reactive({
     verified_damage_class_id: '',
     verification_notes: '',
 });
+const fieldErrors = reactive({
+    disaster_incident_id: '',
+    barangay_id: '',
+    building_id: '',
+    report_description: '',
+});
 const incidents = ref([]);
 const barangays = ref([]);
 const classes = ref([]);
@@ -32,16 +41,90 @@ const signOpen = ref(false);
 const signMode = ref('verify');
 const saveState = ref('Saved');
 const savedSnapshot = ref('');
+const createBaseline = ref('');
 const editing = ref(false);
 const menuOpen = ref(false);
 const zoom = ref('100%');
 const detailsOpen = ref(false);
+const contextReady = ref(false);
+const buildingChoice = ref(null);
+
+const selectedIncident = computed(() => incidents.value.find((incident) => String(incident.id) === String(form.disaster_incident_id)));
+const selectedBarangay = computed(() => barangays.value.find((barangay) => String(barangay.id) === String(form.barangay_id)));
+const buildingSummary = computed(() => {
+    if (!buildingChoice.value) return 'Not selected';
+    const place = buildingChoice.value.address || locationLabel(buildingChoice.value.location_status);
+    return `${buildingChoice.value.reference} · ${place}`;
+});
+const createDirty = computed(() => route.meta.kind === 'create' && createBaseline.value !== '' && createBaseline.value !== createSnapshot());
+const backHref = computed(() => {
+    const from = typeof route.query.from === 'string' ? route.query.from : '';
+    if (from.startsWith('/reports/drafts') || from.startsWith('/reports/returned') || from.startsWith('/reports/submitted')) return from;
+    if (record.value?.status === 'returned') return '/reports/returned';
+    if (['review', 'signed', 'submitted', 'finalized'].includes(record.value?.status)) return '/reports/submitted';
+    return '/reports/drafts';
+});
+
+function createSnapshot() {
+    return JSON.stringify({
+        disaster_incident_id: String(form.disaster_incident_id || ''),
+        barangay_id: String(form.barangay_id || ''),
+        building_id: String(form.building_id || ''),
+        report_description: form.report_description || '',
+    });
+}
+
+function markCreateBaseline() {
+    createBaseline.value = createSnapshot();
+}
+
+function locationLabel(status) {
+    if (status === 'verified') return 'Verified';
+    if (status === 'rejected') return 'Rejected';
+    return 'Unverified';
+}
+
+function clearFieldErrors() {
+    fieldErrors.disaster_incident_id = '';
+    fieldErrors.barangay_id = '';
+    fieldErrors.building_id = '';
+    fieldErrors.report_description = '';
+}
+
+function applyFieldErrors(errors, fallback = '') {
+    clearFieldErrors();
+    const source = errors || {};
+    for (const key of Object.keys(fieldErrors)) {
+        const value = source[key];
+        fieldErrors[key] = Array.isArray(value) ? value[0] : (value || '');
+    }
+    if (!Object.values(fieldErrors).some(Boolean) && fallback) {
+        if (fallback.toLowerCase().includes('building')) fieldErrors.building_id = fallback;
+        else fieldErrors.disaster_incident_id = fallback;
+    }
+    const first = ['disaster_incident_id', 'barangay_id', 'building_id', 'report_description'].find((key) => fieldErrors[key]);
+    if (first) document.getElementById(`report-${first}`)?.focus();
+}
+
+function unsaved() {
+    if (saving.value || leaving.value) return false;
+    if (route.meta.kind === 'create') return createDirty.value;
+    return saveState.value === 'Unsaved changes';
+}
 
 async function loadContext() {
-    const summary = await window.axios.get(`${apiBase}/summary`);
-    barangays.value = summary.data.barangays || [];
-    incidents.value = (await window.axios.get(`${apiBase}/incidents`)).data.data || [];
-    profile.value = (await window.axios.get(`${apiBase}/profile`)).data;
+    try {
+        const summary = await window.axios.get(`${apiBase}/summary`);
+        barangays.value = summary.data.barangays || [];
+        incidents.value = (await window.axios.get(`${apiBase}/incidents`)).data.data || [];
+        profile.value = (await window.axios.get(`${apiBase}/profile`)).data;
+        if (route.meta.kind === 'create' && barangays.value.length === 1 && !form.barangay_id) {
+            form.barangay_id = barangays.value[0].id;
+        }
+        if (route.meta.kind === 'create') markCreateBaseline();
+    } finally {
+        contextReady.value = true;
+    }
 }
 
 async function loadRecord() {
@@ -60,6 +143,10 @@ async function loadRecord() {
     savedSnapshot.value = JSON.stringify({ findings: form.findings, description: form.report_description, building_id: form.building_id });
     saveState.value = 'Saved';
     editing.value = false;
+    if (route.query.panel === 'history') detailsOpen.value = true;
+    if (route.query.saved === '1') {
+        message.value = 'Draft saved. Photographs, the checklist, signing, and forwarding are available on this report. Saving a draft does not send it for review.';
+    }
 }
 
 async function keep(action) {
@@ -101,10 +188,29 @@ async function confirmSign(payload) {
 }
 
 async function createReport() {
-    await keep(async () => {
-        const { data } = await window.axios.post(`${apiBase}/reports`, { ...form });
-        router.push(`/reports/${data.data.id}`);
-    });
+    saving.value = true;
+    error.value = '';
+    clearFieldErrors();
+    try {
+        const payload = {
+            disaster_incident_id: form.disaster_incident_id,
+            barangay_id: form.barangay_id,
+            report_description: form.report_description,
+        };
+        if (form.building_id) payload.building_id = form.building_id;
+        const { data } = await window.axios.post(`${apiBase}/reports`, payload);
+        leaving.value = true;
+        await router.push({ path: `/reports/${data.data.id}`, query: { saved: '1' } });
+        leaving.value = false;
+        await loadRecord();
+    } catch (exception) {
+        const errors = exception.response?.data?.errors;
+        const fallback = exception.response?.data?.message || 'The draft was not saved.';
+        applyFieldErrors(errors, errors ? '' : fallback);
+        error.value = errors ? 'Check the highlighted fields and save the draft again.' : fallback;
+    } finally {
+        saving.value = false;
+    }
 }
 
 async function saveDraft() {
@@ -132,7 +238,7 @@ function snapshotNow() {
 }
 
 watch(() => [form.findings, form.report_description, form.building_id], () => {
-    if (!savedSnapshot.value) return;
+    if (!savedSnapshot.value || route.meta.kind === 'create') return;
     saveState.value = snapshotNow() === savedSnapshot.value ? 'Saved' : 'Unsaved changes';
 });
 
@@ -164,11 +270,15 @@ async function resolveFlag(payload) {
 }
 
 function onLeave(event) {
-    if (saveState.value === 'Unsaved changes') {
-        event.preventDefault();
-        event.returnValue = '';
-    }
+    if (!unsaved()) return;
+    event.preventDefault();
+    event.returnValue = '';
 }
+
+onBeforeRouteLeave(() => {
+    if (!unsaved()) return true;
+    return window.confirm('Leave this page? Unsaved changes will be lost.');
+});
 
 onMounted(async () => {
     window.addEventListener('beforeunload', onLeave);
@@ -180,35 +290,93 @@ onMounted(async () => {
     }
 });
 
-onBeforeUnmount(() => window.removeEventListener('beforeunload', onLeave));
+onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', onLeave);
+});
 </script>
 
 <template>
-    <section class="field-report">
-        <p v-if="record?.return_reason" class="cdrrmo-error">Returned for correction: {{ record.return_reason }}</p>
+    <section class="field-report bdrrm-reports">
         <p v-if="error" class="cdrrmo-error" role="alert">{{ error }}</p>
-        <p v-if="message" class="cdrrmo-muted">{{ message }}</p>
+        <p v-if="message" class="report-note" role="status">{{ message }}</p>
 
-        <form v-if="route.meta.kind === 'create'" @submit.prevent="createReport">
-            <label>Incident
-                <select v-model="form.disaster_incident_id" required>
-                    <option value="">Choose an incident</option>
-                    <option v-for="incident in incidents" :key="incident.id" :value="incident.id">{{ incident.incident_name }}</option>
-                </select>
-            </label>
-            <label>Barangay
-                <select v-model="form.barangay_id" required>
-                    <option value="">Choose a barangay</option>
-                    <option v-for="barangay in barangays" :key="barangay.id" :value="barangay.id">{{ barangay.name }}</option>
-                </select>
-            </label>
-            <label>Building reference id
-                <input v-model="form.building_id" inputmode="numeric">
-            </label>
-            <label>Description
-                <textarea v-model="form.report_description" rows="4"></textarea>
-            </label>
-            <button class="mapr-button mapr-button-primary" type="submit" :disabled="saving">Save draft</button>
+        <form v-if="route.meta.kind === 'create'" class="report-composer" @submit.prevent="createReport">
+            <header class="report-page-heading">
+                <div class="report-page-title">
+                    <span class="report-mark"><MapIcon name="file-pen" /></span>
+                    <div>
+                        <h2>Create Barangay Report</h2>
+                        <p>Prepare and save a barangay incident report for review.</p>
+                    </div>
+                </div>
+            </header>
+            <div class="report-composer-grid">
+                <div class="report-section">
+                    <div class="report-section-title">
+                        <h3>Incident and barangay</h3>
+                    </div>
+                    <label>
+                        <span>Incident <span class="required-mark">Required</span></span>
+                        <select id="report-disaster_incident_id" v-model="form.disaster_incident_id" :aria-invalid="Boolean(fieldErrors.disaster_incident_id)">
+                            <option value="">Choose an incident</option>
+                            <option v-for="incident in incidents" :key="incident.id" :value="incident.id">{{ incident.incident_name }}</option>
+                        </select>
+                        <span v-if="fieldErrors.disaster_incident_id" class="report-field-error">{{ fieldErrors.disaster_incident_id }}</span>
+                    </label>
+                    <label v-if="barangays.length > 1">
+                        <span>Barangay <span class="required-mark">Required</span></span>
+                        <select id="report-barangay_id" v-model="form.barangay_id" :aria-invalid="Boolean(fieldErrors.barangay_id)">
+                            <option value="">Choose a barangay</option>
+                            <option v-for="barangay in barangays" :key="barangay.id" :value="barangay.id">{{ barangay.name }}</option>
+                        </select>
+                        <span v-if="fieldErrors.barangay_id" class="report-field-error">{{ fieldErrors.barangay_id }}</span>
+                    </label>
+                    <p v-else-if="!contextReady">Loading the assigned barangay…</p>
+                    <p v-else-if="selectedBarangay">Barangay: {{ selectedBarangay.name }}</p>
+                    <p v-else class="report-field-error">No assigned barangay is available for this account.</p>
+
+                    <h3>Building</h3>
+                    <p class="report-note">Optional for a draft. Search buildings in the selected barangay.</p>
+                    <BuildingPicker
+                        v-model="form.building_id"
+                        :barangay-id="form.barangay_id"
+                        :invalid="Boolean(fieldErrors.building_id)"
+                        :error="fieldErrors.building_id"
+                        @selected="buildingChoice = $event"
+                    />
+
+                    <h3>Description</h3>
+                    <label>
+                        <span>Description</span>
+                        <textarea id="report-report_description" v-model="form.report_description" maxlength="5000" placeholder="Describe the reported incident, observed conditions, and relevant barangay information." :aria-invalid="Boolean(fieldErrors.report_description)"></textarea>
+                        <span class="report-note">{{ form.report_description.length }} / 5000</span>
+                        <span v-if="fieldErrors.report_description" class="report-field-error">{{ fieldErrors.report_description }}</span>
+                    </label>
+                    <div class="report-actions-row">
+                        <button class="report-primary" type="submit" :disabled="saving || !contextReady || !barangays.length">
+                            <MapIcon name="save" /> {{ saving ? 'Saving…' : 'Save Draft' }}
+                        </button>
+                        <router-link class="report-quiet" to="/reports/drafts">Back to Drafts</router-link>
+                    </div>
+                </div>
+                <aside class="report-support report-support-wide">
+                    <h3>This draft</h3>
+                    <p>Incident: {{ selectedIncident?.incident_name || 'Not selected' }}</p>
+                    <p>Barangay: {{ selectedBarangay?.name || 'Not selected' }}</p>
+                    <p>Building: {{ buildingSummary }}</p>
+                    <p>{{ createDirty ? 'Unsaved changes' : 'Not saved yet' }}</p>
+                    <p class="report-note">Save Draft keeps this report in Draft Reports. It does not send it for review.</p>
+                    <p class="report-note">A description is optional until you forward the report. Forwarding also requires one building in this barangay, a photograph, and the barangay captain’s signature. Add those after the draft is saved.</p>
+                </aside>
+            </div>
+            <details class="report-support report-support-narrow">
+                <summary>About this draft</summary>
+                <p>Incident: {{ selectedIncident?.incident_name || 'Not selected' }}</p>
+                <p>Barangay: {{ selectedBarangay?.name || 'Not selected' }}</p>
+                <p>Building: {{ buildingSummary }}</p>
+                <p>{{ createDirty ? 'Unsaved changes' : 'Not saved yet' }}</p>
+                <p class="report-note">Save Draft keeps this report in Draft Reports. It does not send it for review.</p>
+            </details>
         </form>
 
         <ReportWorkspace
@@ -224,6 +392,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onLeave));
             :zoom="zoom"
             :details-open="detailsOpen"
             :menu-open="menuOpen"
+            :back-to="backHref"
             @update:editing="editing = $event"
             @update:zoom="zoom = $event"
             @update:details-open="detailsOpen = $event"

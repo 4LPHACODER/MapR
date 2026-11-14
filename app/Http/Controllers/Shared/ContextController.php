@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Shared;
 use App\Http\Controllers\Controller;
 use App\Services\AssignmentScope;
 use App\Services\ReportWorkflow;
+use App\Services\ResidentReportWorkflow;
 use App\Support\MapSourceLocation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,6 +17,7 @@ class ContextController extends Controller
     public function __construct(
         private readonly AssignmentScope $scope,
         private readonly ReportWorkflow $workflow,
+        private readonly ResidentReportWorkflow $residentReports,
     ) {}
 
     public function summary(Request $request): JsonResponse
@@ -43,6 +45,35 @@ class ContextController extends Controller
                 'buildings' => $this->countIn('buildings', 'barangay_id', $ids),
                 'households' => $this->countIn('households', 'barangay_id', $ids),
             ],
+        ]);
+    }
+
+    public function bdrrmHome(Request $request): JsonResponse
+    {
+        $assigned = $this->scope->ids($request);
+        $ids = $assigned;
+        $selected = null;
+        if ($request->filled('barangay_id')) {
+            $selected = $request->integer('barangay_id');
+            $ids = in_array($selected, $assigned, true) ? [$selected] : [];
+        }
+        $barangays = $assigned === []
+            ? collect()
+            : DB::table('barangays')->whereIn('id', $assigned)->orderBy('barangay_name')->get(['id', 'barangay_name']);
+
+        return response()->json([
+            'officer_name' => $request->user()->display_name,
+            'barangays' => $barangays->map(fn ($row) => [
+                'id' => (int) $row->id,
+                'name' => $row->barangay_name,
+            ])->values(),
+            'selected_barangay_id' => $selected,
+            'cards' => $this->bdrrmCards($ids),
+            'resident_status' => $this->residentReports->statusBreakdown($ids),
+            'resident_months' => $this->residentReports->submissionMonths($ids),
+            'attention' => $this->bdrrmAttention($ids),
+            'recent_submissions' => $this->residentReports->recentSubmissionRows($ids),
+            'activity' => $this->bdrrmActivity($ids),
         ]);
     }
 
@@ -87,8 +118,10 @@ class ContextController extends Controller
             ]);
         }
 
+        $isSupervisor = in_array($user->role?->code, ['rdana_admin_officer', 'rdana_city_assessor'], true);
+
         return response()->json([
-            'barangay_reports' => $this->assignedReviewCount($user->id, $ids),
+            'barangay_reports' => $this->barangayQueueOutstandingCount($user->id, $ids, $isSupervisor),
             'drafts' => $this->assessmentCount($user->id, ['draft']),
             'returned' => $this->assessmentCount($user->id, ['returned']),
             'submitted' => $this->assessmentCount($user->id, ['submitted']),
@@ -178,6 +211,121 @@ class ContextController extends Controller
         ]);
     }
 
+    private function bdrrmAttention(array $ids): array
+    {
+        $items = $this->residentReports->pendingAttentionRows($ids);
+        if ($ids === [] || ! Schema::hasTable('barangay_reports')) {
+            return $items;
+        }
+        $returnedColumns = ['id', 'report_reference'];
+        if (Schema::hasColumn('barangay_reports', 'return_reason')) {
+            $returnedColumns[] = 'return_reason';
+        }
+        $returned = DB::table('barangay_reports')
+            ->whereIn('barangay_id', $ids)
+            ->where('report_status', 'returned')
+            ->orderByDesc('updated_at')
+            ->orderByDesc('id')
+            ->limit(2)
+            ->get($returnedColumns);
+        foreach ($returned as $row) {
+            $reason = trim((string) ($row->return_reason ?? ''));
+            $items[] = [
+                'id' => (int) $row->id,
+                'reference' => $row->report_reference,
+                'kind' => 'barangay',
+                'type' => 'Returned barangay report',
+                'detail' => $reason !== '' ? $reason : 'Updates required before this report can continue.',
+                'action' => 'Revise',
+                'path' => '/reports/'.$row->id,
+            ];
+        }
+        $draft = DB::table('barangay_reports')
+            ->whereIn('barangay_id', $ids)
+            ->where('report_status', 'draft')
+            ->orderByDesc('updated_at')
+            ->orderByDesc('id')
+            ->first(['id', 'report_reference']);
+        if ($draft !== null) {
+            $items[] = [
+                'id' => (int) $draft->id,
+                'reference' => $draft->report_reference,
+                'kind' => 'barangay-draft',
+                'type' => 'Barangay draft',
+                'detail' => 'The most recently updated draft.',
+                'action' => 'Continue',
+                'path' => '/reports/'.$draft->id,
+            ];
+        }
+
+        return $items;
+    }
+
+    private function bdrrmActivity(array $ids): array
+    {
+        if ($ids === [] || ! Schema::hasTable('activity_events')) {
+            return [];
+        }
+        $wanted = [
+            'resident_report_submitted',
+            'resident_report_returned',
+            'resident_report_accepted',
+            'barangay_report_submitted',
+            'barangay_report_returned',
+        ];
+        $events = collect();
+        if (Schema::hasTable('resident_incident_reports')) {
+            $events = $events->concat(DB::table('activity_events as events')
+                ->join('resident_incident_reports as reports', 'reports.id', '=', 'events.subject_id')
+                ->where('events.subject_type', 'resident_incident_report')
+                ->whereIn('events.action_type', $wanted)
+                ->whereIn('reports.barangay_id', $ids)
+                ->orderByDesc('events.created_at')
+                ->limit(5)
+                ->get([
+                    'events.id',
+                    'events.action_type',
+                    'events.summary',
+                    'events.created_at',
+                    'reports.id as report_id',
+                    'reports.report_reference',
+                ])->map(fn ($row) => [
+                    'id' => (int) $row->id,
+                    'action' => $row->action_type,
+                    'summary' => $row->summary,
+                    'reference' => $row->report_reference,
+                    'at' => $row->created_at,
+                    'path' => '/submissions/'.$row->report_id,
+                ]));
+        }
+        if (Schema::hasTable('barangay_reports')) {
+            $events = $events->concat(DB::table('activity_events as events')
+                ->join('barangay_reports as reports', 'reports.id', '=', 'events.subject_id')
+                ->where('events.subject_type', 'barangay_report')
+                ->whereIn('events.action_type', $wanted)
+                ->whereIn('reports.barangay_id', $ids)
+                ->orderByDesc('events.created_at')
+                ->limit(5)
+                ->get([
+                    'events.id',
+                    'events.action_type',
+                    'events.summary',
+                    'events.created_at',
+                    'reports.id as report_id',
+                    'reports.report_reference',
+                ])->map(fn ($row) => [
+                    'id' => (int) $row->id,
+                    'action' => $row->action_type,
+                    'summary' => $row->summary,
+                    'reference' => $row->report_reference,
+                    'at' => $row->created_at,
+                    'path' => '/reports/'.$row->report_id,
+                ]));
+        }
+
+        return $events->sortByDesc('at')->unique('id')->take(5)->values()->all();
+    }
+
     private function bdrrmCards(array $ids): array
     {
         return [
@@ -190,12 +338,91 @@ class ContextController extends Controller
 
     private function assessorCards(int $userId, array $ids, ?Request $request = null): array
     {
+        $user = $request?->user();
+        $code = $user?->role?->code;
+        $isSupervisor = in_array($code, ['rdana_admin_officer', 'rdana_city_assessor'], true);
+        $outstanding = $this->barangayQueueOutstandingCount($userId, $ids, $isSupervisor, $request);
+
         return [
-            ['key' => 'review', 'label' => 'Barangay reports awaiting review', 'count' => $this->assignedReviewCount($userId, $ids, $request)],
+            ['key' => 'review', 'label' => 'Barangay Reports', 'count' => $outstanding],
             ['key' => 'drafts', 'label' => 'Field assessments in draft', 'count' => $this->assessmentCount($userId, ['draft'], $request)],
             ['key' => 'returned', 'label' => 'Returned for correction', 'count' => $this->assessmentCount($userId, ['returned'], $request)],
             ['key' => 'submitted', 'label' => 'Submitted field assessments', 'count' => $this->assessmentCount($userId, ['submitted'], $request)],
         ];
+    }
+
+    private function barangayQueueOutstandingCount(int $userId, array $ids, bool $isSupervisor, ?Request $request = null): int
+    {
+        if (! Schema::hasTable('barangay_reports')) {
+            return 0;
+        }
+
+        $query = DB::table('barangay_reports as reports')
+            ->where('reports.report_status', 'review');
+        if ($ids !== []) {
+            $query->whereIn('reports.barangay_id', $ids);
+        } elseif (! Schema::hasTable('field_assessments')) {
+            return 0;
+        }
+
+        if (! $isSupervisor && Schema::hasTable('report_assignments')) {
+            $query->where(function ($inner) use ($userId) {
+                $inner->whereExists(function ($assigned) use ($userId) {
+                    $assigned->selectRaw('1')
+                        ->from('report_assignments')
+                        ->whereColumn('report_assignments.subject_id', 'reports.id')
+                        ->where('report_assignments.subject_type', 'barangay_report')
+                        ->where('report_assignments.assignment_role', 'rdana')
+                        ->where('report_assignments.is_active', true)
+                        ->where('report_assignments.assignee_user_id', $userId);
+                });
+                if (Schema::hasTable('field_assessments')) {
+                    $inner->orWhereExists(function ($fa) use ($userId) {
+                        $fa->selectRaw('1')
+                            ->from('field_assessments')
+                            ->whereColumn('field_assessments.barangay_report_id', 'reports.id')
+                            ->where('field_assessments.assigned_assessor_id', $userId);
+                    });
+                }
+            });
+            // Pending only for ordinary assessors
+            $query->whereNotExists(function ($done) {
+                $done->selectRaw('1')
+                    ->from('field_assessments')
+                    ->whereColumn('field_assessments.barangay_report_id', 'reports.id')
+                    ->where(function ($status) {
+                        $status->whereIn('field_assessments.assessment_status', ['signed', 'submitted']);
+                        if (Schema::hasColumn('field_assessments', 'workflow_stage')) {
+                            $status->orWhereIn('field_assessments.workflow_stage', [
+                                'pending_admin_verification',
+                                'pending_city_assessor',
+                                'forwarded_cdrrmo',
+                            ]);
+                        }
+                    });
+            });
+        } else {
+            // Supervisors: unassigned + pending (not completed)
+            $query->whereNotExists(function ($done) {
+                $done->selectRaw('1')
+                    ->from('field_assessments')
+                    ->whereColumn('field_assessments.barangay_report_id', 'reports.id')
+                    ->where(function ($status) {
+                        $status->whereIn('field_assessments.assessment_status', ['signed', 'submitted']);
+                        if (Schema::hasColumn('field_assessments', 'workflow_stage')) {
+                            $status->orWhereIn('field_assessments.workflow_stage', [
+                                'pending_admin_verification',
+                                'pending_city_assessor',
+                                'forwarded_cdrrmo',
+                            ]);
+                        }
+                    });
+            });
+        }
+
+        $this->applyPeriod($query, $request, Schema::hasColumn('barangay_reports', 'submitted_at') ? 'reports.submitted_at' : 'reports.updated_at');
+
+        return (int) $query->count('reports.id');
     }
 
     private function reportCount(array $ids, array $statuses): int
@@ -209,14 +436,7 @@ class ContextController extends Controller
 
     private function submissionCount(array $ids): int
     {
-        if ($ids === [] || ! Schema::hasTable('resident_incident_reports')) {
-            return 0;
-        }
-
-        return DB::table('resident_incident_reports')
-            ->whereIn('barangay_id', $ids)
-            ->where('report_status', '!=', 'draft')
-            ->count();
+        return $this->residentReports->pendingCount($ids);
     }
 
     private function assessmentCount(int $userId, array $statuses, ?Request $request = null): int
@@ -583,6 +803,18 @@ class ContextController extends Controller
 
     private function signingCapacity($user): ?string
     {
+        $user->loadMissing('role');
+        $role = $user->role?->code;
+        if ($role === 'rdana') {
+            return 'assessed_by';
+        }
+        if ($role === 'rdana_admin_officer') {
+            return 'verified_by';
+        }
+        if ($role === 'rdana_city_assessor') {
+            return 'approved_by';
+        }
+
         $email = strtolower((string) $user->email);
         if ($email === 'mark.merillo@mapr.test') {
             return 'verified_by';

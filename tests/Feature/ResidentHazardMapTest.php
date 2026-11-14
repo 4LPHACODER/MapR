@@ -321,6 +321,46 @@ class ResidentHazardMapTest extends TestCase
         ])->assertStatus(422)->assertJsonPath('message', 'No listed evacuation sites are in the selected area.');
     }
 
+    public function test_a_bdrrm_officer_can_read_the_hazard_catalog_and_listed_sites(): void
+    {
+        Storage::disk('local')->put('resident-hazards/catalog.json', json_encode([
+            'note' => ResidentHazardCatalog::NOTE,
+            'initial_bounds' => [[126.1, 9.0], [126.3, 9.2]],
+            'layers' => [[
+                'id' => 'flood',
+                'name' => 'Flood',
+                'legend' => [['value' => 'LF', 'label' => 'LF', 'color' => '#bfdbfe']],
+            ]],
+        ]));
+        Storage::disk('local')->put('resident-hazards/flood.geojson', '{"type":"FeatureCollection","features":[]}');
+        Storage::disk('local')->put('resident-hazards/critical-points.geojson', json_encode([
+            'type' => 'FeatureCollection',
+            'features' => [
+                $this->point('evacuation-1', 'Barangay Dagocdoc Covered Court', 'evacuation', [126.2, 9.07]),
+                $this->point('health-1', 'Brgy Dagocdoc Health Station', 'health-station', [126.21, 9.08]),
+            ],
+        ]));
+        $officer = $this->user('bdrrm', 'Hazard Officer');
+
+        $this->actingAs($officer)->getJson('/bdrrm/api/map/hazards')
+            ->assertOk()
+            ->assertJsonPath('layers.0.id', 'flood')
+            ->assertJsonPath('coverage', 'Tandag City');
+        $this->actingAs($officer)->get('/bdrrm/api/map/hazards/flood')
+            ->assertOk()
+            ->assertHeader('content-type', 'application/geo+json');
+
+        $sites = $this->actingAs($officer)->getJson('/bdrrm/api/map/evacuation-sites')->assertOk();
+        $sites->assertJsonPath('features.0.properties.name', 'Barangay Dagocdoc Covered Court');
+        $sites->assertJsonPath('features.0.properties.availability', EvacuationSites::AVAILABILITY);
+        $this->assertStringNotContainsString('Brgy Dagocdoc Health Station', $sites->getContent());
+        $this->assertCount(1, $sites->json('features'));
+
+        $this->actingAs($this->user('resident', 'Hazard Resident'))
+            ->getJson('/bdrrm/api/map/hazards')
+            ->assertForbidden();
+    }
+
     public function test_hazard_routes_reject_guests_and_other_roles(): void
     {
         $this->getJson('/resident/api/map/hazards')->assertUnauthorized();

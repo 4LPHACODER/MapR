@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Registry\Barangay;
 use App\Models\Registry\Building;
 use App\Services\AssignmentScope;
+use App\Services\BuildingRegistry;
+use App\Services\ResidentReportWorkflow;
 use App\Support\DamageClassColor;
 use App\Support\MapLocationEligibility;
 use App\Support\MapSourceLocation;
@@ -16,6 +18,17 @@ use Illuminate\Support\Facades\Schema;
 
 class MapDataController extends Controller
 {
+    public function residentSubmissions(Request $request, ResidentReportWorkflow $residentReports): JsonResponse
+    {
+        $ids = $this->scopedBarangayIds($request) ?? [];
+        if ($request->filled('barangay_id')) {
+            $requested = $request->integer('barangay_id');
+            $ids = in_array($requested, $ids, true) ? [$requested] : [];
+        }
+
+        return response()->json($residentReports->submissionFeatures($ids));
+    }
+
     public function boundaries(Request $request): JsonResponse
     {
         $query = Barangay::query()->whereNotNull('boundary_polygon');
@@ -309,16 +322,21 @@ class MapDataController extends Controller
         return response()->json(['type' => 'FeatureCollection', 'features' => $features]);
     }
 
-    public function building(Request $request, Building $building): JsonResponse
+    public function building(Request $request, Building $building, BuildingRegistry $registry): JsonResponse
     {
-        app(AssignmentScope::class)->assertBarangay($request, (int) $building->barangay_id);
+        $registry->denyPersonnel($request->user());
+        $scope = app(AssignmentScope::class);
+        $scope->assertBarangay($request, (int) $building->barangay_id);
         $building->load('barangay');
         $householdCount = $building->households()->where('household_status', 'active')->count();
-        $residentCount = (int) DB::table('residents')
-            ->join('households', 'households.id', '=', 'residents.household_id')
-            ->where('households.building_id', $building->id)
-            ->where('residents.residency_status', 'active')
-            ->count();
+        $residentCount = 0;
+        if (Schema::hasTable('residents') && Schema::hasTable('households')) {
+            $residentCount = (int) DB::table('residents')
+                ->join('households', 'households.id', '=', 'residents.household_id')
+                ->where('households.building_id', $building->id)
+                ->where('residents.residency_status', 'active')
+                ->count();
+        }
         $point = DB::getDriverName() === 'mysql'
             ? DB::selectOne('SELECT ST_Longitude(geographic_point) AS lng, ST_Latitude(geographic_point) AS lat FROM buildings WHERE id = ?', [$building->id])
             : null;
@@ -339,6 +357,7 @@ class MapDataController extends Controller
             'longitude' => $mapAvailable ? $lng : null,
             'latitude' => $mapAvailable ? $lat : null,
             'residents_url' => $this->workspacePrefix($request).'/residents?building_id='.$building->id,
+            ...$registry->detail($building, $scope->ids($request), $mapAvailable),
         ]);
     }
 

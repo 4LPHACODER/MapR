@@ -12,7 +12,7 @@ CREATE TABLE `roles` (
   `created_at` TIMESTAMP NULL,
   `updated_at` TIMESTAMP NULL,
   UNIQUE (`code`),
-  CHECK (code IN ('resident','bdrrm','rdana','cdrrmo_admin'))
+  CONSTRAINT roles_code_chk CHECK (code IN ('resident','bdrrm','rdana','cdrrmo_admin','barangay_secretary','barangay_captain','rdana_admin_officer','rdana_city_assessor'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 SQL); }
  public function down(): void { Schema::dropIfExists('roles'); }

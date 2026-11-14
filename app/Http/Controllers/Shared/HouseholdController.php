@@ -6,11 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\Registry\Building;
 use App\Models\Registry\Household;
 use App\Services\AssignmentScope;
+use App\Services\BuildingRegistry;
 use App\Support\MapSourceLocation;
 use App\Support\SourceName;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class HouseholdController extends Controller
 {
@@ -95,12 +97,17 @@ class HouseholdController extends Controller
 
     public function forBuilding(Request $request, Building $building): JsonResponse
     {
+        app(BuildingRegistry::class)->denyPersonnel($request->user());
         app(AssignmentScope::class)->assertBarangay($request, (int) $building->barangay_id);
+        $columns = ['id', 'household_reference'];
+        if (Schema::hasColumn('households', 'source_household_size')) {
+            $columns[] = 'source_household_size';
+        }
         $rows = Household::query()
             ->where('building_id', $building->id)
             ->where('household_status', 'active')
             ->orderBy('household_reference')
-            ->get(['id', 'household_reference']);
+            ->get($columns);
 
         return response()->json(['data' => $rows]);
     }

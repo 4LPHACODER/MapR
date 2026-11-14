@@ -5,16 +5,27 @@ import mapboxgl from 'mapbox-gl';
 import MapboxDraw from '@mapbox/mapbox-gl-draw';
 import AreaSummaryPanel from './AreaSummaryPanel.vue';
 import MapIcon from './MapIcon.vue';
+import MapLayersPanel from '../../bdrrm/components/MapLayersPanel.vue';
+import MapActionsMenu from '../../bdrrm/components/MapActionsMenu.vue';
+import { createCommunityLayers } from '../../bdrrm/communityLayers.js';
 
 const props = defineProps({
     embedded: { type: Boolean, default: false },
     apiBase: { type: String, default: '/cdrrmo/api' },
     allowImpact: { type: Boolean, default: true },
     scopeBarangays: { type: Boolean, default: false },
+    residentSubmissions: { type: Boolean, default: false },
+    preview: { type: Boolean, default: false },
+    barangayId: { type: [String, Number], default: '' },
+    communityLayers: { type: Boolean, default: false },
+    actionMenu: { type: Boolean, default: false },
+    singleClear: { type: Boolean, default: false },
+    hideHouseholds: { type: Boolean, default: false },
 });
 
 const route = useRoute();
 const router = useRouter();
+const emit = defineEmits(['select-report']);
 const mapboxToken = inject('mapboxToken');
 const mapboxStyle = inject('mapboxStyle');
 const reportContext = inject('reportContext');
@@ -25,14 +36,29 @@ const loading = ref(true);
 const mapMeta = ref({ eligible_marker_count: 0, message_if_zero: '' });
 const barangays = ref([]);
 const incidents = ref([]);
-const selectedBarangay = ref(route.query.barangay_id || '');
+const selectedBarangay = ref(props.preview ? String(props.barangayId || '') : (route.query.barangay_id || ''));
 const selectedIncident = ref(route.query.incident_id || '');
 const searchRef = ref(route.query.search || '');
 const searchOpen = ref(false);
 const layersOpen = ref(false);
-const layers = ref({ boundaries: true, households: true, flood: false, fieldDamage: false, aiPredictions: false });
+const layers = ref({
+    boundaries: true,
+    households: !props.preview && !props.hideHouseholds,
+    flood: false,
+    fieldDamage: false,
+    aiPredictions: false,
+    residentSubmissions: props.residentSubmissions,
+});
+const previewEmpty = ref(false);
+let previewShouldFit = true;
+let previewBoundaries = null;
+let previewPoints = [];
 const incidentLinkedOnly = ref(false);
 const mapStyleMode = ref('satellite');
+const community = props.communityLayers ? createCommunityLayers(props.apiBase || '/bdrrm/api') : null;
+const communityOpen = ref(false);
+const actionsOpen = ref(false);
+let residentPointFeatures = [];
 const householdFeatures = ref([]);
 
 const selection = reactive({
@@ -45,6 +71,9 @@ const selection = reactive({
     building: null,
     buildingHouseholds: [],
     outsideArea: false,
+    report: null,
+    reportChoices: [],
+    reportCoordinates: null,
 });
 
 const mapMissing = computed(() => !mapboxToken);
@@ -67,6 +96,7 @@ const styleUrls = {
 
 let map;
 let draw;
+let residentPopup = null;
 let layersReady = false;
 let detailRequest = 0;
 let layerRequest = 0;
@@ -143,6 +173,36 @@ function boundsFromGeoJson(geojson) {
     return [[minLng, minLat], [maxLng, maxLat]];
 }
 
+function boundsFromCoords(coords) {
+    if (!coords.length) return null;
+    let minLng = coords[0][0];
+    let maxLng = coords[0][0];
+    let minLat = coords[0][1];
+    let maxLat = coords[0][1];
+    for (const [lng, lat] of coords) {
+        minLng = Math.min(minLng, lng);
+        maxLng = Math.max(maxLng, lng);
+        minLat = Math.min(minLat, lat);
+        maxLat = Math.max(maxLat, lat);
+    }
+    return [[minLng, minLat], [maxLng, maxLat]];
+}
+
+function fitPreviewView() {
+    if (!props.preview || !map || !previewShouldFit) return;
+    const bounds = boundsFromGeoJson(previewBoundaries) || boundsFromCoords(previewPoints);
+    if (bounds) {
+        const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400;
+        map.fitBounds(bounds, { padding: 36, maxZoom: 15, duration });
+    }
+    previewShouldFit = false;
+}
+
+function resetPreview() {
+    previewShouldFit = true;
+    fitPreviewView();
+}
+
 function pointInRing(lng, lat, ring) {
     if (!Array.isArray(ring) || ring.length < 4 || lng == null || lat == null) return false;
     let inside = false;
@@ -173,6 +233,12 @@ function drawingActive() {
 }
 
 function selectionGeoJson() {
+    if (selection.featureType === 'resident-report' && Array.isArray(selection.reportCoordinates)) {
+        return {
+            type: 'FeatureCollection',
+            features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: selection.reportCoordinates }, properties: {} }],
+        };
+    }
     const householdId = selection.featureType === 'household' ? String(selection.featureId ?? '') : '';
     const buildingId = selection.featureType === 'building' ? String(selection.featureId ?? '') : '';
     const features = householdFeatures.value.filter((feature) => {
@@ -180,6 +246,16 @@ function selectionGeoJson() {
         if (householdId && String(props.household_id) === householdId) return true;
         return buildingId !== '' && String(props.building_id) === buildingId;
     });
+    if (buildingId !== '' && features.length === 0 && selection.building?.longitude != null && selection.building?.latitude != null) {
+        return {
+            type: 'FeatureCollection',
+            features: [{
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [Number(selection.building.longitude), Number(selection.building.latitude)] },
+                properties: {},
+            }],
+        };
+    }
     return { type: 'FeatureCollection', features };
 }
 
@@ -187,7 +263,10 @@ function applyHighlight() {
     if (map?.getSource('selection-highlight')) {
         map.getSource('selection-highlight').setData(selectionGeoJson());
     }
-    if (!map?.getLayer('household-points')) return;
+    if (!map?.getLayer('household-points')) {
+        paintResidentSelection();
+        return;
+    }
     const householdId = selection.featureType === 'household' ? String(selection.featureId ?? '') : '';
     const buildingId = selection.featureType === 'building' ? String(selection.featureId ?? '') : '';
     const clauses = [];
@@ -197,6 +276,18 @@ function applyHighlight() {
     map.setPaintProperty('household-points', 'circle-stroke-color', ['case', selected, '#f59e0b', '#0f172a']);
     map.setPaintProperty('household-points', 'circle-stroke-width', ['case', selected, 4, 1]);
     map.setPaintProperty('household-points', 'circle-radius', ['case', selected, 11, 7]);
+    paintResidentSelection();
+}
+
+function paintResidentSelection() {
+    if (!map?.getLayer('resident-submission-points')) return;
+    const reportId = selection.featureType === 'resident-report' ? String(selection.featureId ?? '') : '';
+    const reportSelected = reportId
+        ? ['==', ['to-string', ['get', 'id']], reportId]
+        : ['==', ['literal', 1], ['literal', 0]];
+    map.setPaintProperty('resident-submission-points', 'circle-stroke-color', ['case', reportSelected, '#f59e0b', '#ffffff']);
+    map.setPaintProperty('resident-submission-points', 'circle-stroke-width', ['case', reportSelected, 4, 2]);
+    map.setPaintProperty('resident-submission-points', 'circle-radius', ['case', reportSelected, 11, 8]);
 }
 
 function featureCoordinates() {
@@ -230,11 +321,100 @@ function clearFeatureSelection() {
     selection.household = null;
     selection.building = null;
     selection.buildingHouseholds = [];
+    selection.report = null;
+    selection.reportChoices = [];
+    selection.reportCoordinates = null;
     selection.loading = false;
     selection.error = '';
     selection.outsideArea = false;
     selection.tab = 'summary';
+    residentPopup?.remove();
+    emit('select-report', null);
     applyHighlight();
+}
+
+function closeCommunitySheet() {
+    if (props.communityLayers && window.innerWidth < 768) communityOpen.value = false;
+}
+
+function rememberResidentPoints(collection) {
+    residentPointFeatures = collection?.features || [];
+    const wanted = route.query.resident_report_id;
+    if (props.preview || wanted == null || wanted === '') return;
+    const feature = residentPointFeatures.find((item) => String(item.properties?.id) === String(wanted));
+    if (!feature?.geometry?.coordinates) return;
+    if (selection.featureType === 'resident-report' && String(selection.featureId) === String(wanted)) return;
+    selectResidentReport(feature.properties || {}, feature.geometry.coordinates);
+}
+
+function keepReportVisible(coordinates) {
+    if (!map || !Array.isArray(coordinates)) return;
+    if (map.getBounds()?.contains(coordinates)) return;
+    const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400;
+    map.easeTo({ center: coordinates, duration });
+}
+
+async function loadLinkedReports(url, requestId) {
+    selection.report = null;
+    selection.reportChoices = [];
+    if (!props.residentSubmissions) return;
+    try {
+        const rows = (await window.axios.get(url)).data?.data || [];
+        if (requestId !== detailRequest) return;
+        selection.reportChoices = rows;
+        selection.report = rows.length === 1 ? rows[0] : null;
+    } catch {
+        if (requestId !== detailRequest) return;
+        selection.reportChoices = [];
+    }
+}
+
+function chooseLinkedReport(id) {
+    selection.report = (selection.reportChoices || []).find((row) => String(row.id) === String(id)) || null;
+    if (selection.report) emit('select-report', selection.report.id);
+}
+
+async function selectResidentReport(properties, coordinates) {
+    const id = Number(properties?.id);
+    if (!Number.isInteger(id)) return;
+    const requestId = ++detailRequest;
+    residentPopup?.remove();
+    selection.featureType = 'resident-report';
+    selection.featureId = id;
+    selection.tab = 'feature';
+    selection.household = null;
+    selection.building = null;
+    selection.buildingHouseholds = [];
+    selection.reportChoices = [];
+    selection.reportCoordinates = coordinates;
+    selection.loading = true;
+    selection.error = '';
+    closeCommunitySheet();
+    selection.report = {
+        id,
+        reference: properties.reference,
+        incident_name: properties.incident_name || null,
+        barangay_name: properties.barangay_name || null,
+        reported_location: properties.reported_location || null,
+        submitted_at: properties.submitted_at || null,
+        status: properties.status,
+        label: properties.label || properties.status,
+        resident_name: null,
+        incident_type: null,
+    };
+    emit('select-report', id);
+    applyHighlight();
+    keepReportVisible(coordinates);
+    try {
+        const data = (await window.axios.get(api(`/submissions/${id}/summary`))).data?.data;
+        if (requestId !== detailRequest) return;
+        if (data) selection.report = data;
+    } catch {
+        if (requestId !== detailRequest) return;
+        selection.error = 'The report summary could not be loaded.';
+    } finally {
+        if (requestId === detailRequest) selection.loading = false;
+    }
 }
 
 function backToBuilding() {
@@ -272,6 +452,8 @@ async function selectHousehold(id, { fromBuilding = false, locate = false } = {}
         selection.household = data;
         refreshOutsideFlag();
         focusFeature(data.longitude, data.latitude, locate);
+        closeCommunitySheet();
+        await loadLinkedReports(api(`/households/${id}/resident-reports`), requestId);
     } catch {
         if (requestId !== detailRequest) return;
         selection.error = 'Household details could not be loaded.';
@@ -303,10 +485,18 @@ async function selectBuilding(buildingId, { locate = false } = {}) {
         selection.building = buildingRes.data;
         selection.buildingHouseholds = householdsRes.data?.data || [];
         refreshOutsideFlag();
+        applyHighlight();
         focusFeature(selection.building.longitude, selection.building.latitude, locate);
-    } catch {
+        closeCommunitySheet();
+        await loadLinkedReports(api(`/buildings/${buildingId}/resident-reports`), requestId);
+    } catch (exception) {
         if (requestId !== detailRequest) return;
-        selection.error = 'Building details could not be loaded.';
+        const status = exception?.response?.status;
+        selection.error = status === 403
+            ? 'That record is outside your assignment.'
+            : status === 404
+                ? 'This building record is unavailable.'
+                : 'Building details could not be loaded.';
     } finally {
         if (requestId === detailRequest) selection.loading = false;
     }
@@ -344,6 +534,24 @@ function onPointerLeave() {
     if (map) map.getCanvas().style.cursor = '';
 }
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+    }[char]));
+}
+
+function onResidentLayerClick(event) {
+    const feature = event.features?.[0];
+    const coordinates = feature?.geometry?.coordinates;
+    const id = Number(feature?.properties?.id);
+    if (!map || !coordinates || !Number.isInteger(id)) return;
+    selectResidentReport(feature.properties || {}, coordinates);
+}
+
 function bindLayerClicks() {
     if (!map) return;
     map.off('click', 'household-points', onHouseholdLayerClick);
@@ -358,6 +566,14 @@ function bindLayerClicks() {
     map.on('mouseleave', 'household-points', onPointerLeave);
     map.on('mouseenter', 'household-clusters', onPointerEnter);
     map.on('mouseleave', 'household-clusters', onPointerLeave);
+    if (map.getLayer('resident-submission-points')) {
+        map.off('click', 'resident-submission-points', onResidentLayerClick);
+        map.off('mouseenter', 'resident-submission-points', onPointerEnter);
+        map.off('mouseleave', 'resident-submission-points', onPointerLeave);
+        map.on('click', 'resident-submission-points', onResidentLayerClick);
+        map.on('mouseenter', 'resident-submission-points', onPointerEnter);
+        map.on('mouseleave', 'resident-submission-points', onPointerLeave);
+    }
 }
 
 function ensureMapLayers() {
@@ -382,6 +598,15 @@ function ensureMapLayers() {
         filter: ['!', ['has', 'point_count']],
         paint: { 'circle-color': '#0d9488', 'circle-stroke-color': '#0f172a', 'circle-stroke-width': 1, 'circle-radius': 7 },
     });
+    if (props.residentSubmissions) {
+        map.addSource('resident-submissions', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        map.addLayer({
+            id: 'resident-submission-points',
+            type: 'circle',
+            source: 'resident-submissions',
+            paint: { 'circle-color': '#1e3a8a', 'circle-radius': 8, 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 },
+        });
+    }
     map.addSource('selection-highlight', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({
         id: 'selection-highlight',
@@ -399,7 +624,7 @@ function ensureMapLayers() {
 }
 
 function reconcileSelection(features) {
-    if (!selection.featureId) return;
+    if (!selection.featureId || selection.featureType === 'resident-report') return;
     const stillThere = features.some((feature) => {
         const props = feature.properties || {};
         if (selection.featureType === 'household') return String(props.household_id) === String(selection.featureId);
@@ -421,6 +646,26 @@ function maybeSelectSearchResult(features) {
     selectHousehold(props.household_id, { locate: true });
 }
 
+async function refreshPreview(requestId) {
+    const boundaries = await fetchJson(api(`/map/boundaries`));
+    let points = { type: 'FeatureCollection', features: [] };
+    try {
+        points = await fetchJson(api(`/map/resident-submissions`));
+    } catch {
+        points = { type: 'FeatureCollection', features: [] };
+    }
+    if (requestId !== layerRequest) return;
+    setSource('boundaries', boundaries);
+    setSource('resident-submissions', points);
+    previewBoundaries = boundaries;
+    previewPoints = (points.features || [])
+        .filter((feature) => feature.geometry?.type === 'Point' && Array.isArray(feature.geometry?.coordinates))
+        .map((feature) => feature.geometry.coordinates);
+    previewEmpty.value = previewPoints.length === 0;
+    syncLayerVisibility();
+    fitPreviewView();
+}
+
 async function refreshLayers() {
     if (!map) return;
     const requestId = ++layerRequest;
@@ -428,6 +673,11 @@ async function refreshLayers() {
     error.value = '';
     try {
         ensureMapLayers();
+        if (community) community.bind(map);
+        if (props.preview) {
+            await refreshPreview(requestId);
+            return;
+        }
         mapMeta.value = (await window.axios.get(api(`/map/meta`))).data;
         const [boundaries, households] = await Promise.all([
             fetchJson(api(`/map/boundaries`)),
@@ -441,15 +691,26 @@ async function refreshLayers() {
         searchOpen.value = !!searchRef.value.trim() && householdFeatures.value.length > 1;
         reconcileSelection(householdFeatures.value);
         maybeSelectSearchResult(householdFeatures.value);
-        if (!currentFeature() && !selection.featureId) {
+        if (!currentFeature() && !selection.featureId && !reportedFocus()) {
             const bounds = boundsFromGeoJson(boundaries);
             if (bounds) map.fitBounds(bounds, { padding: 48, maxZoom: 14 });
         }
         if (layers.value.flood) setSource('flood', await fetchJson(api(`/map/flood`)));
         if (layers.value.fieldDamage) setSource('field-damage', await fetchJson(api(`/map/field-damage`)));
         if (layers.value.aiPredictions) setSource('ai-predictions', await fetchJson(api(`/map/ai-predictions`)));
+        if (props.residentSubmissions && layers.value.residentSubmissions) {
+            try {
+                const points = await fetchJson(api(`/map/resident-submissions`));
+                setSource('resident-submissions', points);
+                rememberResidentPoints(points);
+            } catch {
+                setSource('resident-submissions', { type: 'FeatureCollection', features: [] });
+                rememberResidentPoints({ features: [] });
+            }
+        }
         applyHighlight();
         syncLayerVisibility();
+        focusReportedQuery();
     } catch {
         if (requestId === layerRequest) {
             error.value = 'Map layers could not be loaded from the authorized API.';
@@ -557,11 +818,33 @@ function chooseSearchFeature(feature) {
     selectHousehold(props.household_id, { locate: true });
 }
 
+function reportedFocus() {
+    if (!props.residentSubmissions) return null;
+    const lng = Number(route.query.lng);
+    const lat = Number(route.query.lat);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat) || lng < -180 || lng > 180 || lat < -90 || lat > 90) return null;
+    return [lng, lat];
+}
+
+function focusReportedQuery() {
+    const point = reportedFocus();
+    if (!map || !point) return;
+    const wide = window.innerWidth >= 960;
+    map.easeTo({
+        center: point,
+        zoom: Math.max(map.getZoom(), 16),
+        padding: wide
+            ? { top: 56, right: 72, bottom: 56, left: 48 }
+            : { top: 56, right: 48, bottom: 72, left: 24 },
+    });
+}
+
 function layerIdFor(key) {
     if (key === 'households') return 'household-points';
     if (key === 'flood') return 'flood-fill';
     if (key === 'fieldDamage') return 'field-damage-points';
     if (key === 'aiPredictions') return 'ai-prediction-points';
+    if (key === 'residentSubmissions') return 'resident-submission-points';
     return 'boundary-line';
 }
 
@@ -581,6 +864,7 @@ function syncLayerVisibility() {
     toggleLayer('flood', layers.value.flood);
     toggleLayer('fieldDamage', layers.value.fieldDamage);
     toggleLayer('aiPredictions', layers.value.aiPredictions);
+    toggleLayer('residentSubmissions', layers.value.residentSubmissions);
 }
 
 function startDraw() {
@@ -612,8 +896,20 @@ async function selectBarangayBoundary() {
     refreshOutsideFlag();
 }
 
+function runMapAction(command) {
+    if (command === 'draw') startDraw();
+    else if (command === 'edit' && hasPolygon.value) editDraw();
+    else if (command === 'clear-area' && hasPolygon.value) clearPolygon();
+    else if (command === 'fit' && hasPolygon.value) fitToSelection();
+    else if (command === 'registry') layersOpen.value = !layersOpen.value;
+    else if (command === 'map-layers') communityOpen.value = !communityOpen.value;
+    else if (command === 'reset') resetStudyArea();
+    else if (command === 'filters') clearFilters();
+}
+
 function onKeydown(event) {
     if (event.key !== 'Escape') return;
+    if (actionsOpen.value) return;
     if (searchOpen.value) {
         searchOpen.value = false;
         return;
@@ -626,12 +922,14 @@ function onKeydown(event) {
 }
 
 onMounted(async () => {
-    const summaryRes = await window.axios.get(api(`/summary`));
-    barangays.value = summaryRes.data.barangays;
-    try {
-        incidents.value = (await window.axios.get(api(`/incidents`))).data.data || [];
-    } catch {
-        incidents.value = [];
+    if (!props.preview) {
+        const summaryRes = await window.axios.get(api(`/summary`));
+        barangays.value = summaryRes.data.barangays;
+        try {
+            incidents.value = (await window.axios.get(api(`/incidents`))).data.data || [];
+        } catch {
+            incidents.value = [];
+        }
     }
 
     window.addEventListener('keydown', onKeydown);
@@ -649,19 +947,27 @@ onMounted(async () => {
         center: [126.17, 9.08],
         zoom: 12,
     });
-    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-    map.addControl(new mapboxgl.ScaleControl({ maxWidth: 120 }), 'bottom-left');
-    map.addControl(new mapboxgl.FullscreenControl(), 'top-right');
-    draw = new MapboxDraw({ displayControlsDefault: false });
-    map.addControl(draw);
-    map.on('draw.create', onDrawChange);
-    map.on('draw.update', onDrawChange);
-    map.on('draw.delete', onDrawChange);
+    if (props.preview) {
+        map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+    } else {
+        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        map.addControl(new mapboxgl.ScaleControl({ maxWidth: 120 }), 'bottom-left');
+        map.addControl(new mapboxgl.FullscreenControl(), 'top-right');
+        draw = new MapboxDraw({ displayControlsDefault: false });
+        map.addControl(draw);
+        map.on('draw.create', onDrawChange);
+        map.on('draw.update', onDrawChange);
+        map.on('draw.delete', onDrawChange);
+    }
     map.on('load', async () => {
         await refreshLayers();
+        if (community) community.load();
+        if (props.preview) return;
         if (selectedBarangay.value) await selectBarangayBoundary();
         if (route.query.focus === 'residents') {
             await focusResidentSelection();
+        } else if (route.query.building_id) {
+            await selectBuilding(route.query.building_id, { locate: true });
         } else if (route.query.household_id) {
             await selectHousehold(route.query.household_id, { locate: true });
         }
@@ -671,10 +977,16 @@ onMounted(async () => {
     if (mapEl.value) resizeObserver.observe(mapEl.value);
 });
 
+watch(() => props.barangayId, (value) => {
+    if (!props.preview) return;
+    previewShouldFit = true;
+    selectedBarangay.value = value ? String(value) : '';
+});
 watch(selectedBarangay, async () => {
     const ticket = ++barangayTicket;
+    if (props.preview) previewShouldFit = true;
     await refreshLayers();
-    if (ticket !== barangayTicket) return;
+    if (props.preview || ticket !== barangayTicket) return;
     await selectBarangayBoundary();
 });
 watch(incidentLinkedOnly, () => {
@@ -695,19 +1007,36 @@ watch(layers, () => syncLayerVisibility(), { deep: true });
 watch(() => layers.value.flood, async (on) => { if (on) setSource('flood', await fetchJson(api(`/map/flood`))); });
 watch(() => layers.value.fieldDamage, async (on) => { if (on) setSource('field-damage', await fetchJson(api(`/map/field-damage`))); });
 watch(() => layers.value.aiPredictions, async (on) => { if (on) setSource('ai-predictions', await fetchJson(api(`/map/ai-predictions`))); });
+watch(() => layers.value.residentSubmissions, async (on) => {
+    if (!props.residentSubmissions || !on) return;
+    try {
+        setSource('resident-submissions', await fetchJson(api(`/map/resident-submissions`)));
+    } catch {
+        setSource('resident-submissions', { type: 'FeatureCollection', features: [] });
+    }
+});
+watch(() => [route.query.lng, route.query.lat], () => focusReportedQuery());
+watch(() => route.query.building_id, (buildingId) => {
+    if (!map || props.preview || !buildingId) return;
+    selectBuilding(buildingId, { locate: true });
+});
 watch(() => reportContext.state.coordinates, () => refreshOutsideFlag());
 
 onBeforeUnmount(() => {
     clearTimeout(searchTimer);
     resizeObserver?.disconnect();
     window.removeEventListener('keydown', onKeydown);
+    residentPopup?.remove();
     map?.remove();
 });
 </script>
 
 <template>
-    <div class="map-workspace" :class="{ 'is-embedded': embedded }">
-        <div class="map-toolbar">
+    <div class="map-workspace" :class="{ 'is-embedded': embedded, 'is-preview': preview, 'community-open': communityOpen }">
+        <div v-if="preview" class="map-preview-tools">
+            <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" @click="resetPreview"><MapIcon name="reset" /> Reset view</button>
+        </div>
+        <div v-else class="map-toolbar">
             <div class="map-toolbar-group">
                 <span class="map-toolbar-label">Filters</span>
                 <div class="map-mode-toggle" role="group" aria-label="Basemap">
@@ -745,40 +1074,59 @@ onBeforeUnmount(() => {
                     Incident-linked records only
                 </label>
             </div>
-            <div class="map-toolbar-group">
+            <div v-if="actionMenu" class="map-toolbar-group is-actions">
+                <MapActionsMenu
+                    v-model:open="actionsOpen"
+                    :has-polygon="hasPolygon"
+                    :registry-open="layersOpen"
+                    :map-layers-open="communityOpen"
+                    :has-map-layers="!!community"
+                    @command="runMapAction"
+                />
+            </div>
+            <div v-else class="map-toolbar-group">
                 <span class="map-toolbar-label">Map actions</span>
                 <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" @click="startDraw"><MapIcon name="polygon" /> Draw area</button>
                 <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" :disabled="!hasPolygon" @click="editDraw"><MapIcon name="pencil" /> Edit area</button>
                 <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" :disabled="!hasPolygon" @click="clearPolygon"><MapIcon name="eraser" /> Clear area</button>
                 <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" :disabled="!hasPolygon" @click="fitToSelection"><MapIcon name="focus" /> Fit to area</button>
                 <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" :aria-expanded="layersOpen" @click="layersOpen = !layersOpen"><MapIcon name="layers" /> Layers</button>
+                <button v-if="community" type="button" class="mapr-button mapr-button-secondary map-tool-btn" :aria-expanded="communityOpen" @click="communityOpen = !communityOpen"><MapIcon name="layers" /> Hazard map</button>
                 <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" @click="resetStudyArea"><MapIcon name="reset" /> Reset view</button>
                 <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" @click="clearFilters"><MapIcon name="filter-reset" /> Clear filters</button>
             </div>
         </div>
-        <div v-if="layersOpen" class="cdrrmo-filters layer-panel">
+        <div v-if="!preview && layersOpen" class="cdrrmo-filters layer-panel">
             <label><input v-model="layers.boundaries" type="checkbox"> Barangay boundaries</label>
             <label><input v-model="layers.households" type="checkbox"> Source-recorded households</label>
             <label><input v-model="layers.flood" type="checkbox"> Flood hazard (historical)</label>
             <label><input v-model="layers.fieldDamage" type="checkbox"> Field-verified damage</label>
             <label><input v-model="layers.aiPredictions" type="checkbox"> Preliminary AI classification</label>
+            <label v-if="residentSubmissions"><input v-model="layers.residentSubmissions" type="checkbox"> Resident-reported points (not field verified)</label>
         </div>
         <p v-if="loading">Loading map layers…</p>
-        <p v-if="error" class="cdrrmo-error">{{ error }}</p>
+        <p v-if="error" class="cdrrmo-error">
+            {{ error }}
+            <button v-if="preview" type="button" class="mapr-button mapr-button-secondary map-tool-btn" @click="refreshLayers">Retry</button>
+        </p>
         <div class="map-layout">
             <div class="map-canvas-wrap">
                 <div ref="mapEl" class="map-canvas" :class="{ 'map-canvas-embedded': embedded }" />
-                <div v-if="!loading && (mapMeta.total ?? mapMeta.eligible_marker_count) === 0" class="map-empty-overlay">
+                <MapLayersPanel v-if="community" :community="community" :open="communityOpen" @update:open="communityOpen = $event" />
+                <div v-if="!preview && !loading && (mapMeta.total ?? mapMeta.eligible_marker_count) === 0" class="map-empty-overlay">
                     <p>{{ mapMeta.message_if_zero || mapMeta.message_if_empty || 'No source-recorded household locations are available.' }}</p>
                 </div>
             </div>
             <AreaSummaryPanel
+                v-if="!preview || selection.featureType === 'resident-report'"
+                :resident-reports="residentSubmissions"
                 :summary="summary"
                 :summary-loading="summaryLoading"
                 :has-polygon="hasPolygon"
                 :area-name="areaName"
                 :selection="selection"
                 :show-impact="allowImpact"
+                :single-clear="singleClear"
                 @preview-report="previewReport"
                 @view-records="viewLinkedRecords"
                 @view-households="viewLinkedRecords"
@@ -787,12 +1135,16 @@ onBeforeUnmount(() => {
                 @select-household="(id) => selectHousehold(id, { fromBuilding: true })"
                 @locate="locateSelection"
                 @open-residents="openSelectedResidents"
+                @choose-report="chooseLinkedReport"
                 @set-tab="(tab) => { selection.tab = tab; }"
             />
         </div>
-        <p class="cdrrmo-muted map-legend">
+        <p v-if="preview && !loading && previewEmpty" class="map-preview-empty">No reported locations to display.</p>
+        <p v-if="preview" class="cdrrmo-muted map-legend">Navy circles are reported locations, not field-verified damage.</p>
+        <p v-else class="cdrrmo-muted map-legend">
             Showing {{ mapMeta.returned ?? mapMeta.source_marker_count ?? 0 }} of {{ mapMeta.total ?? mapMeta.source_marker_count ?? 0 }} source-recorded households.
             Teal markers are for browsing. An amber outline marks the selection. Damage colors apply only when an assessment exists for the selected incident.
+            <template v-if="residentSubmissions"> Navy circles are resident-reported locations and are not field verified.</template>
         </p>
     </div>
 </template>

@@ -191,10 +191,15 @@ class ReportIndexController extends Controller
     private function baseQuery(string $type)
     {
         if ($type === 'field') {
-            return DB::query()->from('field_assessments as fa')
+            $field = DB::query()->from('field_assessments as fa')
                 ->join('barangay_reports as br', 'br.id', '=', 'fa.barangay_report_id')
                 ->join('barangays as b', 'b.id', '=', 'br.barangay_id')
-                ->leftJoin('disaster_incidents as i', 'i.id', '=', 'br.disaster_incident_id')
+                ->leftJoin('disaster_incidents as i', 'i.id', '=', 'br.disaster_incident_id');
+            if (Schema::hasColumn('field_assessments', 'workflow_stage')) {
+                $field->where('fa.workflow_stage', 'forwarded_cdrrmo');
+            }
+
+            return $field
                 ->select([
                     'fa.id',
                     'fa.assessment_reference as reference',

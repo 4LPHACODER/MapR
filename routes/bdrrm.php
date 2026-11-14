@@ -1,20 +1,36 @@
 <?php
 
+use App\Http\Controllers\Assessor\ResidentController as AssessorResidentController;
 use App\Http\Controllers\Bdrrm\BarangayReportController;
+use App\Http\Controllers\Bdrrm\BuildingPhotoController;
+use App\Http\Controllers\Resident\HazardMapController;
 use App\Http\Controllers\Bdrrm\PageController;
 use App\Http\Controllers\Bdrrm\PhotoController;
+use App\Http\Controllers\Resident\PhotoController as ResidentPhotoController;
 use App\Http\Controllers\Shared\ContextController;
 use App\Http\Controllers\Shared\HouseholdController;
 use App\Http\Controllers\Shared\ImportedDocumentController;
 use App\Http\Controllers\Shared\MapDataController;
 use App\Http\Controllers\Shared\PhotoController as SharedPhotoController;
 use App\Http\Controllers\Shared\PreviewController;
+use App\Http\Controllers\Shared\ReportAssignmentController;
 use App\Http\Controllers\Shared\ReportFlagController;
 use App\Http\Controllers\Shared\SignatureAssetController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth', 'role:bdrrm', 'field.scope'])->prefix('bdrrm')->group(function () {
+Route::middleware(['auth', 'role:bdrrm'])->prefix('bdrrm')->group(function () {
+    Route::get('api/map/hazards', [HazardMapController::class, 'index']);
+    Route::get('api/map/hazards/{layer}', [HazardMapController::class, 'show']);
+    Route::get('api/map/evacuation-sites', [HazardMapController::class, 'evacuationSites']);
+    Route::post('api/map/nearest-site', [HazardMapController::class, 'nearestSite']);
+    Route::post('api/map/routes', [HazardMapController::class, 'route']);
+    Route::get('api/map/hazard-boundaries', [HazardMapController::class, 'boundaries']);
+    Route::get('api/map/rivers', [HazardMapController::class, 'rivers']);
+});
+
+Route::middleware(['auth', 'role:bdrrm,barangay_secretary,barangay_captain', 'field.scope'])->prefix('bdrrm')->group(function () {
     Route::get('api/summary', [ContextController::class, 'summary']);
+    Route::get('api/dashboard', [ContextController::class, 'bdrrmHome']);
     Route::get('api/navigation', [ContextController::class, 'navigation']);
     Route::get('api/profile', [ContextController::class, 'profile']);
     Route::get('api/signature', [SignatureAssetController::class, 'show']);
@@ -24,10 +40,26 @@ Route::middleware(['auth', 'role:bdrrm', 'field.scope'])->prefix('bdrrm')->group
     Route::get('api/documents/{importKey}', [ImportedDocumentController::class, 'download']);
     Route::get('api/incidents', [ContextController::class, 'incidents']);
     Route::get('api/submissions', [BarangayReportController::class, 'submissions']);
+    Route::get('api/submissions/{report}/photos/{photo}', [ResidentPhotoController::class, 'show']);
     Route::post('api/submissions/{submission}/return', [BarangayReportController::class, 'returnSubmission']);
     Route::post('api/submissions/{submission}/accept', [BarangayReportController::class, 'acceptSubmission']);
+    Route::post('api/submissions/{submission}/start-review', [BarangayReportController::class, 'startReview']);
+    Route::get('api/personnel', [ReportAssignmentController::class, 'personnel']);
+    Route::post('api/submissions/assign', [ReportAssignmentController::class, 'assignSubmissions']);
+    Route::post('api/submissions/{submission}/assign', [ReportAssignmentController::class, 'assignSubmission']);
+    Route::post('api/reports/{report}/endorse', [ReportAssignmentController::class, 'endorse']);
+    Route::post('api/reports/{report}/captain-approve', [ReportAssignmentController::class, 'approve']);
+    Route::get('api/submissions/{submission}/summary', [BarangayReportController::class, 'submissionSummary']);
+    Route::get('api/submissions/{submission}/document', [BarangayReportController::class, 'submissionDocument']);
+    Route::get('api/submissions/{submission}/review-signature', [BarangayReportController::class, 'reviewSignature']);
     Route::get('api/submissions/{submission}', [BarangayReportController::class, 'showSubmission']);
     Route::get('api/buildings', [BarangayReportController::class, 'buildings']);
+    Route::get('api/residents/summary', [AssessorResidentController::class, 'summary']);
+    Route::get('api/residents/map-focus', [AssessorResidentController::class, 'showMapFocus']);
+    Route::post('api/residents/map-focus', [AssessorResidentController::class, 'storeMapFocus']);
+    Route::get('api/residents', [AssessorResidentController::class, 'index']);
+    Route::get('api/residents/{resident}/reports', [AssessorResidentController::class, 'reports']);
+    Route::get('api/residents/{resident}', [AssessorResidentController::class, 'show']);
     Route::get('api/reports', [BarangayReportController::class, 'index']);
     Route::post('api/reports', [BarangayReportController::class, 'store']);
     Route::get('api/reports/{report}', [BarangayReportController::class, 'show']);
@@ -41,6 +73,7 @@ Route::middleware(['auth', 'role:bdrrm', 'field.scope'])->prefix('bdrrm')->group
     Route::get('reports/{report}/preview', [PreviewController::class, 'barangay']);
     Route::post('api/flags', [ReportFlagController::class, 'store']);
     Route::post('api/flags/{flag}/resolve', [ReportFlagController::class, 'resolve']);
+    Route::get('api/map/resident-submissions', [MapDataController::class, 'residentSubmissions']);
     Route::get('api/map/boundaries', [MapDataController::class, 'boundaries']);
     Route::get('api/map/buildings', [MapDataController::class, 'buildings']);
     Route::get('api/map/household-locations', [MapDataController::class, 'householdLocations']);
@@ -50,7 +83,11 @@ Route::middleware(['auth', 'role:bdrrm', 'field.scope'])->prefix('bdrrm')->group
     Route::get('api/map/field-damage', [MapDataController::class, 'fieldDamage']);
     Route::get('api/map/ai-predictions', [MapDataController::class, 'aiPredictions']);
     Route::get('api/households/search', [HouseholdController::class, 'search']);
+    Route::get('api/households/{household}/resident-reports', [BarangayReportController::class, 'householdReports']);
     Route::get('api/households/{household}', [HouseholdController::class, 'show']);
+    Route::get('api/buildings/{building}/photos/{photo}', [BuildingPhotoController::class, 'show']);
+    Route::get('api/buildings/{building}/photos', [BuildingPhotoController::class, 'index']);
+    Route::get('api/buildings/{building}/resident-reports', [BarangayReportController::class, 'buildingReports']);
     Route::get('api/buildings/{building}/households', [HouseholdController::class, 'forBuilding']);
     Route::get('api/buildings/{building}', [MapDataController::class, 'building']);
     Route::get('/{any?}', PageController::class)->where('any', '.*')->name('bdrrm.dashboard');

@@ -87,11 +87,31 @@ function openSign(mode) {
     signOpen.value = true;
 }
 
+function resolveSignMode() {
+    const capacity = profile.value?.signing_capacity;
+    if (capacity === 'assessed_by') return 'submit-assessed';
+    if (capacity === 'verified_by') return 'verify-officer';
+    if (capacity === 'approved_by') return 'forward';
+    return 'verify';
+}
+
 async function confirmSign(payload) {
     const mode = signMode.value;
     signOpen.value = false;
     if (mode === 'barangay') {
         await keep(() => window.axios.post(`${apiBase}/reports/${record.value.id}/sign`, payload));
+        return;
+    }
+    if (mode === 'submit-assessed') {
+        await keep(() => window.axios.post(`${apiBase}/assessments/${record.value.id}/submit-assessed`, payload));
+        return;
+    }
+    if (mode === 'verify-officer') {
+        await keep(() => window.axios.post(`${apiBase}/assessments/${record.value.id}/verify-officer`, payload));
+        return;
+    }
+    if (mode === 'forward') {
+        await keep(() => window.axios.post(`${apiBase}/assessments/${record.value.id}/forward`, payload));
         return;
     }
     if (mode === 'approve') {
@@ -230,8 +250,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onLeave));
             @update:details-open="detailsOpen = $event"
             @update:menu-open="menuOpen = $event"
             @save="keep(() => window.axios.patch(`${apiBase}/assessments/${record.id}/findings`, { findings: form.findings, updated_at: record.updated_at }))"
-            @sign="openSign(profile?.signing_capacity === 'approved_by' ? 'approve' : 'verify')"
-            @submit="keep(() => window.axios.post(`${apiBase}/assessments/${record.id}/submit`, { updated_at: record.updated_at }))"
+            @sign="openSign(resolveSignMode())"
+            @submit="openSign('submit-assessed')"
             @verify="keep(() => window.axios.post(`${apiBase}/assessments/${record.id}/verifications`, { building_id: form.building_id, location_verified: form.location_verified, household_link_verified: form.household_link_verified, verified_damage_class_id: form.verified_damage_class_id, verification_notes: form.verification_notes }))"
             @upload="uploadPhoto"
             @flag="addFlag"
@@ -243,7 +263,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onLeave));
             :reference="record?.reference || ''"
             :name="profile?.name || ''"
             :position="profile?.job_title || profile?.role || ''"
-            :capacity="signMode === 'approve' ? 'approved_by' : (signMode === 'barangay' ? 'barangay_signer' : 'verified_by')"
+            :capacity="signMode === 'forward' || signMode === 'approve' ? 'approved_by' : (signMode === 'submit-assessed' ? 'assessed_by' : (signMode === 'barangay' ? 'barangay_signer' : 'verified_by'))"
             @close="signOpen = false"
             @confirm="confirmSign"
         />

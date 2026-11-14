@@ -30,20 +30,27 @@ const detailsRef = ref(null);
 const summaryRef = ref(null);
 const form = reactive({
     disaster_incident_id: '',
+    incident_text: '',
+    reported_incident_type: '',
     incident_description: '',
     reported_location: '',
     observed_at: '',
     observed_at_approximate: false,
     latitude: null,
     longitude: null,
+    confirm_affected_building: false,
+    affected_building_id: '',
     confirmed: false,
 });
 
 const selectedIncident = computed(() => incidents.value.find((item) => String(item.id) === String(form.disaster_incident_id)) || null);
-const incidentName = computed(() => selectedIncident.value?.name || '');
+watch(selectedIncident, (incident) => {
+    if (incident && !form.incident_text.trim()) form.incident_text = incident.name;
+});
+const incidentName = computed(() => form.incident_text.trim() || selectedIncident.value?.name || '');
 const storageKey = computed(() => (reportId.value ? `mapr-resident-draft-${reportId.value}` : ''));
 const uploading = computed(() => pending.value.some((item) => item.uploading));
-const detailsReady = computed(() => Boolean(form.disaster_incident_id) && form.reported_location.trim() !== '' && form.incident_description.trim() !== '' && form.latitude != null && form.longitude != null);
+const detailsReady = computed(() => form.incident_text.trim() !== '' && form.reported_location.trim() !== '' && form.incident_description.trim() !== '' && form.latitude != null && form.longitude != null);
 const reviewBlockReason = computed(() => {
     if (uploading.value) return 'Wait until the photos finish uploading.';
     if (pending.value.some((item) => item.error)) return 'Remove or retry the photo that failed before continuing.';
@@ -67,6 +74,8 @@ function remember() {
     if (!storageKey.value) return;
     sessionStorage.setItem(storageKey.value, JSON.stringify({
         disaster_incident_id: form.disaster_incident_id,
+        incident_text: form.incident_text,
+        reported_incident_type: form.reported_incident_type,
         incident_description: form.incident_description,
         reported_location: form.reported_location,
         observed_at: form.observed_at,
@@ -91,12 +100,17 @@ function toLocalInput(value) {
 function payload() {
     return {
         disaster_incident_id: form.disaster_incident_id || null,
+        reported_incident_type: form.disaster_incident_id ? null : (form.reported_incident_type.trim() || form.incident_text.trim() || null),
         incident_description: form.incident_description,
         reported_location: form.reported_location,
         observed_at: form.observed_at ? form.observed_at : null,
         observed_at_approximate: Boolean(form.observed_at) && form.observed_at_approximate,
         latitude: form.latitude,
         longitude: form.longitude,
+        confirm_affected_building: Boolean(form.confirm_affected_building),
+        affected_building_id: form.confirm_affected_building && form.affected_building_id
+            ? Number(form.affected_building_id)
+            : null,
     };
 }
 
@@ -105,12 +119,16 @@ function applyReport(report) {
     reportStatus.value = report.status || '';
     returnReason.value = report.return_reason || '';
     form.disaster_incident_id = report.disaster_incident_id || '';
+    form.reported_incident_type = report.reported_incident_type || '';
+    form.incident_text = report.reported_incident_type || incidents.value.find((item) => String(item.id) === String(report.disaster_incident_id))?.name || form.incident_text;
     form.incident_description = report.incident_description || '';
     form.reported_location = report.reported_location || '';
     form.observed_at = toLocalInput(report.observed_at);
     form.observed_at_approximate = Boolean(report.observed_at_approximate);
     form.latitude = report.latitude;
     form.longitude = report.longitude;
+    form.confirm_affected_building = Boolean(report.confirm_affected_building || report.building_id);
+    form.affected_building_id = report.building_id ? String(report.building_id) : '';
     recordedSignature.value = Boolean(report.signature);
     photos.value = report.photos || [];
     restore();
@@ -125,7 +143,7 @@ function clearFieldErrors() {
 
 function validateDetails() {
     clearFieldErrors();
-    if (!form.disaster_incident_id) fieldErrors.incident = 'Choose the incident.';
+    if (!form.incident_text.trim()) fieldErrors.incident = 'Choose or type the incident.';
     if (!form.reported_location.trim()) fieldErrors.location = 'Describe the location.';
     if (!form.incident_description.trim()) fieldErrors.description = 'Describe what happened.';
     if (form.latitude == null || form.longitude == null) fieldErrors.pin = 'Confirm the incident location on the map.';
@@ -147,8 +165,8 @@ function acceptedFile(file) {
 }
 
 async function ensureDraft() {
-    if (!form.disaster_incident_id) {
-        throw new Error('Choose the incident before saving.');
+    if (!form.incident_text.trim()) {
+        throw new Error('Choose or type the incident before saving.');
     }
     if (!reportId.value) {
         const created = await window.axios.post(`${apiBase}/reports`, payload());
@@ -368,6 +386,11 @@ onMounted(async () => {
     incidents.value = incidentResponse.data.data || [];
     if (!route.params.id && !form.reported_location.trim() && profile.value.suggested_location) {
         form.reported_location = profile.value.suggested_location;
+    }
+    const linked = profile.value.linked_buildings || [];
+    if (!route.params.id && linked.length === 1) {
+        form.affected_building_id = String(linked[0].building_id);
+        form.confirm_affected_building = true;
     }
     if (route.params.id) {
         const report = (await window.axios.get(`${apiBase}/reports/${route.params.id}`)).data.data;

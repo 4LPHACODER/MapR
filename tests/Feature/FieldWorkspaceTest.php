@@ -326,7 +326,17 @@ class FieldWorkspaceTest extends TestCase
         ]);
 
         $this->actingAs($officer)->getJson('/bdrrm/api/buildings/'.$foreign)->assertForbidden();
-        $this->actingAs($officer)->getJson('/bdrrm/api/buildings/'.$building)
+        $this->actingAs($officer)->getJson('/bdrrm/api/buildings/'.$building)->assertForbidden();
+        $secretary = $this->user('barangay_secretary', 'Leonida Lagunda');
+        DB::table('user_barangay_assignments')->insert([
+            'assigned_at' => now(),
+            'user_id' => $secretary->id,
+            'barangay_id' => $home,
+            'assigned_by' => $secretary->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->actingAs($secretary)->getJson('/bdrrm/api/buildings/'.$building)
             ->assertOk()
             ->assertJsonPath('reference', DB::table('buildings')->where('id', $building)->value('building_reference'))
             ->assertJsonPath('resident_count', 1);
