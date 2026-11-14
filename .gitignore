@@ -23,3 +23,10 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 /geospatial_data/
+/.codex
+/.claude
+/.agents
+/.ai
+/docs/superpowers/
+TODO.md
+AGENTS.md
