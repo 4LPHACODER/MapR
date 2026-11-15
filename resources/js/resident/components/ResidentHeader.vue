@@ -9,8 +9,11 @@ import { residentAccount } from '../accountState';
 
 defineProps({
     title: { type: String, default: '' },
+    collapsed: { type: Boolean, default: false },
     userName: { type: String, default: '' },
 });
+
+defineEmits(['toggle-collapse']);
 
 const apiBase = inject('apiBase');
 const route = useRoute();
@@ -35,7 +38,22 @@ watch(() => route.fullPath, () => {
 
 <template>
     <header class="resident-header">
-        <h1>{{ title }}</h1>
+        <div class="resident-header-heading">
+            <Button
+                type="button"
+                class="resident-collapse p-0"
+                severity="secondary"
+                text
+                :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+                :aria-expanded="!collapsed"
+                aria-controls="resident-sidebar"
+                :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+                @click="$emit('toggle-collapse')"
+            >
+                <template #icon="{ class: iconClass }"><MapIcon name="panel" :class="iconClass" /></template>
+            </Button>
+            <h1>{{ title }}</h1>
+        </div>
         <div class="resident-header-tools">
             <ResidentReportButton />
             <div class="resident-notify">

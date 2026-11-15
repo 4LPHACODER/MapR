@@ -13,35 +13,37 @@ defineProps({
     csrfToken: { type: String, default: '' },
     collapsed: { type: Boolean, default: false },
 });
-defineEmits(['toggle-collapse']);
 </script>
 
 <template>
-    <aside class="resident-sidebar" :class="{ 'is-collapsed': collapsed }" aria-label="Resident navigation">
+    <aside id="resident-sidebar" class="resident-sidebar" :class="{ 'is-collapsed': collapsed }" aria-label="Resident navigation">
         <div class="resident-brand">
-            <a :href="homeUrl">
+            <a :href="homeUrl" aria-label="MapR Resident home" title="MapR Resident home">
                 <img :src="logoUrl" alt="MapR logo" width="40" height="40">
-                <span class="resident-label">MapR Resident</span>
+                <span class="resident-label resident-brand-copy"><strong>MapR</strong><span>Resident workspace</span></span>
             </a>
-            <Button type="button" class="resident-collapse p-0" severity="secondary" variant="outlined" rounded :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'" @click="$emit('toggle-collapse')">
-                <template #icon="{ class: iconClass }"><MapIcon name="panel" :class="iconClass" /></template>
-            </Button>
         </div>
-        <nav>
-            <router-link to="/" active-class="" exact-active-class="router-link-active"><MapIcon name="dashboard" /><span class="resident-label">Dashboard</span></router-link>
-            <router-link to="/map"><MapIcon name="map" /><span class="resident-label">Map</span></router-link>
-            <router-link to="/report"><MapIcon name="camera" /><span class="resident-label">Report Incident</span></router-link>
-            <router-link to="/reports"><MapIcon name="reports" /><span class="resident-label">My Reports</span></router-link>
-            <router-link to="/profile"><MapIcon name="user" /><span class="resident-label">My Profile</span></router-link>
+        <nav aria-label="Main navigation">
+            <p class="resident-nav-heading resident-label">Workspace</p>
+            <router-link aria-label="Dashboard" title="Dashboard" to="/" active-class="" exact-active-class="router-link-active"><MapIcon name="dashboard" /><span class="resident-label">Dashboard</span></router-link>
+            <router-link aria-label="Map" title="Map" to="/map"><MapIcon name="map" /><span class="resident-label">Map</span></router-link>
+            <router-link aria-label="Report Incident" title="Report Incident" to="/report"><MapIcon name="camera" /><span class="resident-label">Report Incident</span></router-link>
+            <router-link aria-label="My Reports" title="My Reports" to="/reports"><MapIcon name="reports" /><span class="resident-label">My Reports</span></router-link>
+            <router-link aria-label="My Profile" title="My Profile" to="/profile"><MapIcon name="user" /><span class="resident-label">My Profile</span></router-link>
         </nav>
         <div class="resident-account-area">
-            <p class="resident-label"><ResidentAvatar :name="userName" :src="residentAccount.photoUrl || ''" /> {{ userName || jobTitle }}</p>
-            <form method="POST" :action="logoutUrl">
+            <div class="resident-account-identity" :title="userName || jobTitle">
+                <ResidentAvatar :name="userName" :src="residentAccount.photoUrl || ''" />
+                <span class="resident-label resident-account-copy"><strong class="resident-account-name">{{ userName || jobTitle }}</strong><span>{{ jobTitle }}</span></span>
+            </div>
+            <form novalidate method="POST" :action="logoutUrl">
                 <!-- native-ok: hidden CSRF token must accompany the native POST logout form. -->
                 <input type="hidden" name="_token" :value="csrfToken">
                 <Button
                     type="submit"
-                    class="resident-logout p-0"
+                    class="resident-logout"
+                    size="small"
+                    title="Sign out"
                     severity="secondary"
                     text
                     aria-label="Sign out"
