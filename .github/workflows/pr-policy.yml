@@ -42,7 +42,7 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           printf '%s\n' "$PR_TITLE" > "$RUNNER_TEMP/title.txt"
-          scripts/ci/check-commit-message.sh "$RUNNER_TEMP/title.txt"
+          scripts/ci/check-commit-message.sh --pr-title "$RUNNER_TEMP/title.txt"
       - name: Check commit messages
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}

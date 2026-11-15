@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
-    echo "usage: $0 <commit-message-file>" >&2
+pr_title=false
+if [ "${1:-}" = --pr-title ]; then
+    pr_title=true
+    shift
+fi
+
+if [ "$#" -ne 1 ] || [[ $1 == -* ]] || [ ! -f "$1" ]; then
+    echo "usage: $0 [--pr-title] <commit-message-file>" >&2
     exit 2
 fi
 
@@ -10,9 +16,11 @@ fi
 
 subject=$({ grep -v '^#' "$1" || true; } | sed -n '/[^[:space:]]/{p;q;}')
 
-case "$subject" in
-    'Merge '* | 'Revert "'*) exit 0 ;;
-esac
+if [ "$pr_title" = false ]; then
+    case "$subject" in
+        'Merge '* | 'Revert "'*) exit 0 ;;
+    esac
+fi
 
 if [[ ${#subject} -le 72 && $subject =~ ^($CHANGE_TYPES)/[a-z0-9](.*[^.[:space:]])?$ ]]; then
     exit 0

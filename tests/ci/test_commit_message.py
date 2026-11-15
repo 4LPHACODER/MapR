@@ -10,11 +10,11 @@ TYPES = ('feature', 'fix', 'hotfix', 'refactor', 'docs', 'test',
          'chore', 'ci', 'style', 'perf', 'build', 'revert')
 
 
-def check(message):
+def check(message, *flags):
     with tempfile.NamedTemporaryFile('w', suffix='.txt') as file:
         file.write(message)
         file.flush()
-        return subprocess.run([str(SCRIPT), file.name],
+        return subprocess.run([str(SCRIPT), *flags, file.name],
                               capture_output=True, text=True)
 
 
@@ -55,6 +55,41 @@ class CommitMessageTest(unittest.TestCase):
     def test_allows_git_generated_merge_and_revert_subjects(self):
         self.assertAccepted('Merge pull request #12 from 4LPHACODER/develop\n')
         self.assertAccepted('Revert "feature/add map legend"\n')
+
+    def test_pr_title_rejects_merge_prefix(self):
+        for title in ('Merge develop', 'Merge pull request #12 from 4LPHACODER/develop'):
+            with self.subTest(title=title):
+                result = check(title + '\n', '--pr-title')
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn('Example: feature/', result.stderr)
+
+    def test_pr_title_rejects_revert_prefix(self):
+        result = check('Revert "feature/add map legend"\n', '--pr-title')
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn('Example: feature/', result.stderr)
+
+    def test_pr_title_accepts_valid_title(self):
+        for title in ('revert/add map legend', 'feature/add resident export', 'fix/a'):
+            with self.subTest(title=title):
+                result = check(title + '\n', '--pr-title')
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_pr_title_enforces_existing_format_rules(self):
+        for title in ('fix: login redirect', 'fix/Login redirect', 'fix/login.',
+                      'fix/login ', 'fix/' + 'a' * 69, ''):
+            with self.subTest(title=title):
+                self.assertEqual(check(title, '--pr-title').returncode, 1)
+
+    def test_pr_title_usage_errors(self):
+        result = subprocess.run([str(SCRIPT), '--pr-title'], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('usage:', result.stderr)
+        for flags in (('--unknown',), ('--pr-title', '--unknown'),
+                      ('--pr-title', '--pr-title')):
+            with self.subTest(flags=flags):
+                result = check('feature/add map legend', *flags)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn('usage:', result.stderr)
 
     def test_rejects_colon_style(self):
         self.assertRejected('feat: add resident export\n')
@@ -111,3 +146,9 @@ class CommitMsgHookTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Invalid commit message', result.stderr)
         self.assertNotEqual(self.git('rev-parse', '--verify', 'HEAD').returncode, 0)
+
+    def test_hook_accepts_git_generated_subjects(self):
+        for subject in ('Merge develop', 'Revert "feature/add map legend"'):
+            with self.subTest(subject=subject):
+                result = self.commit(subject)
+                self.assertEqual(result.returncode, 0, result.stderr)

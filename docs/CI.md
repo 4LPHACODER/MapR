@@ -29,6 +29,8 @@ Every commit subject and every pull request title uses:
 
 Examples: `feature/add resident export`, `fix/login redirect loop`, `docs/describe backup restore`.
 
+PR titles must always use `<type>/<description>`, including reverts (`revert/<description>`). Git-generated merge/revert commit subjects remain exempt in the local hook and individual commit validation; PR titles have no such exemption.
+
 Enable the local hook once per clone so bad messages are rejected before they reach GitHub:
 
 ```bash
