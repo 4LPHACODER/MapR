@@ -5,13 +5,13 @@ import Dialog from 'primevue/dialog';
 import Message from 'primevue/message';
 import Tag from 'primevue/tag';
 import MapIcon from '../../shared/components/MapIcon.vue';
-import SummaryCard from '../components/SummaryCard.vue';
 import StatusBadge from '../components/StatusBadge.vue';
 import { formatWhen } from '../format';
 
 const apiBase = inject('apiBase');
 const data = ref(null);
 const error = ref('');
+const loading = ref(true);
 const updates = ref([]);
 const updatesLoading = ref(true);
 const updatesError = ref(false);
@@ -73,13 +73,21 @@ function closeDetails() {
     selectedUpdate.value = null;
 }
 
-onMounted(async () => {
-    loadUpdates();
+async function loadDashboard() {
+    error.value = '';
+    loading.value = true;
     try {
         data.value = (await window.axios.get(`${apiBase}/dashboard`)).data;
     } catch (exception) {
         error.value = exception.response?.data?.message || 'The dashboard could not be loaded.';
+    } finally {
+        loading.value = false;
     }
+}
+
+onMounted(() => {
+    loadUpdates();
+    loadDashboard();
 });
 </script>
 
@@ -92,22 +100,76 @@ onMounted(async () => {
                     <MapIcon name="pin" />
                     <span>{{ data.barangay_name }}</span>
                 </p>
-                <p class="resident-dashboard-lead">Report incidents and track the progress of your submissions.</p>
+                <p class="resident-dashboard-lead">Keep track of your reports and see what needs your attention.</p>
                 <p v-if="!data.reporting_open" class="resident-reason">Your barangay is not assigned yet. Ask barangay staff to assign it before reporting.</p>
             </div>
             <div v-if="data.reporting_open || data.draft" class="resident-dashboard-actions">
-                <router-link v-if="data.reporting_open" class="resident-primary" to="/report">
+                <Button as="router-link" size="small" v-if="data.reporting_open" class="resident-dashboard-button" to="/report">
                     <MapIcon name="camera" /> Report an Incident
-                </router-link>
-                <router-link v-if="data.draft" class="resident-secondary" :to="`/report/${data.draft.id}`">
+                </Button>
+                <Button as="router-link" size="small" severity="secondary" outlined v-if="data.draft" class="resident-dashboard-button" :to="`/report/${data.draft.id}`">
                     <MapIcon name="pencil" /> Continue Draft
-                </router-link>
+                </Button>
             </div>
         </header>
 
+        <div class="resident-dashboard-counts" aria-label="Report summary">
+            <router-link v-for="metric in [
+                { label: 'Submitted', count: data.counts.submitted, to: '/reports?status=all_submitted', tone: 'blue' },
+                { label: 'Under review', count: data.counts.under_review, to: '/reports?status=in_review', tone: 'amber' },
+                { label: 'Needs correction', count: data.counts.needs_correction, to: '/reports?status=returned', tone: 'orange' },
+                { label: 'Finalized', count: data.counts.finalized, to: '/reports?status=finalized', tone: 'green' },
+            ]" :key="metric.label" :to="metric.to" :class="`is-${metric.tone}`">
+                <span>{{ metric.label }}</span><strong>{{ metric.count }}</strong>
+            </router-link>
+        </div>
+
+        <div class="resident-dashboard-lower">
+            <section class="resident-card resident-dashboard-panel resident-dashboard-next" aria-labelledby="resident-attention-heading">
+                <h3 id="resident-attention-heading" class="resident-dashboard-title">
+                    <MapIcon name="alert-circle" /> Your next steps
+                </h3>
+                <p v-if="!data.attention.length && !data.draft" class="resident-dashboard-quiet">
+                    <span>No corrections are needed.</span>
+                </p>
+                <div v-if="data.draft" class="resident-dashboard-draft">
+                    <strong>Finish your draft</strong>
+                    <p>{{ data.draft.reference || 'Your saved report' }} is ready to continue.</p>
+                    <Button as="router-link" size="small" severity="secondary" outlined :to="`/report/${data.draft.id}`">Continue draft</Button>
+                </div>
+                <article v-for="item in data.attention" :key="item.id" class="resident-dashboard-attention">
+                    <strong>{{ item.reference || '—' }}</strong>
+                    <p v-if="item.reason">{{ item.reason }}</p>
+                    <Button as="router-link" size="small" class="resident-dashboard-button" :to="`/report/${item.id}`">Revise and Resubmit</Button>
+                </article>
+            </section>
+            <section class="resident-card resident-dashboard-panel" aria-labelledby="resident-recent-heading">
+                <div class="resident-dashboard-card-head">
+                    <h3 id="resident-recent-heading" class="resident-dashboard-title">
+                        <MapIcon name="reports" /> Recent reports
+                    </h3>
+                    <Button as="router-link" size="small" text class="resident-dashboard-textlink" to="/reports">View all</Button>
+                </div>
+                <p v-if="!data.recent.length" class="resident-dashboard-quiet">
+                    <MapIcon name="file" />
+                    <span>No submitted reports yet.</span>
+                </p>
+                <article v-for="report in data.recent" :key="report.id" class="resident-dashboard-row">
+                    <div class="resident-dashboard-row-id">
+                        <strong>{{ report.reference || '—' }}</strong>
+                        <StatusBadge :label="report.label" />
+                    </div>
+                    <p>{{ incidentLabel(report) }}</p>
+                    <p>{{ report.reported_location || '—' }}</p>
+                    <p class="resident-dashboard-when">{{ whenLabel(report) }}</p>
+                    <Button as="router-link" size="small" text class="resident-dashboard-view" :to="`/reports/${report.id}`">View</Button>
+                </article>
+            </section>
+
+        </div>
         <section class="resident-card resident-dashboard-panel resident-dashboard-updates" aria-labelledby="resident-updates-heading">
             <h3 id="resident-updates-heading" class="resident-dashboard-title">
-                <MapIcon name="disaster" /> Disaster Incident Updates
+                <MapIcon name="disaster" /> Incident updates
             </h3>
             <div v-if="updatesLoading" class="resident-dashboard-skeleton" aria-busy="true" aria-label="Loading incident updates">
                 <span></span>
@@ -115,7 +177,7 @@ onMounted(async () => {
             </div>
             <div v-else-if="updatesError" class="resident-dashboard-update-error">
                 <Message severity="error" :closable="false">Unable to load incident updates.</Message>
-                <Button type="button" @click="loadUpdates">Retry</Button>
+                <Button size="small" type="button" @click="loadUpdates">Retry</Button>
             </div>
             <p v-else-if="!updates.length" class="resident-dashboard-quiet">
                 <span>No disaster incident updates for your barangay at this time.</span>
@@ -141,13 +203,13 @@ onMounted(async () => {
                         <p class="resident-dashboard-attribution">Published by CDRRMO</p>
                     </div>
                     <div class="resident-dashboard-update-actions">
-                        <Button type="button" class="resident-dashboard-view" @click="openDetails(item)">View Details</Button>
-                        <router-link v-if="data.reporting_open" class="resident-secondary" to="/report">
+                        <Button size="small" type="button" class="resident-dashboard-view" @click="openDetails(item)">View Details</Button>
+                        <Button as="router-link" size="small" severity="secondary" outlined v-if="data.reporting_open" class="resident-dashboard-button" to="/report">
                             <MapIcon name="camera" /> Report an Incident
-                        </router-link>
+                        </Button>
                     </div>
                 </article>
-                <Button v-if="updates.length > 1" type="button" text class="resident-dashboard-textlink" @click="showAllUpdates = !showAllUpdates">
+                <Button size="small" v-if="updates.length > 1" type="button" text class="resident-dashboard-textlink" @click="showAllUpdates = !showAllUpdates">
                     {{ showAllUpdates ? 'Show less' : 'Show more' }}
                 </Button>
             </template>
@@ -174,28 +236,13 @@ onMounted(async () => {
                 <p>{{ selectedUpdate.description || 'No description was included with this update.' }}</p>
                 <p class="resident-dashboard-attribution">Published by CDRRMO</p>
                 <div class="resident-dashboard-update-actions">
-                    <router-link v-if="data.reporting_open" class="resident-secondary" to="/report" @click="closeDetails">
+                    <Button as="router-link" size="small" severity="secondary" outlined v-if="data.reporting_open" class="resident-dashboard-button" to="/report" @click="closeDetails">
                         <MapIcon name="camera" /> Report an Incident
-                    </router-link>
-                    <Button type="button" class="resident-dashboard-view" @click="closeDetails">Close</Button>
+                    </Button>
+                    <Button size="small" type="button" class="resident-dashboard-view" @click="closeDetails">Close</Button>
                 </div>
             </template>
         </Dialog>
-
-        <div class="resident-dashboard-counts">
-            <router-link to="/reports">
-                <SummaryCard label="Total Submitted" :count="data.counts.submitted" icon="file" accent="blue" />
-            </router-link>
-            <router-link to="/reports">
-                <SummaryCard label="Under Review" :count="data.counts.under_review" icon="clock" accent="amber" />
-            </router-link>
-            <router-link to="/reports?status=returned">
-                <SummaryCard label="Needs Correction" :count="data.counts.needs_correction" icon="alert-circle" accent="orange" />
-            </router-link>
-            <router-link to="/reports">
-                <SummaryCard label="Finalized" :count="data.counts.finalized" icon="circle-check" accent="green" />
-            </router-link>
-        </div>
 
         <section v-if="data.counts.submitted" class="resident-dashboard-charts">
             <section class="resident-card resident-dashboard-panel" aria-labelledby="resident-status-heading">
@@ -232,48 +279,18 @@ onMounted(async () => {
             <div>
                 <h3 id="resident-overview-heading">Your reporting overview</h3>
                 <p>Your reporting activity will appear here after your first submission.</p>
-                <p>Your first submitted report starts your status overview and six-month activity charts.</p>
+
             </div>
         </section>
 
-        <div class="resident-dashboard-lower">
-            <section class="resident-card resident-dashboard-panel" aria-labelledby="resident-recent-heading">
-                <div class="resident-dashboard-card-head">
-                    <h3 id="resident-recent-heading" class="resident-dashboard-title">
-                        <MapIcon name="reports" /> Recent reports
-                    </h3>
-                    <router-link class="resident-dashboard-textlink" to="/reports">View all</router-link>
-                </div>
-                <p v-if="!data.recent.length" class="resident-dashboard-quiet">
-                    <MapIcon name="file" />
-                    <span>No submitted reports yet.</span>
-                </p>
-                <article v-for="report in data.recent" :key="report.id" class="resident-dashboard-row">
-                    <div class="resident-dashboard-row-id">
-                        <strong>{{ report.reference || '—' }}</strong>
-                        <StatusBadge :label="report.label" />
-                    </div>
-                    <p>{{ incidentLabel(report) }}</p>
-                    <p>{{ report.reported_location || '—' }}</p>
-                    <p class="resident-dashboard-when">{{ whenLabel(report) }}</p>
-                    <router-link class="resident-dashboard-view" :to="`/reports/${report.id}`">View</router-link>
-                </article>
-            </section>
-            <section class="resident-card resident-dashboard-panel" aria-labelledby="resident-attention-heading">
-                <h3 id="resident-attention-heading" class="resident-dashboard-title">
-                    <MapIcon name="alert-circle" /> Needs your attention
-                </h3>
-                <p v-if="!data.attention.length" class="resident-dashboard-quiet">
-                    <span>Nothing needs your attention.</span>
-                </p>
-                <article v-for="item in data.attention" :key="item.id" class="resident-dashboard-attention">
-                    <strong>{{ item.reference || '—' }}</strong>
-                    <p v-if="item.reason">{{ item.reason }}</p>
-                    <router-link class="resident-dashboard-revise" :to="`/report/${item.id}`">Revise and Resubmit</router-link>
-                </article>
-            </section>
-        </div>
+
     </section>
-    <Message v-else-if="error" severity="error" :closable="false" class="resident-error" role="alert">{{ error }}</Message>
-    <p v-else>Loading your dashboard…</p>
+    <div v-else-if="error" class="resident-dashboard-load-error">
+        <Message severity="error" :closable="false" role="alert">{{ error }}</Message>
+        <Button size="small" type="button" @click="loadDashboard">Try again</Button>
+    </div>
+    <section v-else class="resident-dashboard-loading" :aria-busy="loading" role="status">
+        <p>Loading your dashboard…</p>
+        <div class="resident-dashboard-skeleton" aria-hidden="true"><span></span><span></span></div>
+    </section>
 </template>

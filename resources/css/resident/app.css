@@ -8,8 +8,8 @@
     --resident-blue-hover: #1d4ed8;
     --resident-wash: #eff6ff;
     --resident-line: #e2e8f0;
-    --resident-radius: 16px;
-    --resident-control: 12px;
+    --resident-radius: var(--p-border-radius-sm, 8px);
+    --resident-control: var(--p-border-radius-sm, 8px);
     --resident-sidebar-expanded: 15.5rem;
     --resident-sidebar-rail: 4.5rem;
     --resident-nav-height: 2.25rem;

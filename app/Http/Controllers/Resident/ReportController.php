@@ -51,8 +51,10 @@ class ReportController extends Controller
                 }
             });
         }
-        if ($request->filled('status')) {
-            $query->where('reports.report_status', $request->string('status'));
+        $status = (string) $request->input('status', '');
+        $summaryStatus = in_array($status, ['all_submitted', 'in_review', 'finalized'], true);
+        if ($status !== '' && ! $summaryStatus) {
+            $query->where('reports.report_status', $status);
         }
         if ($request->filled('from')) {
             $query->whereDate('reports.updated_at', '>=', $request->date('from'));
@@ -61,9 +63,16 @@ class ReportController extends Controller
             $query->whereDate('reports.updated_at', '<=', $request->date('to'));
         }
 
-        return response()->json([
-            'data' => $query->get()->map(fn ($row) => $this->reports->present($row))->values(),
-        ]);
+        $reports = $query->get()->map(fn ($row) => $this->reports->present($row));
+        if ($summaryStatus) {
+            $reports = $reports->filter(fn ($report) => match ($status) {
+                'all_submitted' => $report['status'] !== 'draft',
+                'in_review' => $report['bucket'] === 'under_review',
+                'finalized' => $report['bucket'] === 'finalized',
+            });
+        }
+
+        return response()->json(['data' => $reports->values()]);
     }
 
     public function store(Request $request): JsonResponse
