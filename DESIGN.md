@@ -37,7 +37,7 @@ A quiet civic mapping workspace: legible blue navigation, precise alignment, and
 
 MapR supports disaster reporting and assessment in Tandag City, Philippines. The Resident workspace helps residents submit photos, track reports, and consult hazard maps (README.md and docs/resident-report-flow.md). This is product UI, with English labels matching existing routes. Desktop uses a sidebar, tablets an icon rail, and phones bottom navigation. Preserve the established Roboto typography and blue identity; avoid promotional decoration inside working screens.
 
-Runtime CSS remains canonical. This document mirrors existing resident tokens and the sidebar decisions authorized by the redesign. Token mapping: resources/css/resident/app.css `.resident-app` variables → desktop media rules → ResidentSidebar.vue and ResidentLayout.vue. Shared workspace CSS owns the separate staff shells; their dimensions are not redefined here.
+Runtime CSS remains canonical. This document mirrors existing resident tokens and the sidebar and header overlay decisions. Token mapping: resources/css/resident/app.css `.resident-app` variables → desktop media rules → ResidentSidebar.vue, ResidentHeader.vue, and ResidentLayout.vue. The resident header uses the maintained PrimeVue Popover for anchored geometry and dismissal; its resident-specific view and class tokens live beside the resident shell styles. Shared workspace CSS owns the separate staff shells; their dimensions are not redefined here.
 
 ## Colors
 
@@ -75,7 +75,7 @@ ResidentSidebar.vue owns resident navigation labels, brand, and account footer. 
 
 ### Forms and overlays
 
-The sidebar redesign changes no domain workflows. Existing shared UI owners in resources/js/shared/ui continue to own feedback and overlays. See docs/resident-report-flow.md for reporting behavior.
+The resident header uses PrimeVue Popover for anchored account and notification views, including outside-click dismissal, Escape handling, portal placement, and focus trapping. The popovers mount inside `.resident-app` so portal content inherits resident tokens and has an opaque white surface. PrimeVue owns their stacking and anchor gap. Header buttons retain their 32px geometry. Popover action rows use compact padding and a 36px minimum height; the profile action uses a 28px icon container. The views use a white identity surface, compact icon-led links, and a centered empty state; headings carry the hierarchy without eyebrow labels. Reduced-motion preferences disable the popover and link transitions. Existing shared UI owners in resources/js/shared/ui continue to own feedback. See docs/resident-report-flow.md for reporting behavior.
 
 ### Iconography
 
