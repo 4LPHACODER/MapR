@@ -60,6 +60,8 @@ Branch names use the same types: `feature/resident-export`, `fix/login-redirect`
 
 Branch rulesets are versioned in `.github/rulesets/`. If you rename a job, update the matching ruleset `context` or the PR will wait forever for a check that never reports.
 
+Local check results and integration fixes are recorded in [CI_VERIFICATION.md](CI_VERIFICATION.md).
+
 ## Activation status and owner setup
 
 The implementation is prepared on `ci/github-actions-branch-flow`. Repository
