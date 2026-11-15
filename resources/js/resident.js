@@ -13,6 +13,7 @@ import ProfilePage from './resident/pages/ProfilePage.vue';
 import '../css/shared/workspace.css';
 import '../css/resident/app.css';
 import '../css/resident/dashboard.css';
+import '../css/resident/map.css';
 
 const root = document.getElementById('resident-app');
 

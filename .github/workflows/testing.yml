@@ -24,6 +24,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run test:map
       - run: npm run build
       - name: Build development image
         run: >-
