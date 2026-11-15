@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Auth\User;
 use Database\Seeders\MaprDemoUserSeeder;
+use Database\Seeders\RoleSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use RuntimeException;
@@ -68,7 +69,7 @@ class DemoUserSeederTest extends TestCase
 
     public function test_seeder_migrates_legacy_lester_email_and_preserves_user_id(): void
     {
-        $this->seed(\Database\Seeders\RoleSeeder::class);
+        $this->seed(RoleSeeder::class);
         $roles = DB::table('roles')->pluck('id', 'code');
 
         $legacyId = User::query()->create([
@@ -93,7 +94,7 @@ class DemoUserSeederTest extends TestCase
     public function test_seeder_rejects_production(): void
     {
         $this->app['env'] = 'production';
-        $seeder = new MaprDemoUserSeeder();
+        $seeder = new MaprDemoUserSeeder;
         $seeder->setContainer($this->app);
 
         $this->expectException(RuntimeException::class);

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Shared;
 
 use App\Http\Controllers\Controller;
+use App\Models\Auth\User;
 use App\Services\ReportAssignmentService;
 use App\Services\ReportWorkflow;
 use App\Services\SignatureConfirmation;
@@ -127,7 +128,7 @@ class ReportAssignmentController extends Controller
         if ($report === null) {
             return;
         }
-        $assessor = \App\Models\Auth\User::query()->find($assigneeUserId);
+        $assessor = User::query()->find($assigneeUserId);
         if ($assessor === null) {
             return;
         }

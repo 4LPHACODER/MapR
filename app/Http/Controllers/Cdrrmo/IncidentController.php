@@ -7,6 +7,7 @@ use App\Services\ActivityLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -470,7 +471,7 @@ class IncidentController extends Controller
         return DB::table('disaster_types')->where('id', $id)->first();
     }
 
-    private function resolveBarangays(array $ids): JsonResponse|\Illuminate\Support\Collection
+    private function resolveBarangays(array $ids): JsonResponse|Collection
     {
         $allowed = collect($this->studyBarangays())->keyBy('id');
         $unique = collect($ids)->map(fn ($id) => (int) $id)->unique()->values();

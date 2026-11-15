@@ -1,13 +1,22 @@
 <script setup>
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import Button from 'primevue/button';
+import DatePicker from 'primevue/datepicker';
+import IconField from 'primevue/iconfield';
+import InputIcon from 'primevue/inputicon';
+import { useConfirm } from 'primevue/useconfirm';
+import InputText from 'primevue/inputtext';
+import Message from 'primevue/message';
+import Select from 'primevue/select';
 import MapIcon from '../../shared/components/MapIcon.vue';
 import StatusBadge from '../components/StatusBadge.vue';
 import EmptyState from '../components/EmptyState.vue';
-import ConfirmDialog from '../components/ConfirmDialog.vue';
 import { formatWhen } from '../format';
+import { dateToIso, isoToDate } from '../../shared/ui/dates';
 
 const apiBase = inject('apiBase');
+const confirm = useConfirm();
 const route = useRoute();
 const router = useRouter();
 const reports = ref([]);
@@ -25,7 +34,9 @@ const menuTrigger = ref(null);
 const menuEl = ref(null);
 const menuPosition = ref({ top: 0, left: 0 });
 const statuses = [
-    { value: '', label: 'All reports' },
+    { value: 'all_submitted', label: 'All submitted reports' },
+    { value: 'in_review', label: 'All review stages' },
+    { value: 'finalized', label: 'Finalized' },
     { value: 'draft', label: 'Draft' },
     { value: 'submitted', label: 'Pending BDRRM Review' },
     { value: 'under_review', label: 'Under review' },
@@ -34,6 +45,22 @@ const statuses = [
 ];
 let requestId = 0;
 let searchTimer = null;
+
+const selectedStatus = computed({
+    get: () => filters.value.status || null,
+    set: (value) => {
+        filters.value.status = value || '';
+        onStatusChange();
+    },
+});
+const fromDate = computed({
+    get: () => isoToDate(dateDraft.value.from),
+    set: (value) => { dateDraft.value.from = dateToIso(value); },
+});
+const toDate = computed({
+    get: () => isoToDate(dateDraft.value.to),
+    set: (value) => { dateDraft.value.to = dateToIso(value); },
+});
 
 const queryActive = computed(() => {
     const current = readQuery(route.query);
@@ -253,6 +280,18 @@ function chooseMenu(item, report) {
     }
     actionMessage.value = '';
     pendingDelete.value = report;
+    confirm.require({
+        header: 'Delete draft',
+        message: `Delete draft ${report.reference}? This cannot be undone.`,
+        acceptLabel: 'Delete draft',
+        rejectLabel: 'Cancel',
+        defaultFocus: 'reject',
+        acceptProps: { severity: 'danger' },
+        rejectProps: { severity: 'secondary', outlined: true },
+        accept: confirmDelete,
+        reject: () => { pendingDelete.value = null; },
+        onHide: () => { pendingDelete.value = null; },
+    });
 }
 
 async function confirmDelete() {
@@ -300,51 +339,57 @@ onBeforeUnmount(() => {
             <div class="resident-reports-toolbar">
                 <label class="resident-reports-search">
                     <span>Search</span>
-                    <span class="resident-reports-search-field">
-                        <MapIcon name="search" />
-                        <input v-model="searchInput" type="search" placeholder="Reference or incident" @input="onSearchInput">
-                    </span>
+                    <IconField class="resident-reports-search-field">
+                        <InputIcon><MapIcon name="search" /></InputIcon>
+                        <InputText id="resident-reports-search" v-model="searchInput" type="search" placeholder="Reference or incident" @input="onSearchInput" />
+                    </IconField>
                 </label>
                 <div class="resident-reports-tools">
                     <label class="resident-reports-status">
                         <span>Status</span>
-                        <select v-model="filters.status" @change="onStatusChange">
-                            <option v-for="option in statuses" :key="option.label" :value="option.value">{{ option.label }}</option>
-                        </select>
+                        <Select
+                            v-model="selectedStatus"
+                            input-id="resident-reports-status"
+                            :options="statuses"
+                            option-label="label"
+                            option-value="value"
+                            placeholder="All reports"
+                            show-clear
+                        />
                     </label>
-                    <button type="button" class="resident-reports-dates" :aria-expanded="showDates" aria-controls="resident-report-dates" @click="showDates = !showDates">
+                    <Button type="button" class="resident-reports-dates" :aria-expanded="showDates" aria-controls="resident-report-dates" @click="showDates = !showDates">
                         <MapIcon name="clock" /> Dates
-                    </button>
-                    <button v-if="filtersActive" type="button" class="resident-reports-clear" @click="clearFilters">Clear filters</button>
+                    </Button>
+                    <Button v-if="filtersActive" type="button" text class="resident-reports-clear" @click="clearFilters">Clear filters</Button>
                 </div>
             </div>
             <div v-show="showDates" id="resident-report-dates" class="resident-reports-dates-panel">
-                <label>From
-                    <input v-model="dateDraft.from" type="date">
+                <label for="resident-reports-from">From
+                    <DatePicker input-id="resident-reports-from" v-model="fromDate" date-format="mm/dd/yy" />
                 </label>
-                <label>To
-                    <input v-model="dateDraft.to" type="date">
+                <label for="resident-reports-to">To
+                    <DatePicker input-id="resident-reports-to" v-model="toDate" date-format="mm/dd/yy" />
                 </label>
-                <button type="button" class="resident-primary" @click="applyDates">Apply dates</button>
-                <p v-if="dateError" class="resident-error">{{ dateError }}</p>
+                <Button type="button" class="resident-primary" @click="applyDates">Apply dates</Button>
+                <Message v-if="dateError" severity="error" :closable="false" class="resident-error">{{ dateError }}</Message>
             </div>
         </div>
         <div v-if="loading" class="resident-reports-list" aria-hidden="true">
             <div v-for="item in 3" :key="item" class="resident-reports-card resident-reports-skeleton"></div>
         </div>
         <p v-if="loading" class="resident-reports-sr">Loading reports…</p>
-        <div v-else-if="error" class="resident-reports-error" role="alert">
-            <p class="resident-error">{{ error }}</p>
-            <button type="button" class="resident-secondary" @click="load">Retry</button>
+        <div v-else-if="error" class="resident-reports-error">
+            <Message severity="error" :closable="false" class="resident-error">{{ error }}</Message>
+            <Button type="button" severity="secondary" variant="outlined" class="resident-secondary" @click="load">Retry</Button>
         </div>
         <EmptyState v-else-if="!reports.length && !queryActive" icon="file" title="No reports yet.">
             <p>Drafts and submitted reports will show up here.</p>
         </EmptyState>
         <EmptyState v-else-if="!reports.length" icon="search" title="No reports match your filters.">
-            <button type="button" class="resident-secondary" @click="clearFilters">Clear filters</button>
+            <Button type="button" severity="secondary" variant="outlined" class="resident-secondary" @click="clearFilters">Clear filters</Button>
         </EmptyState>
         <template v-else>
-        <p v-if="actionMessage" class="resident-reports-note" role="status">{{ actionMessage }}</p>
+        <Message v-if="actionMessage" severity="info" :closable="false" class="resident-reports-note" role="status">{{ actionMessage }}</Message>
         <div class="resident-reports-list">
             <article v-for="report in reports" :key="report.id" class="resident-card resident-reports-card">
                 <span class="resident-reports-mark" aria-hidden="true"><MapIcon name="file" /></span>
@@ -364,16 +409,18 @@ onBeforeUnmount(() => {
                     <router-link v-if="secondaryAction(report)" class="resident-secondary" :to="secondaryAction(report).to">
                         <MapIcon :name="secondaryAction(report).icon" /> {{ secondaryAction(report).label }}
                     </router-link>
-                    <button
+                    <Button
                         type="button"
                         class="resident-reports-more"
+                        text
+                        rounded
                         aria-haspopup="menu"
                         :aria-expanded="openReport?.id === report.id"
                         :aria-label="`More actions for ${report.reference}`"
                         @click="toggleMenu(report, $event)"
                     >
-                        <MapIcon name="more" />
-                    </button>
+                        <template #icon><MapIcon name="more" /></template>
+                    </Button>
                 </div>
             </article>
         </div>
@@ -391,19 +438,11 @@ onBeforeUnmount(() => {
                     <router-link v-if="item.to" role="menuitem" :to="item.to" @click="closeMenu(false)">
                         <MapIcon :name="item.icon" /> {{ item.label }}
                     </router-link>
-                    <button v-else type="button" role="menuitem" :class="{ 'is-danger': item.danger }" @click="chooseMenu(item, openReport)">
+                    <Button v-else type="button" text role="menuitem" :class="{ 'is-danger': item.danger }" @click="chooseMenu(item, openReport)">
                         <MapIcon :name="item.icon" /> {{ item.label }}
-                    </button>
+                    </Button>
                 </template>
             </div>
         </Teleport>
-        <ConfirmDialog
-            v-if="pendingDelete"
-            title="Delete draft"
-            :message="`Delete draft ${pendingDelete.reference}? This cannot be undone.`"
-            confirm-label="Delete draft"
-            @confirm="confirmDelete"
-            @cancel="pendingDelete = null"
-        />
     </section>
 </template>

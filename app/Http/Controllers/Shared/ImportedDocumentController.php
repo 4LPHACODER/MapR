@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Shared;
 
 use App\Http\Controllers\Controller;
-
 use App\Services\AssignmentScope;
 use App\Services\DocxPreviewConverter;
 use Illuminate\Http\JsonResponse;

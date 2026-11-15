@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Shared;
 
 use App\Http\Controllers\Controller;
 use App\Policies\BarangayReportPolicy;
+use App\Policies\FieldAssessmentPolicy;
 use App\Services\BuildingCostEstimator;
 use App\Services\ReportLineage;
 use App\Services\ReportSignatoryCatalog;
@@ -83,7 +84,7 @@ class PreviewController extends Controller
     {
         $row = DB::table('field_assessments')->where('id', $assessment)->first();
         abort_if($row === null, 404);
-        abort_unless(app(\App\Policies\FieldAssessmentPolicy::class)->view($request->user(), $row), 403);
+        abort_unless(app(FieldAssessmentPolicy::class)->view($request->user(), $row), 403);
         $report = DB::table('barangay_reports')->where('id', $row->barangay_report_id)->first();
         $barangay = $report ? DB::table('barangays')->where('id', $report->barangay_id)->first() : null;
         $incident = $report && Schema::hasTable('disaster_incidents')
@@ -528,6 +529,7 @@ class PreviewController extends Controller
             }
             if ($row->assessment_status === 'confirmed') {
                 $byBuilding[$buildingKey] = $row;
+
                 continue;
             }
             $confirmed = $rows->first(fn ($candidate) => (int) $candidate->building_id === $buildingKey && $candidate->assessment_status === 'confirmed');

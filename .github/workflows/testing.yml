@@ -1,0 +1,52 @@
+name: Testing
+
+on:
+  pull_request:
+    branches: [testing]
+  push:
+    branches: [testing]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-suite:
+    name: Full test suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Build development image
+        run: >-
+          docker build --file docker/Dockerfile --target development
+          --build-arg LOCAL_UID="$(id -u)" --build-arg LOCAL_GID="$(id -g)"
+          --tag mapr-ci-dev .
+      - name: Require LibreOffice so DOCX preview tests do not skip
+        run: docker run --rm --entrypoint test mapr-ci-dev -x /usr/bin/soffice
+      - name: Run PHPUnit in the development image
+        run: |
+          docker run --rm --volume "$PWD:/var/www/html" mapr-ci-dev sh -ec '
+            composer install --no-interaction --prefer-dist --no-progress
+            cp .env.example .env
+            php artisan key:generate --ansi
+            composer test
+          '
+
+  docker-tests:
+    name: Docker tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 -B -m unittest discover -s tests/docker -v
+
+  images:
+    uses: ./.github/workflows/build-images.yml

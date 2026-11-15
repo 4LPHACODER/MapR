@@ -1,0 +1,86 @@
+x-local-app: &local-app
+  env_file: !override
+    - ${MAPR_ENV_FILE:-.env.docker}
+  image: mapr-app:development
+  build:
+    target: development
+    args:
+      LOCAL_UID: ${LOCAL_UID:-1000}
+      LOCAL_GID: ${LOCAL_GID:-1000}
+  environment:
+    MAPR_EXPECTED_ENV: local
+    APP_DEBUG: "true"
+    SESSION_SECURE_COOKIE: "false"
+    MAPR_LARAVEL_ENV_PATH: /run/mapr
+  volumes:
+    - .:/var/www/html
+    - vendor:/var/www/html/vendor
+    - local-bootstrap-cache:/var/www/html/bootstrap/cache
+    - type: bind
+      source: ${MAPR_ENV_FILE:-.env.docker}
+      target: /run/mapr/.env
+      read_only: true
+      bind:
+        create_host_path: false
+    - local-storage:/var/www/html/storage
+    - uploads:/var/www/html/storage/app
+    - type: bind
+      source: ${MAPR_DATA_DIR:-./geospatial_data}
+      target: /var/www/html/geospatial_data
+      read_only: true
+      bind:
+        create_host_path: false
+services:
+  app:
+    <<: *local-app
+  queue:
+    <<: *local-app
+  web:
+    volumes:
+      - .:/var/www/html:ro
+      - uploads:/var/www/html/storage/app:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+  db:
+    environment:
+      MAPR_EXPECTED_ENV: local
+    env_file: !override
+      - ${MAPR_ENV_FILE:-.env.docker}
+  vite:
+    image: mapr-vite:development
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: vite-development
+      args:
+        LOCAL_UID: ${LOCAL_UID:-1000}
+        LOCAL_GID: ${LOCAL_GID:-1000}
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    working_dir: /var/www/html
+    command: sh -c 'npm ci && npm run dev -- --host 0.0.0.0'
+    environment:
+      VITE_DEV_SERVER_HOST: localhost
+    ports:
+      - "127.0.0.1:5173:5173"
+    volumes:
+      - .:/var/www/html
+      - node-modules:/var/www/html/node_modules
+    restart: unless-stopped
+  phpmyadmin:
+    image: phpmyadmin:5.2-apache@sha256:e4b3eb5305cd42d21512bb55def2bab52625d56df927ad4ee1864a9354c84d40
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_ARBITRARY: "0"
+    volumes:
+      - ./docker/php/session-security.ini:/usr/local/etc/php/conf.d/zz-session-security.ini:ro
+    ports:
+      - "127.0.0.1:8081:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  vendor:
+  node-modules:
+  local-storage:
+  local-bootstrap-cache:

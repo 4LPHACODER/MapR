@@ -3,9 +3,10 @@
 use App\Http\Controllers\Assessor\ResidentController as AssessorResidentController;
 use App\Http\Controllers\Bdrrm\BarangayReportController;
 use App\Http\Controllers\Bdrrm\BuildingPhotoController;
-use App\Http\Controllers\Resident\HazardMapController;
 use App\Http\Controllers\Bdrrm\PageController;
 use App\Http\Controllers\Bdrrm\PhotoController;
+use App\Http\Controllers\Bdrrm\ResidentMapController;
+use App\Http\Controllers\Resident\HazardMapController;
 use App\Http\Controllers\Resident\PhotoController as ResidentPhotoController;
 use App\Http\Controllers\Shared\ContextController;
 use App\Http\Controllers\Shared\HouseholdController;
@@ -73,6 +74,9 @@ Route::middleware(['auth', 'role:bdrrm,barangay_secretary,barangay_captain', 'fi
     Route::get('reports/{report}/preview', [PreviewController::class, 'barangay']);
     Route::post('api/flags', [ReportFlagController::class, 'store']);
     Route::post('api/flags/{flag}/resolve', [ReportFlagController::class, 'resolve']);
+    Route::get('api/map/resident-markers', [ResidentMapController::class, 'markers']);
+    Route::get('api/map/resident-groups/{group}', [ResidentMapController::class, 'group']);
+    Route::get('api/map/residents/{resident}', [ResidentMapController::class, 'resident'])->whereNumber('resident');
     Route::get('api/map/resident-submissions', [MapDataController::class, 'residentSubmissions']);
     Route::get('api/map/boundaries', [MapDataController::class, 'boundaries']);
     Route::get('api/map/buildings', [MapDataController::class, 'buildings']);

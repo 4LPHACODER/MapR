@@ -29,12 +29,14 @@ class RepairBarangayReportLineageCommand extends Command
             $already = DB::table('barangay_report_buildings')->where('barangay_report_id', $report->id)->exists();
             if ($already) {
                 $skipped++;
+
                 continue;
             }
 
             $residentReport = DB::table('resident_incident_reports')->where('barangay_report_id', $report->id)->orderByDesc('id')->first();
             if ($residentReport === null) {
                 $skipped++;
+
                 continue;
             }
 
@@ -57,12 +59,14 @@ class RepairBarangayReportLineageCommand extends Command
 
             if (! $buildingId || ! Schema::hasTable('buildings')) {
                 $skipped++;
+
                 continue;
             }
 
             $building = DB::table('buildings')->where('id', $buildingId)->first(['id', 'barangay_id', 'building_reference']);
             if ($building === null || (int) $building->barangay_id !== (int) $report->barangay_id) {
                 $skipped++;
+
                 continue;
             }
 

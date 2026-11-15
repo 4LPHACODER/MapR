@@ -30,7 +30,7 @@ class BarangaySeeder extends Seeder
 
             DB::table('barangays')->updateOrInsert(
                 ['barangay_code' => $row['barangay_code']],
-                [...$payload, 'created_at' => now()],
+                fn (bool $exists) => [...$payload, ...($exists ? [] : ['created_at' => now()])],
             );
         }
     }

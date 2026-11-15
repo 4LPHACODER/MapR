@@ -112,7 +112,7 @@ class DocxPreviewTest extends TestCase
             $this->markTestSkipped('LibreOffice is not installed.');
         }
 
-        $converter = new DocxPreviewConverter();
+        $converter = new DocxPreviewConverter;
         $files = glob(base_path('assets/0*_MapR_*.docx')) ?: [];
         $this->assertCount(4, $files);
         foreach ($files as $path) {
@@ -147,7 +147,7 @@ class DocxPreviewTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $repair = new ImportedDocumentLinkRepair();
+        $repair = new ImportedDocumentLinkRepair;
         $first = $repair->repair();
         $second = $repair->repair();
 

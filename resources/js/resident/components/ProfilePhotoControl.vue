@@ -1,5 +1,8 @@
 <script setup>
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
+import Message from 'primevue/message';
 import MapIcon from '../../shared/components/MapIcon.vue';
 import ResidentAvatar from './ResidentAvatar.vue';
 import { applyResidentAccount, residentAccount } from '../accountState';
@@ -15,8 +18,8 @@ const menuTrigger = ref(null);
 const menuEl = ref(null);
 const menuPosition = ref({ top: 0, left: 0 });
 const fileInput = ref(null);
-const dialog = ref(null);
 const cancelButton = ref(null);
+const dialogVisible = ref(false);
 const previewUrl = ref('');
 const pendingFile = ref(null);
 const photoError = ref('');
@@ -106,8 +109,21 @@ function cancelPreview() {
     if (saving.value) return;
     clearPreview();
     photoError.value = '';
-    dialog.value?.close();
+    dialogVisible.value = false;
     menuTrigger.value?.focus();
+}
+
+function onDialogVisibilityChange(visible) {
+    if (visible) {
+        dialogVisible.value = true;
+        return;
+    }
+    cancelPreview();
+}
+
+function focusCancelButton() {
+    const button = cancelButton.value?.$el || cancelButton.value;
+    button?.focus?.();
 }
 
 function rejectFile(message) {
@@ -152,8 +168,8 @@ function onFile(event) {
         clearPreview();
         pendingFile.value = file;
         previewUrl.value = url;
-        dialog.value?.showModal();
-        nextTick(() => cancelButton.value?.focus());
+        dialogVisible.value = true;
+        nextTick(focusCancelButton);
     };
     image.onerror = () => {
         URL.revokeObjectURL(url);
@@ -179,7 +195,7 @@ async function savePhoto() {
         residentAccount.photoNotice = 'Profile photo updated.';
         residentAccount.photoNoticeError = false;
         clearPreview();
-        dialog.value?.close();
+        dialogVisible.value = false;
         menuTrigger.value?.focus();
     } catch (exception) {
         photoError.value = exception.response?.data?.errors?.photo?.[0]
@@ -228,7 +244,7 @@ defineExpose({ close: () => closeMenu(false) });
 <template>
     <div class="resident-profile-photo">
         <ResidentAvatar :name="name" :src="residentAccount.photoUrl || ''" />
-        <button
+        <Button
             type="button"
             class="resident-profile-photo-edit"
             aria-label="Change profile photo"
@@ -236,8 +252,9 @@ defineExpose({ close: () => closeMenu(false) });
             :aria-expanded="menuOpen"
             @click="toggleMenu"
         >
-            <MapIcon name="camera" />
-        </button>
+            <template #icon><MapIcon name="camera" /></template>
+        </Button>
+        <!-- native-ok: hidden input backs the custom profile photo picker -->
         <input
             ref="fileInput"
             class="resident-profile-file"
@@ -255,24 +272,35 @@ defineExpose({ close: () => closeMenu(false) });
             :style="{ top: `${menuPosition.top}px`, left: `${menuPosition.left}px` }"
             @keydown="onMenuKeydown"
         >
-            <button type="button" role="menuitem" @click="chooseFile">
+            <Button type="button" text role="menuitem" @click="chooseFile">
                 <MapIcon name="camera" /> Upload photo
-            </button>
-            <button v-if="hasPhoto" type="button" role="menuitem" :disabled="removing" @click="removePhoto">
+            </Button>
+            <Button v-if="hasPhoto" type="button" text role="menuitem" :disabled="removing" @click="removePhoto">
                 <MapIcon name="eraser" /> {{ removing ? 'Removing…' : 'Remove photo' }}
-            </button>
+            </Button>
         </div>
-        <dialog ref="dialog" class="resident-dialog resident-photo-dialog" aria-modal="true" aria-labelledby="resident-photo-title" @cancel.prevent="cancelPreview">
+        <Dialog
+            :visible="dialogVisible"
+            modal
+            :closable="false"
+            :close-on-escape="!saving"
+            :draggable="false"
+            :show-header="false"
+            class="resident-photo-dialog"
+            aria-labelledby="resident-photo-title"
+            @update:visible="onDialogVisibilityChange"
+            @show="focusCancelButton"
+        >
             <h2 id="resident-photo-title">Save profile photo</h2>
             <img v-if="previewUrl" :src="previewUrl" alt="Selected profile photo preview">
             <p v-if="saving" class="resident-profile-note">Uploading {{ progress }}%</p>
-            <p v-if="photoError" class="resident-error" role="alert">{{ photoError }}</p>
-            <div class="resident-dialog-actions">
-                <button ref="cancelButton" type="button" class="resident-secondary" :disabled="saving" @click="cancelPreview">Cancel</button>
-                <button type="button" class="resident-primary" :disabled="saving || !pendingFile" @click="savePhoto">
+            <Message v-if="photoError" severity="error" :closable="false" class="resident-error">{{ photoError }}</Message>
+            <div class="resident-modal-actions">
+                <Button ref="cancelButton" type="button" severity="secondary" variant="outlined" class="resident-secondary" :disabled="saving" autofocus @click="cancelPreview">Cancel</Button>
+                <Button type="button" class="resident-primary" :disabled="saving || !pendingFile" @click="savePhoto">
                     <MapIcon name="save" /> {{ saving ? 'Saving…' : 'Save Photo' }}
-                </button>
+                </Button>
             </div>
-        </dialog>
+        </Dialog>
     </Teleport>
 </template>

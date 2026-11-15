@@ -1,9 +1,14 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-return new class extends Migration {
- public function up(): void { DB::unprepared(<<<'SQL'
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        DB::unprepared(<<<'SQL'
 CREATE TABLE `incident_photos` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `file_path` VARCHAR(512) NOT NULL,
@@ -28,6 +33,11 @@ CREATE TABLE `incident_photos` (
   CHECK ((incident_report_id IS NOT NULL) + (barangay_report_id IS NOT NULL) + (field_assessment_id IS NOT NULL) = 1),
   CHECK (mime_type IN ('image/jpeg','image/png','image/webp') AND file_size BETWEEN 1 AND 10485760)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-SQL); }
- public function down(): void { Schema::dropIfExists('incident_photos'); }
+SQL);
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('incident_photos');
+    }
 };

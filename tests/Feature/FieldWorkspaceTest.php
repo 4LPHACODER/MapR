@@ -228,7 +228,6 @@ class FieldWorkspaceTest extends TestCase
         ]);
     }
 
-
     public function test_open_flag_blocks_verification_until_a_reviewer_resolves_it(): void
     {
         Schema::create('report_flags', function (Blueprint $table) {

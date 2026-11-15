@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\Auth\User;
 use App\Models\Registry\Building;
 use App\Models\Registry\BuildingLocationReview;
-use App\Models\Auth\User;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 

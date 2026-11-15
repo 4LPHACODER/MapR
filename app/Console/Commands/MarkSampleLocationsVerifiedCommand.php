@@ -13,7 +13,7 @@ class MarkSampleLocationsVerifiedCommand extends Command
 
     public function handle(): int
     {
-        $this->call('db:seed', ['--class' => \Database\Seeders\MapEligibleSampleSeeder::class]);
+        $this->call('db:seed', ['--class' => MapEligibleSampleSeeder::class]);
 
         return self::SUCCESS;
     }

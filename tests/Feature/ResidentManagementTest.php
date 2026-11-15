@@ -2,12 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\Auth\Role;
+use App\Models\Auth\User;
 use App\Models\Registry\Barangay;
 use App\Models\Registry\Building;
 use App\Models\Registry\Household;
 use App\Models\Registry\Resident;
-use App\Models\Auth\Role;
-use App\Models\Auth\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;

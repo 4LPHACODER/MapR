@@ -1,0 +1,41 @@
+name: Build images
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build production app image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: production
+          push: false
+          tags: mapr-app:${{ github.sha }}
+          cache-from: type=gha,scope=mapr
+          cache-to: type=gha,mode=max,scope=mapr
+      - name: Build web image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: web
+          push: false
+          tags: mapr-web:${{ github.sha }}
+          cache-from: type=gha,scope=mapr
+      - name: Summarize
+        run: |
+          {
+            echo "### Production images built"
+            echo "Commit: \`$GITHUB_SHA\`"
+            echo "Images are built but not pushed. Deploy manually by following docs/DOCKER.md."
+          } >> "$GITHUB_STEP_SUMMARY"

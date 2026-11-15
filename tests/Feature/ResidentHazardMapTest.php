@@ -9,11 +9,13 @@ use App\Support\ResidentHazardCatalog;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Tests\Support\CreatesHazardShapefiles;
 use Tests\Support\CreatesMaprAuthSchema;
 use Tests\TestCase;
 
 class ResidentHazardMapTest extends TestCase
 {
+    use CreatesHazardShapefiles;
     use CreatesMaprAuthSchema;
 
     protected function setUp(): void
@@ -57,8 +59,16 @@ class ResidentHazardMapTest extends TestCase
 
     public function test_critical_points_keep_public_fields_and_land_near_tandag(): void
     {
-        $directory = storage_path('framework/testing/resident-hazards');
-        $community = (new ResidentHazardExporter)->exportCommunity($directory);
+        $directory = Storage::disk('local')->path('resident-hazards');
+        $root = Storage::disk('local')->path('shapefile-fixtures');
+        $this->createHazardShapefiles($root);
+        $originalBasePath = $this->app->basePath();
+        try {
+            $this->app->setBasePath($root);
+            $community = (new ResidentHazardExporter)->exportCommunity($directory);
+        } finally {
+            $this->app->setBasePath($originalBasePath);
+        }
         $collection = json_decode((string) file_get_contents($directory.'/critical-points.geojson'), true);
         $encoded = json_encode($collection);
 
