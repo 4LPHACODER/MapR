@@ -23,6 +23,8 @@ MapR uses Laravel 12, PHP, Vue 3, Vue Router, Vite 7, Tailwind CSS 4, MySQL spat
 - Official map eligibility requires field-verified building locations. Imported CBMS coordinates start unverified; local demo bootstrap verifies a sample for testing.
 - Resident impact counts are estimates subject to field validation, not confirmed casualty counts.
 
+Changes reach production through `develop` → `testing` → `main`, with commit messages formatted as `<type>/<description>` (for example `feature/add resident export`). See [docs/CI.md](docs/CI.md) and run `composer hooks` once per clone.
+
 ## Docker setup
 
 For the configured Docker workflow (PHP 8.5.12, MySQL 8.4, local Vite/phpMyAdmin, production bootstrap and HTTPS proxy integration), see [Docker setup and operations](docs/DOCKER.md). Existing host data is kept separate.
