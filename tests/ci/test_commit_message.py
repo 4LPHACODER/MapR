@@ -61,11 +61,13 @@ class CommitMessageTest(unittest.TestCase):
             with self.subTest(title=title):
                 result = check(title + '\n', '--pr-title')
                 self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn('Invalid pull request title:', result.stderr)
                 self.assertIn('Example: feature/', result.stderr)
 
     def test_pr_title_rejects_revert_prefix(self):
         result = check('Revert "feature/add map legend"\n', '--pr-title')
         self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn('Invalid pull request title:', result.stderr)
         self.assertIn('Example: feature/', result.stderr)
 
     def test_pr_title_accepts_valid_title(self):

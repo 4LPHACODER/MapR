@@ -26,8 +26,13 @@ if [[ ${#subject} -le 72 && $subject =~ ^($CHANGE_TYPES)/[a-z0-9](.*[^.[:space:]
     exit 0
 fi
 
+label='commit message'
+if [ "$pr_title" = true ]; then
+    label='pull request title'
+fi
+
 cat >&2 <<MSG
-Invalid commit message: "$subject"
+Invalid $label: "$subject"
 
 Use <type>/<description>: lowercase start, at most 72 characters, no trailing period.
 Types: ${CHANGE_TYPES//|/, }

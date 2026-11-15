@@ -68,13 +68,14 @@ Local check results and integration fixes are recorded in [CI_VERIFICATION.md](C
 
 The implementation is prepared on `ci/github-actions-branch-flow`. Repository
 rulesets and settings have **not** been applied. Live branch enforcement and the
-GitHub promotion smoke test remain pending repository owner/admin access. Local
-checks do not prove that GitHub branch protection is active.
+GitHub promotion smoke test remain pending activation. The `develop` and `testing`
+branches were created from `main` at `5f77808` on 2026-11-15. Local checks do not
+prove that GitHub branch protection is active.
 
 The branch includes the Docker integration prerequisite and merges the newer
 `main` application changes. Land the Docker prerequisite first, then land this CI
-branch on `main`, before enabling rulesets. This bootstrap PR intentionally fails
-`Branch flow` because its source is not `testing`. Until the Docker prerequisite
+branch on `main`, before enabling rulesets. A bootstrap PR directly into `main`
+fails `Branch flow` because its source is not `testing`. Until the Docker prerequisite
 is merged, its older `feat:` commits also fail `Commit messages`; do not rewrite
 existing history or add a permanent policy bypass. Inspect the bootstrap image
 build result before merging.
@@ -137,8 +138,11 @@ After activation, verify the complete flow using a disposable work branch:
    `docs: verify ci flow` commit, bypassing only the local hook with `--no-verify`.
    Confirm `Commit messages` fails and merging is blocked.
 3. Amend to `docs/verify ci flow`, push with `--force-with-lease`, and confirm all
-   five review checks pass. Obtain one approval from another collaborator and
-   squash-merge. Verify the squash subject matches the PR title.
+   five review checks pass. Temporarily change the PR title to `Merge develop`;
+   confirm the new `Commit messages` run fails at `Check pull request title` and
+   merging is blocked. Restore the valid `docs/verify ci flow` title and wait for
+   all required checks to pass again. Obtain one approval from another collaborator
+   and squash-merge. Verify the squash subject matches the PR title.
 4. Open `develop` into `main`; confirm `Branch flow` rejects it, then close the
    PR without deleting `develop`.
 5. Promote `develop` into `testing` with a merge commit. Confirm all five testing

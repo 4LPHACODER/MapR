@@ -21,7 +21,10 @@ class StorageLinkTest(unittest.TestCase):
         identity = self.root / 'bin/id'
         identity.write_text('#!/bin/sh\necho 1001\n')
         identity.chmod(0o755)
-        self.env = dict(os.environ, PATH=str(self.root / 'bin') + ':' + os.environ['PATH'])
+        # Each test selects its own environment; ignore the caller's stack.
+        self.env = {key: value for key, value in os.environ.items()
+                    if key not in ('APP_ENV', 'MAPR_EXPECTED_ENV')}
+        self.env['PATH'] = str(self.root / 'bin') + ':' + os.environ['PATH']
 
     def start(self):
         return subprocess.Popen(['sh', str(ENTRYPOINT), 'true'], cwd=self.root,
