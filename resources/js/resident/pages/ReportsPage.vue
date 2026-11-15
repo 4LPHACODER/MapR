@@ -34,6 +34,9 @@ const menuTrigger = ref(null);
 const menuEl = ref(null);
 const menuPosition = ref({ top: 0, left: 0 });
 const statuses = [
+    { value: 'all_submitted', label: 'All submitted reports' },
+    { value: 'in_review', label: 'All review stages' },
+    { value: 'finalized', label: 'Finalized' },
     { value: 'draft', label: 'Draft' },
     { value: 'submitted', label: 'Pending BDRRM Review' },
     { value: 'under_review', label: 'Under review' },

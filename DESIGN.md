@@ -15,6 +15,7 @@ typography:
   sans:
     fontFamily: 'Roboto, Arial, sans-serif'
 rounded:
+  sm: '0.5rem'
   DEFAULT: '0.5rem'
   lg: '1rem'
 spacing:
@@ -57,7 +58,7 @@ Use a thin right border on the sidebar, without a floating shadow. Existing card
 
 ## Shapes
 
-Sidebar rows use an 8px radius. Preserve existing 16px card radii and round avatars.
+Use the shared sm radius (8px) for resident surfaces and controls. Runtime mapping: PrimeVue borderRadius.sm → --p-border-radius-sm → --resident-radius and --resident-control. Dashboard cards, summary strip, buttons, and incident dialog use this token. Preserve round avatars and semantic status pills.
 
 ## Components
 
@@ -84,6 +85,10 @@ Reuse MapIcon with fixed 20px sidebar icons. Keep text in the DOM during collaps
 ### Motion
 
 Sidebar width and content offset share `--resident-sidebar-duration` (280ms) and `--resident-sidebar-ease` (cubic-bezier(0.22, 1, 0.36, 1)). Labels fade over 140ms and move 6px; expansion delays their entrance 70ms. CSS transitions reverse naturally when interrupted. Respect prefers-reduced-motion by disabling these transitions. Never swap display or centering during collapse.
+
+### Resident dashboard
+
+The dashboard prioritizes report status and next steps. Use one divided summary strip, recent report rows, and a correction/draft panel before incident notices and activity charts. Dashboard styles live in resources/css/resident/dashboard.css, imported after the resident shell. Reuse resident palette variables and established correction orange and finalized green. Dashboard actions use the canonical PrimeVue Button with size="small", 32px minimum height, and 8px radius, including router navigation rendered through Button. On phones, next steps precede recent reports; on wide screens, recent reports sit beside next steps. Keep visible keyboard focus inset within the summary strip.
 
 ### Content and data visualization
 
