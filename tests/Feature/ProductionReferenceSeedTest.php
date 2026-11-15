@@ -13,8 +13,9 @@ class ProductionReferenceSeedTest extends TestCase
 {
     use CreatesMaprAuthSchema;
 
-    public function test_fresh_production_reference_seeding_is_usable_and_creates_no_demo_users(): void
+    protected function setUp(): void
     {
+        parent::setUp();
         $this->createMaprAuthSchema();
         Schema::table('barangays', function (Blueprint $table) {
             $table->string('city')->nullable();
@@ -41,18 +42,40 @@ class ProductionReferenceSeedTest extends TestCase
             $table->text('description')->nullable();
             $table->timestamps();
         });
+    }
+
+    public function test_fresh_production_reference_seeding_is_usable_and_creates_no_demo_users(): void
+    {
         $this->app['env'] = 'production';
         $this->artisan('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true])->assertSuccessful();
         $counts = [];
+        $created = [];
         foreach (['roles', 'barangays', 'disaster_types', 'damage_classes', 'vulnerability_categories'] as $table) {
             $counts[$table] = DB::table($table)->count();
+            $created[$table] = DB::table($table)->orderBy('id')->pluck('created_at', 'id')->all();
             $this->assertGreaterThan(0, $counts[$table], $table.' must be populated');
         }
         $this->assertDatabaseCount('users', 0);
+        $this->travel(1)->days();
         $this->artisan('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true])->assertSuccessful();
         foreach ($counts as $table => $count) {
             $this->assertDatabaseCount($table, $count);
+            $this->assertSame($created[$table], DB::table($table)->orderBy('id')->pluck('created_at', 'id')->all(), $table.' creation dates changed');
         }
         $this->assertDatabaseCount('users', 0);
+    }
+
+    public function test_failed_local_seed_rolls_back_reference_and_account_writes(): void
+    {
+        config(['mapr.demo_password' => null]);
+        try {
+            $this->seed(DatabaseSeeder::class);
+            $this->fail('Expected missing demo password to fail seeding');
+        } catch (\RuntimeException $error) {
+            $this->assertStringContainsString('MAPR_DEMO_PASSWORD', $error->getMessage());
+        }
+        foreach (['roles', 'barangays', 'disaster_types', 'damage_classes', 'vulnerability_categories', 'users'] as $table) {
+            $this->assertDatabaseCount($table, 0);
+        }
     }
 }

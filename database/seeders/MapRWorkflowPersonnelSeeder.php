@@ -10,8 +10,6 @@ use RuntimeException;
 
 class MapRWorkflowPersonnelSeeder extends Seeder
 {
-    private const PASSWORD = 'H4ckm3!_';
-
     public function run(): void
     {
         if (app()->environment('production')) {
@@ -21,6 +19,18 @@ class MapRWorkflowPersonnelSeeder extends Seeder
             throw new RuntimeException('MapRWorkflowPersonnelSeeder runs only in local or testing environments.');
         }
 
+        $password = config('mapr.demo_password');
+        if (! is_string($password) || $password === '') {
+            throw new RuntimeException('Set MAPR_DEMO_PASSWORD before seeding workflow personnel.');
+        }
+
+        DB::transaction(function () use ($password) {
+            $this->seedPersonnel($password);
+        });
+    }
+
+    private function seedPersonnel(string $password): void
+    {
         $this->call(RoleSeeder::class);
         $roles = DB::table('roles')->pluck('id', 'code');
         $barangayId = DB::table('barangays')->where('barangay_code', '166819008')->value('id');
@@ -30,7 +40,7 @@ class MapRWorkflowPersonnelSeeder extends Seeder
             return;
         }
 
-        $actorId = (int) (DB::table('users')->orderBy('id')->value('id') ?? 0);
+        $actorId = (int) (User::query()->where('account_status', 'active')->orderBy('id')->value('id') ?? 0);
 
         foreach ([
             ['email' => 'jesnard.plaza@mapr.test', 'first_name' => 'Jesnard', 'middle_name' => 'D.', 'last_name' => 'Plaza', 'role' => 'bdrrm'],
@@ -42,11 +52,14 @@ class MapRWorkflowPersonnelSeeder extends Seeder
             ['email' => 'orland.falcon@mapr.test', 'first_name' => 'Orland', 'last_name' => 'Falcon', 'role' => 'rdana'],
             ['email' => 'lovy.dedicatoria@mapr.test', 'first_name' => 'Lovy', 'middle_name' => 'R.', 'last_name' => 'Dedicatoria', 'role' => 'rdana_city_assessor', 'job_title' => 'Engr., Acting City Assessor'],
         ] as $account) {
-            $user = $this->ensureUser($account, (int) $roles[$account['role']], (int) $barangayId);
+            $user = $this->ensureUser($account, (int) $roles[$account['role']], (int) $barangayId, $password);
+            if ($user === null) {
+                continue;
+            }
             $this->assignBarangay($user, (int) $barangayId, $actorId ?: $user->id);
         }
 
-        $captain = User::query()->where('last_name', 'Pimentel')->orderBy('id')->first();
+        $captain = User::query()->where('email', 'rocky.pimentel@mapr.test')->where('account_status', 'active')->first();
         if ($captain) {
             if ((int) $captain->role_id !== (int) $roles['barangay_captain']) {
                 $captain->forceFill(['role_id' => $roles['barangay_captain']])->save();
@@ -54,47 +67,40 @@ class MapRWorkflowPersonnelSeeder extends Seeder
             $this->assignBarangay($captain, (int) $barangayId, $actorId ?: $captain->id);
         }
 
-        $mark = User::query()->where('last_name', 'Merillo')->orderBy('id')->first();
-        if ($mark === null) {
-            $mark = $this->ensureUser([
-                'email' => 'mark.merillo@mapr.test',
-                'first_name' => 'Mark',
-                'middle_name' => 'L.',
-                'last_name' => 'Merillo',
-                'role' => 'rdana_admin_officer',
-                'job_title' => 'Administrative Officer III',
-            ], (int) $roles['rdana_admin_officer'], (int) $barangayId);
-        } elseif ((int) $mark->role_id !== (int) $roles['rdana_admin_officer']) {
-            $mark->forceFill(['role_id' => $roles['rdana_admin_officer']])->save();
+        $mark = $this->ensureUser([
+            'email' => 'mark.merillo@mapr.test',
+            'first_name' => 'Mark',
+            'middle_name' => 'L.',
+            'last_name' => 'Merillo',
+            'job_title' => 'Administrative Officer III',
+        ], (int) $roles['rdana_admin_officer'], (int) $barangayId, $password);
+        if ($mark !== null) {
+            $this->assignBarangay($mark, (int) $barangayId, $actorId ?: $mark->id);
         }
-        $this->assignBarangay($mark, (int) $barangayId, $actorId ?: $mark->id);
 
         foreach ([
-            ['email' => 'lester.talan@mapr.test', 'first_name' => 'Lester Lito', 'middle_name' => 'C.', 'last_name' => 'Talan', 'match' => 'Talan'],
-            ['email' => 'reyveen.geli@mapr.test', 'first_name' => 'Reyveen John', 'middle_name' => 'B.', 'last_name' => 'Geli', 'match' => 'Geli'],
+            ['email' => 'lester.talan@mapr.test', 'first_name' => 'Lester Lito', 'middle_name' => 'C.', 'last_name' => 'Talan',
+                'aliases' => ['lestertalan@mapr_admin.com', 'lestertalan@mapr.com', 'lester.talan@mapr.test']],
+            ['email' => 'reyveen.geli@mapr.test', 'first_name' => 'Reyveen John', 'middle_name' => 'B.', 'last_name' => 'Geli',
+                'aliases' => ['reyveen.geli@mapr.test']],
         ] as $account) {
-            $existing = User::query()->where('last_name', $account['match'])->orderBy('id')->first();
-            if ($existing) {
-                if ((int) $existing->role_id !== (int) $roles['cdrrmo_admin']) {
-                    $existing->forceFill(['role_id' => $roles['cdrrmo_admin']])->save();
+            foreach ($account['aliases'] as $email) {
+                if (User::withTrashed()->where('email', $email)->exists()) {
+                    $account['email'] = $email;
+                    break;
                 }
-
-                continue;
             }
-            $this->ensureUser([
-                'email' => $account['email'],
-                'first_name' => $account['first_name'],
-                'middle_name' => $account['middle_name'],
-                'last_name' => $account['last_name'],
-                'role' => 'cdrrmo_admin',
-            ], (int) $roles['cdrrmo_admin'], null);
+            $this->ensureUser($account, (int) $roles['cdrrmo_admin'], null, $password);
         }
     }
 
-    private function ensureUser(array $account, int $roleId, ?int $barangayId): User
+    private function ensureUser(array $account, int $roleId, ?int $barangayId, string $password): ?User
     {
         $existing = User::withTrashed()->where('email', $account['email'])->first();
         if ($existing) {
+            if ($existing->trashed() || $existing->account_status !== 'active') {
+                return null;
+            }
             if ((int) $existing->role_id !== $roleId) {
                 $existing->forceFill(['role_id' => $roleId])->save();
             }
@@ -107,7 +113,7 @@ class MapRWorkflowPersonnelSeeder extends Seeder
             'middle_name' => $account['middle_name'] ?? null,
             'last_name' => $account['last_name'],
             'email' => $account['email'],
-            'password' => self::PASSWORD,
+            'password' => $password,
             'account_status' => 'active',
             'email_verified_at' => now(),
             'job_title' => $account['job_title'] ?? null,

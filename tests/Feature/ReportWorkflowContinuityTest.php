@@ -492,6 +492,7 @@ class ReportWorkflowContinuityTest extends TestCase
 
     public function test_personnel_seeder_is_idempotent_and_refuses_production(): void
     {
+        config(['mapr.demo_password' => 'configured-workflow-password']);
         DB::table('barangays')->insert([
             'barangay_code' => '166819008',
             'barangay_name' => 'Mabua',
@@ -504,7 +505,7 @@ class ReportWorkflowContinuityTest extends TestCase
         $this->seed(MapRWorkflowPersonnelSeeder::class);
         $this->assertSame($count, User::query()->count());
         $this->assertSame($hash, User::query()->where('email', 'jesnard.plaza@mapr.test')->value('password'));
-        $this->assertTrue(Hash::check('H4ckm3!_', $hash));
+        $this->assertTrue(Hash::check('configured-workflow-password', $hash));
 
         $this->app['env'] = 'production';
         $this->expectException(RuntimeException::class);
