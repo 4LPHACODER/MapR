@@ -1,8 +1,11 @@
+@layer theme, base, primevue, components, utilities;
+
 @import '@fontsource/roboto/400.css';
 @import '@fontsource/roboto/500.css';
 @import '@fontsource/roboto/600.css';
 @import '@fontsource/roboto/700.css';
 @import 'tailwindcss';
+@plugin 'tailwindcss-primeui';
 @import './auth.css';
 @import './resident.css';
 
@@ -24,9 +27,7 @@
 @theme {
     --font-sans: 'Roboto', Arial, sans-serif;
     --default-font-family: 'Roboto', Arial, sans-serif;
-    --color-primary: #2563eb;
     --color-deep: #123b70;
-    --color-surface: #eff6ff;
     --color-ink: #0f172a;
     --color-muted: #64748b;
     --color-line: #e2e8f0;

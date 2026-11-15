@@ -2,6 +2,7 @@ import './bootstrap';
 import { createApp } from 'vue';
 import { createRouter, createWebHistory } from 'vue-router';
 import ResidentApp from './resident/App.vue';
+import { installPrimeVue } from './shared/ui/installPrimeVue';
 import DashboardPage from './resident/pages/DashboardPage.vue';
 import HazardMapPage from './resident/pages/HazardMapPage.vue';
 import ReportWizardPage from './resident/pages/ReportWizardPage.vue';
@@ -34,14 +35,14 @@ if (root) {
         ],
     });
 
-    createApp(ResidentApp, {
+    installPrimeVue(createApp(ResidentApp, {
         userName: root.dataset.userName || '',
         userEmail: root.dataset.userEmail || '',
         jobTitle: root.dataset.jobTitle || 'Resident',
         logoutUrl: root.dataset.logoutUrl || '/logout',
         homeUrl: root.dataset.homeUrl || '/',
         csrfToken: token || '',
-    })
+    }))
         .use(router)
         .provide('apiBase', '/resident/api')
         .provide('mapboxToken', root.dataset.mapboxToken || '')

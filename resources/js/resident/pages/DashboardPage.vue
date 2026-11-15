@@ -1,5 +1,9 @@
 <script setup>
 import { computed, inject, onMounted, ref } from 'vue';
+import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
+import Message from 'primevue/message';
+import Tag from 'primevue/tag';
 import MapIcon from '../../shared/components/MapIcon.vue';
 import SummaryCard from '../components/SummaryCard.vue';
 import StatusBadge from '../components/StatusBadge.vue';
@@ -13,7 +17,7 @@ const updatesLoading = ref(true);
 const updatesError = ref(false);
 const showAllUpdates = ref(false);
 const selectedUpdate = ref(null);
-const detailsDialog = ref(null);
+const detailsVisible = ref(false);
 const visibleUpdates = computed(() => (showAllUpdates.value ? updates.value : updates.value.slice(0, 1)));
 
 const statusMax = computed(() => {
@@ -61,11 +65,11 @@ async function loadUpdates() {
 
 function openDetails(item) {
     selectedUpdate.value = item;
-    detailsDialog.value?.showModal();
+    detailsVisible.value = true;
 }
 
 function closeDetails() {
-    detailsDialog.value?.close();
+    detailsVisible.value = false;
     selectedUpdate.value = null;
 }
 
@@ -109,10 +113,10 @@ onMounted(async () => {
                 <span></span>
                 <span></span>
             </div>
-            <p v-else-if="updatesError" class="resident-dashboard-update-error">
-                Unable to load incident updates.
-                <button type="button" @click="loadUpdates">Retry</button>
-            </p>
+            <div v-else-if="updatesError" class="resident-dashboard-update-error">
+                <Message severity="error" :closable="false">Unable to load incident updates.</Message>
+                <Button type="button" @click="loadUpdates">Retry</Button>
+            </div>
             <p v-else-if="!updates.length" class="resident-dashboard-quiet">
                 <span>No disaster incident updates for your barangay at this time.</span>
             </p>
@@ -126,7 +130,7 @@ onMounted(async () => {
                     <div class="resident-dashboard-update-copy">
                         <div class="resident-dashboard-update-head">
                             <strong>{{ item.name }}</strong>
-                            <span class="resident-dashboard-incident-status" :class="item.status === 'active' ? 'is-active' : 'is-closed'">{{ item.status_label }}</span>
+                            <Tag :value="item.status_label" :severity="item.status === 'active' ? 'info' : 'secondary'" rounded class="resident-dashboard-incident-status" :class="item.status === 'active' ? 'is-active' : 'is-closed'" />
                         </div>
                         <p v-if="item.disaster_type">{{ item.disaster_type }}</p>
                         <p v-if="item.coverage_label">{{ item.coverage_label }}</p>
@@ -137,22 +141,31 @@ onMounted(async () => {
                         <p class="resident-dashboard-attribution">Published by CDRRMO</p>
                     </div>
                     <div class="resident-dashboard-update-actions">
-                        <button type="button" class="resident-dashboard-view" @click="openDetails(item)">View Details</button>
+                        <Button type="button" class="resident-dashboard-view" @click="openDetails(item)">View Details</Button>
                         <router-link v-if="data.reporting_open" class="resident-secondary" to="/report">
                             <MapIcon name="camera" /> Report an Incident
                         </router-link>
                     </div>
                 </article>
-                <button v-if="updates.length > 1" type="button" class="resident-dashboard-textlink" @click="showAllUpdates = !showAllUpdates">
+                <Button v-if="updates.length > 1" type="button" text class="resident-dashboard-textlink" @click="showAllUpdates = !showAllUpdates">
                     {{ showAllUpdates ? 'Show less' : 'Show more' }}
-                </button>
+                </Button>
             </template>
         </section>
 
-        <dialog ref="detailsDialog" class="resident-dashboard-dialog" aria-labelledby="resident-update-dialog-title" @close="selectedUpdate = null">
+        <Dialog
+            v-model:visible="detailsVisible"
+            modal
+            :draggable="false"
+            :closable="false"
+            :show-header="false"
+            class="resident-dashboard-dialog"
+            aria-labelledby="resident-update-dialog-title"
+            @hide="selectedUpdate = null"
+        >
             <template v-if="selectedUpdate">
                 <h3 id="resident-update-dialog-title">{{ selectedUpdate.name }}</h3>
-                <p><span class="resident-dashboard-incident-status" :class="selectedUpdate.status === 'active' ? 'is-active' : 'is-closed'">{{ selectedUpdate.status_label }}</span></p>
+                <p><Tag :value="selectedUpdate.status_label" :severity="selectedUpdate.status === 'active' ? 'info' : 'secondary'" rounded class="resident-dashboard-incident-status" :class="selectedUpdate.status === 'active' ? 'is-active' : 'is-closed'" /></p>
                 <p v-if="selectedUpdate.disaster_type">{{ selectedUpdate.disaster_type }}</p>
                 <p v-if="selectedUpdate.coverage_label">{{ selectedUpdate.coverage_label }}</p>
                 <p v-if="selectedUpdate.occurred_at">Occurred {{ formatWhen(selectedUpdate.occurred_at) }}</p>
@@ -164,10 +177,10 @@ onMounted(async () => {
                     <router-link v-if="data.reporting_open" class="resident-secondary" to="/report" @click="closeDetails">
                         <MapIcon name="camera" /> Report an Incident
                     </router-link>
-                    <button type="button" class="resident-dashboard-view" @click="closeDetails">Close</button>
+                    <Button type="button" class="resident-dashboard-view" @click="closeDetails">Close</Button>
                 </div>
             </template>
-        </dialog>
+        </Dialog>
 
         <div class="resident-dashboard-counts">
             <router-link to="/reports">
@@ -261,6 +274,6 @@ onMounted(async () => {
             </section>
         </div>
     </section>
-    <p v-else-if="error" class="resident-error">{{ error }}</p>
+    <Message v-else-if="error" severity="error" :closable="false" class="resident-error" role="alert">{{ error }}</Message>
     <p v-else>Loading your dashboard…</p>
 </template>

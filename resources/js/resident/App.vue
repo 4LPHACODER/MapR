@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router';
 import ResidentSidebar from './components/ResidentSidebar.vue';
 import ResidentHeader from './components/ResidentHeader.vue';
 import ResidentBottomNav from './components/ResidentBottomNav.vue';
+import MaprFeedbackHost from '../shared/ui/MaprFeedbackHost.vue';
 import { applyResidentAccount } from './accountState';
 
 defineProps({
@@ -68,5 +69,6 @@ onUnmounted(() => {
             </main>
         </div>
         <ResidentBottomNav />
+        <MaprFeedbackHost />
     </div>
 </template>

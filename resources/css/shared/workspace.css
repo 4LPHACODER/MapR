@@ -768,7 +768,7 @@ button.residents-summary-card:disabled { cursor: default; }
 .resident-section { display: grid; gap: 0.85rem; align-content: start; }
 .resident-section h4 { margin: 0.25rem 0 0; font-size: 0.95rem; }
 .resident-fields { display: grid; gap: 0.85rem; margin: 0; }
-.resident-fields div { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 0.75rem; align-items: start; }
+dl.resident-fields > div { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 0.75rem; align-items: start; }
 .resident-fields dt { margin: 0; color: #64748b; font-size: 0.8125rem; }
 .resident-fields dd { margin: 0; color: #0f172a; overflow-wrap: anywhere; }
 .resident-source { border-top: 1px solid #e2e8f0; padding-top: 0.75rem; }
@@ -838,7 +838,7 @@ button.residents-summary-card:disabled { cursor: default; }
 .residents-page .cdrrmo-filters input[type="search"] { flex: 1 1 18rem; min-width: min(100%, 16rem); }
 @media (max-width: 640px) {
     .residents-drawer { width: 100vw; }
-    .resident-fields div { grid-template-columns: 1fr; gap: 0.15rem; }
+    dl.resident-fields > div { grid-template-columns: 1fr; gap: 0.15rem; }
     .resident-form-grid { grid-template-columns: 1fr; }
     .resident-drawer-footer .resident-action { width: 100%; }
     .residents-icon-btn { width: 2.75rem; height: 2.75rem; }

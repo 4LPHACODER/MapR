@@ -1,5 +1,7 @@
 <script setup>
 import { computed, inject, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import Button from 'primevue/button';
+import Message from 'primevue/message';
 import { useRoute, useRouter } from 'vue-router';
 import MapIcon from '../../shared/components/MapIcon.vue';
 import PhotoStep from '../components/PhotoStep.vue';
@@ -451,10 +453,17 @@ watch(step, async () => {
                 </li>
             </ol>
             <div v-if="step > 1" class="resident-wizard-back">
-                <button type="button" class="resident-secondary" :disabled="saving" @click="showStep(step - 1)">
-                    <MapIcon name="chevron" class="resident-back-icon" />
-                    {{ step === 2 ? 'Back to Details' : 'Back to Photos' }}
-                </button>
+                <Button
+                    type="button"
+                    :label="step === 2 ? 'Back to Details' : 'Back to Photos'"
+                    severity="secondary"
+                    variant="outlined"
+                    class="resident-secondary"
+                    :disabled="saving"
+                    @click="showStep(step - 1)"
+                >
+                    <template #icon><MapIcon name="chevron" class="resident-back-icon" /></template>
+                </Button>
             </div>
             <div class="resident-wizard-layout">
                 <div class="resident-wizard-main">
@@ -493,23 +502,36 @@ watch(step, async () => {
                         @signature-ready="signatureReady = $event"
                         @signature-busy="signatureBusy = $event"
                     />
-                    <p v-if="step === 2 && photoError" class="resident-error">{{ photoError }}</p>
-                    <p v-if="error" class="resident-error">{{ error }}</p>
+                    <Message v-if="step === 2 && photoError" severity="error" :closable="false">{{ photoError }}</Message>
+                    <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
                     <div class="resident-wizard-bar">
-                        <button type="button" class="resident-secondary" :disabled="saving" @click="saveDraft">
-                            <MapIcon name="file" />
-                            {{ saving && step !== 3 ? 'Saving…' : (reportStatus === 'returned' ? 'Save changes' : 'Save Draft') }}
-                        </button>
-                        <button v-if="step === 1" type="button" class="resident-primary" :disabled="saving" @click="continueStep">
-                            Continue to Photos <MapIcon name="chevron" />
-                        </button>
-                        <button v-else-if="step === 2" type="button" class="resident-primary" :aria-disabled="!!reviewBlockReason" :disabled="saving" @click="continueStep">
-                            Continue to Review <MapIcon name="chevron" />
-                        </button>
-                        <button v-else type="button" class="resident-primary" :disabled="!canSubmit" @click="submitReport">
-                            <MapIcon name="send" />
-                            {{ saving ? 'Submitting…' : (reportStatus === 'returned' ? 'Resubmit to BDRRM' : 'Submit to BDRRM') }}
-                        </button>
+                        <Button
+                            type="button"
+                            :label="saving && step !== 3 ? 'Saving…' : (reportStatus === 'returned' ? 'Save changes' : 'Save Draft')"
+                            severity="secondary"
+                            variant="outlined"
+                            class="resident-secondary"
+                            :disabled="saving"
+                            @click="saveDraft"
+                        >
+                            <template #icon><MapIcon name="file" /></template>
+                        </Button>
+                        <Button v-if="step === 1" type="button" label="Continue to Photos" class="resident-primary" :disabled="saving" @click="continueStep" iconPos="right">
+                            <template #icon="{ class: iconClass }"><MapIcon name="chevron" :class="iconClass" /></template>
+                        </Button>
+                        <Button v-else-if="step === 2" type="button" label="Continue to Review" class="resident-primary" :aria-disabled="!!reviewBlockReason" :disabled="saving" @click="continueStep" iconPos="right">
+                            <template #icon="{ class: iconClass }"><MapIcon name="chevron" :class="iconClass" /></template>
+                        </Button>
+                        <Button
+                            v-else
+                            type="button"
+                            :label="saving ? 'Submitting…' : (reportStatus === 'returned' ? 'Resubmit to BDRRM' : 'Submit to BDRRM')"
+                            class="resident-primary"
+                            :disabled="!canSubmit"
+                            @click="submitReport"
+                        >
+                            <template #icon><MapIcon name="send" /></template>
+                        </Button>
                     </div>
                 </div>
                 <details v-if="summaryLines.length" ref="summaryRef" class="resident-wizard-summary">
