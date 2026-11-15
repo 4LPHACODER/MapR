@@ -1,0 +1,97 @@
+---
+version: alpha
+name: MapR
+description: Resident navigation for Tandag City's disaster reporting workspace
+colors:
+  primary: '#2563eb'
+  navy: '#123b70'
+  canvas: '#f5f7fb'
+  surface: '#ffffff'
+  ink: '#172033'
+  muted: '#64748b'
+  line: '#e2e8f0'
+  selection: '#eff6ff'
+typography:
+  sans:
+    fontFamily: 'Roboto, Arial, sans-serif'
+rounded:
+  DEFAULT: '0.5rem'
+  lg: '1rem'
+spacing:
+  sidebar-expanded: '15.5rem'
+  sidebar-rail: '4.5rem'
+components:
+  sidebar: {}
+  button: {}
+---
+
+# MapR Design System
+
+## Overview
+
+### Creative North Star
+
+A quiet civic mapping workspace: legible blue navigation, precise alignment, and a narrow blue marker identifying the current task.
+
+### Product context and register
+
+MapR supports disaster reporting and assessment in Tandag City, Philippines. The Resident workspace helps residents submit photos, track reports, and consult hazard maps (README.md and docs/resident-report-flow.md). This is product UI, with English labels matching existing routes. Desktop uses a sidebar, tablets an icon rail, and phones bottom navigation. Preserve the established Roboto typography and blue identity; avoid promotional decoration inside working screens.
+
+Runtime CSS remains canonical. This document mirrors existing resident tokens and the sidebar decisions authorized by the redesign. Token mapping: resources/css/resident/app.css `.resident-app` variables → desktop media rules → ResidentSidebar.vue and ResidentLayout.vue. Shared workspace CSS owns the separate staff shells; their dimensions are not redefined here.
+
+## Colors
+
+White surfaces sit on the pale canvas. Navy identifies the brand, ink carries primary text, and muted text supports secondary labels. Blue provides focus; the pale blue selection surface and a vertical marker identify the active route without relying on color alone. Preserve existing application semantic colors elsewhere.
+
+## Typography
+
+Use the existing Roboto/Arial stack. Sidebar navigation is 13px, medium weight, with a 20px line height. The MapR wordmark is 18px bold; workspace and account context use 11px. Account names truncate with the full name available through the identity title.
+
+## Layout
+
+Resident desktop navigation expands to 248px and collapses to 72px. Keep navigation rows 36px high in both states with 4px gaps, 12px outer gutters, and fixed 20px icons. Icons stay at the same horizontal coordinate during collapse. Brand and header heights remain aligned at 80px. The account footer retains its geometry in both states. The sidebar owns vertical overflow on short screens; the content retains document scrolling. At 768–1023px use the rail; below 768px keep the established bottom navigation.
+
+## Elevation & Depth
+
+Use a thin right border on the sidebar, without a floating shadow. Existing cards retain their established soft shadow. Selected navigation uses a tonal surface, not elevation.
+
+## Shapes
+
+Sidebar rows use an 8px radius. Preserve existing 16px card radii and round avatars.
+
+## Components
+
+### Foundational visual states
+
+Navigation uses native router links with accessible names and current-page semantics. Hover uses a pale surface, pressed uses the border tone, and keyboard focus uses a visible blue outline. Disabled and loading states remain owned by existing PrimeVue controls.
+
+### Buttons and actions
+
+Sign out remains a native POST form with CSRF, presented through the existing PrimeVue Button. Keep its 36px geometry consistent with navigation in both sidebar states. The header toggle remains the canonical collapse control.
+
+### Navigation and data display
+
+ResidentSidebar.vue owns resident navigation labels, brand, and account footer. ResidentLayout.vue owns collapse state; ResidentHeader.vue exposes the toggle and expanded state. Keep all routes accessible in both states. Native title hints supplement persistent accessible labels for icon navigation.
+
+### Forms and overlays
+
+The sidebar redesign changes no domain workflows. Existing shared UI owners in resources/js/shared/ui continue to own feedback and overlays. See docs/resident-report-flow.md for reporting behavior.
+
+### Iconography
+
+Reuse MapIcon with fixed 20px sidebar icons. Keep text in the DOM during collapse so layout and accessible names remain stable.
+
+### Motion
+
+Sidebar width and content offset share `--resident-sidebar-duration` (280ms) and `--resident-sidebar-ease` (cubic-bezier(0.22, 1, 0.36, 1)). Labels fade over 140ms and move 6px; expansion delays their entrance 70ms. CSS transitions reverse naturally when interrupted. Respect prefers-reduced-motion by disabling these transitions. Never swap display or centering during collapse.
+
+### Content and data visualization
+
+Keep established route labels and plain action verbs. The sidebar adds no charts, domain claims, or numeric formatting.
+
+## Do's and Don'ts
+
+- Keep navigation compact and preserve icon coordinates across both states.
+- Reuse resident color and motion variables rather than duplicating timing values.
+- Do not unmount labels or the account footer during collapse.
+- Do not change staff navigation or mobile reporting workflows as part of this resident redesign.
