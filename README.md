@@ -23,11 +23,40 @@ MapR uses Laravel 12, PHP, Vue 3, Vue Router, Vite 7, Tailwind CSS 4, MySQL spat
 - Official map eligibility requires field-verified building locations. Imported CBMS coordinates start unverified; local demo bootstrap verifies a sample for testing.
 - Resident impact counts are estimates subject to field validation, not confirmed casualty counts.
 
-## Local setup
+## Docker setup
+
+For the configured Docker workflow (PHP 8.5.12, MySQL 8.4, local Vite/phpMyAdmin, production bootstrap and HTTPS proxy integration), see [Docker setup and operations](docs/DOCKER.md). Existing host data is kept separate.
+
+For the running local Docker stack, install PHP dependencies inside the application container:
+
+```bash
+docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml exec app composer install
+```
+
+Run Artisan commands through the same Compose prefix, for example `exec app php artisan migrate`. A plain `composer install` in your host terminal uses the host's PHP and extensions.
+
+Production bootstrap commands, after configuring the persistent key and environment as described in the Docker guide:
+
+```bash
+export COMPOSE_ENV_FILES=.env.docker.production
+export MAPR_ENV_FILE=.env.docker.production
+export COMPOSE_PROJECT_NAME=mapr-production
+docker compose -f compose.yaml up -d --build
+docker compose -f compose.yaml exec app php artisan migrate --force
+docker compose -f compose.yaml exec app php artisan db:seed --force
+# Verify reference records and zero demo accounts, then provision interactively:
+docker compose -f compose.yaml exec app php artisan mapr:provision-admin
+```
+
+Verify the new administrator can sign in at the public HTTPS `/login` and open `/cdrrmo`. Administrator passwords are entered only through masked prompts; there is no registration route.
+
+## Local setup without Docker
+
+This section requires PHP and its extensions installed directly on the host. For the configured Docker stack, use the Docker instructions above.
 
 ### 1. Install prerequisites
 
-- PHP 8.2+ and Composer, with the extensions required by Composer and the MySQL PDO driver.
+- PHP 8.5.12+ within the 8.5 series and Composer, with the extensions required by Composer and the MySQL PDO driver.
 - Node.js 20.19+ within the 20.x series, or Node.js 22.12+; npm is required for frontend dependencies.
 - MySQL 8 with spatial support. Migrations use MySQL-specific SQL, geometry columns, and SRID 4326. SQLite is not a substitute for running the application schema.
 - A Mapbox access token for map tiles.

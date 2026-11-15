@@ -50,6 +50,26 @@ return [
         ],
     ],
 
+    // Deployment starter taxonomy. Review with CDRRMO before importing official records.
+    // Categories alone never classify a resident; vulnerability records require verification.
+    'disaster_types' => [
+        ['name' => 'Flood'],
+        ['name' => 'Typhoon'],
+        ['name' => 'Earthquake'],
+        ['name' => 'Landslide'],
+        ['name' => 'Fire'],
+        ['name' => 'Storm surge'],
+        ['name' => 'Tsunami'],
+    ],
+
+    'vulnerability_categories' => [
+        ['category_name' => 'Senior citizen', 'description' => 'Person aged 60 years or older; verify individual records.'],
+        ['category_name' => 'Person with disability', 'description' => 'Disability status confirmed through the authorized verification workflow.'],
+        ['category_name' => 'Pregnant woman', 'description' => 'Pregnancy status confirmed through the authorized verification workflow.'],
+        ['category_name' => 'Lactating mother', 'description' => 'Lactation status confirmed through the authorized verification workflow.'],
+        ['category_name' => 'Child under five', 'description' => 'Child younger than five years; verify individual records.'],
+    ],
+
     'flood_classes' => [
         'VHF' => 'VHF (source FloodSusc)',
         'HF' => 'HF (source FloodSusc)',

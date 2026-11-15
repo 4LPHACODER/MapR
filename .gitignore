@@ -30,3 +30,12 @@ Thumbs.db
 /docs/superpowers/
 TODO.md
 AGENTS.md
+CLAUDE.md
+/.superpowers/
+.env.docker
+.env.docker.production
+
+.env.docker.*
+!.env.docker.example
+!.env.docker.production.example
+/backups/
