@@ -55,7 +55,7 @@ onUnmounted(() => {
             :collapsed="collapsed"
         />
         <div class="resident-main">
-            <ResidentHeader :title="title" :user-name="userName" :collapsed="collapsed" @toggle-collapse="collapsed = !collapsed" />
+            <ResidentHeader :title="title" :user-name="userName" :user-email="userEmail" :collapsed="collapsed" @toggle-collapse="collapsed = !collapsed" />
             <main class="resident-content">
                 <slot />
             </main>
