@@ -26,11 +26,11 @@ const accountPopover = ref(null);
 const attention = ref([]);
 
 function togglePopover(popover, event) {
-    popover.value?.toggle(event);
+    popover?.toggle(event);
 }
 
 function closePopover(popover) {
-    popover.value?.hide();
+    popover?.hide();
 }
 
 function popoverPassThrough(id, labelledBy) {
@@ -54,8 +54,8 @@ async function load() {
 
 onMounted(load);
 watch(() => route.fullPath, () => {
-    closePopover(notificationsPopover);
-    closePopover(accountPopover);
+    closePopover(notificationsPopover.value);
+    closePopover(accountPopover.value);
     load();
 });
 </script>
@@ -99,6 +99,7 @@ watch(() => route.fullPath, () => {
                 </Button>
                 <Popover
                     ref="notificationsPopover"
+                    append-to=".resident-app"
                     :pt="popoverPassThrough('resident-notifications-popover', 'resident-notifications-heading')"
                     @show="notesOpen = true"
                     @hide="notesOpen = false"
@@ -106,7 +107,6 @@ watch(() => route.fullPath, () => {
                     <section class="resident-header-popover-view" aria-labelledby="resident-notifications-heading">
                         <header class="resident-header-popover-heading">
                             <div>
-                                <p class="resident-header-popover-eyebrow">RESIDENT UPDATES</p>
                                 <h2 id="resident-notifications-heading">Needs your attention</h2>
                             </div>
                             <span v-if="attention.length" class="resident-header-popover-count">
@@ -153,6 +153,7 @@ watch(() => route.fullPath, () => {
                 </Button>
                 <Popover
                     ref="accountPopover"
+                    append-to=".resident-app"
                     :pt="popoverPassThrough('resident-account-popover', 'resident-account-heading')"
                     @show="accountOpen = true"
                     @hide="accountOpen = false"
@@ -161,7 +162,6 @@ watch(() => route.fullPath, () => {
                         <header class="resident-account-summary">
                             <ResidentAvatar :name="userName" :src="residentAccount.photoUrl || ''" />
                             <div class="resident-account-summary-copy">
-                                <p class="resident-header-popover-eyebrow">RESIDENT ACCOUNT</p>
                                 <h2 id="resident-account-heading">{{ userName || 'Resident' }}</h2>
                                 <span>{{ userEmail || 'MapR resident' }}</span>
                             </div>

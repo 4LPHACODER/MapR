@@ -75,7 +75,7 @@ ResidentSidebar.vue owns resident navigation labels, brand, and account footer. 
 
 ### Forms and overlays
 
-The resident header uses PrimeVue Popover for anchored account and notification views, including outside-click dismissal, Escape handling, portal placement, and focus trapping. The views use a custom resident treatment: soft blue identity surface, compact icon-led links, and a centered empty state. Reduced-motion preferences disable the popover and link transitions. Existing shared UI owners in resources/js/shared/ui continue to own feedback. See docs/resident-report-flow.md for reporting behavior.
+The resident header uses PrimeVue Popover for anchored account and notification views, including outside-click dismissal, Escape handling, portal placement, and focus trapping. The popovers mount inside `.resident-app` so portal content inherits resident tokens and has an opaque white surface. PrimeVue owns their stacking and anchor gap. Header buttons retain their 32px geometry. Popover action rows use compact padding and a 36px minimum height; the profile action uses a 28px icon container. The views use a white identity surface, compact icon-led links, and a centered empty state; headings carry the hierarchy without eyebrow labels. Reduced-motion preferences disable the popover and link transitions. Existing shared UI owners in resources/js/shared/ui continue to own feedback. See docs/resident-report-flow.md for reporting behavior.
 
 ### Iconography
 
