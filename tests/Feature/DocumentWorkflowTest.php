@@ -33,12 +33,12 @@ class DocumentWorkflowTest extends TestCase
         $this->assertStringContainsString('All four barangays', $map);
 
         foreach ([
-            resource_path('js/bdrrm/pages/DashboardPage.vue'),
-            resource_path('js/assessor/pages/DashboardPage.vue'),
-        ] as $dashboardPath) {
-            $dashboard = file_get_contents($dashboardPath);
-            $this->assertStringContainsString('cdrrmo-stat-grid', $dashboard);
-            $this->assertStringContainsString('cdrrmo-stat-card', $dashboard);
+            'bdrrm' => ['bdrrm-dash-cards', 'bdrrm-dash-card'],
+            'assessor' => ['cdrrmo-stat-grid', 'cdrrmo-stat-card'],
+        ] as $workspace => [$gridClass, $cardClass]) {
+            $dashboard = file_get_contents(resource_path("js/{$workspace}/pages/DashboardPage.vue"));
+            $this->assertStringContainsString($gridClass, $dashboard);
+            $this->assertStringContainsString($cardClass, $dashboard);
             $this->assertStringNotContainsString('cdrrmo-summary-grid', $dashboard);
         }
 
