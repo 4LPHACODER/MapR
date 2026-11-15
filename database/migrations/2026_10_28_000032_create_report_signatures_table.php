@@ -1,9 +1,14 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-return new class extends Migration {
- public function up(): void { DB::unprepared(<<<'SQL'
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        DB::unprepared(<<<'SQL'
 CREATE TABLE `report_signatures` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `signature_reference` VARCHAR(512) NOT NULL,
@@ -28,6 +33,11 @@ CREATE TABLE `report_signatures` (
   CHECK ((barangay_report_id IS NOT NULL) + (field_assessment_id IS NOT NULL) + (consolidated_report_id IS NOT NULL) = 1),
   CHECK (verification_status IN ('pending','verified','rejected'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-SQL); }
- public function down(): void { Schema::dropIfExists('report_signatures'); }
+SQL);
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('report_signatures');
+    }
 };

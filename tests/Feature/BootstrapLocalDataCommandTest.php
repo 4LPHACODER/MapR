@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Tests\Support\CreatesMaprAuthSchema;
 use Tests\TestCase;
 
@@ -24,14 +25,14 @@ class BootstrapLocalDataCommandTest extends TestCase
     {
         $this->createMaprAuthSchema();
 
-        \Illuminate\Support\Facades\DB::table('barangays')->insert([
+        DB::table('barangays')->insert([
             'barangay_code' => 'TEST',
             'barangay_name' => 'Test',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
-        $roleId = \Illuminate\Support\Facades\DB::table('roles')->insertGetId([
+        $roleId = DB::table('roles')->insertGetId([
             'name' => 'CDRRMO',
             'code' => 'cdrrmo_admin',
             'description' => 'test',
@@ -39,7 +40,7 @@ class BootstrapLocalDataCommandTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        \Illuminate\Support\Facades\DB::table('users')->insert([
+        DB::table('users')->insert([
             'first_name' => 'Test',
             'last_name' => 'User',
             'email' => 'bootstrap.test@mapr.test',

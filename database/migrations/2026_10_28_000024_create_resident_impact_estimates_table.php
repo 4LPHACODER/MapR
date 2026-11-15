@@ -1,9 +1,14 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-return new class extends Migration {
- public function up(): void { DB::unprepared(<<<'SQL'
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        DB::unprepared(<<<'SQL'
 CREATE TABLE `resident_impact_estimates` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `estimated_buildings` BIGINT UNSIGNED NOT NULL DEFAULT 0,
@@ -27,6 +32,11 @@ CREATE TABLE `resident_impact_estimates` (
   FOREIGN KEY (`generated_by`) REFERENCES `users` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CHECK (estimation_method IN ('area_population','verified_damaged_buildings'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-SQL); }
- public function down(): void { Schema::dropIfExists('resident_impact_estimates'); }
+SQL);
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('resident_impact_estimates');
+    }
 };

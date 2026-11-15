@@ -6,12 +6,11 @@ use App\Models\Registry\Household;
 use App\Models\Registry\IncidentResidentInclusion;
 use App\Models\Registry\IncidentResidentInclusionEvent;
 use App\Models\Registry\Resident;
-use App\Services\ActivityLogger;
-use App\Services\PolygonSpatial;
 use App\Support\MapSourceLocation;
 use App\Support\SourceName;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -168,7 +167,7 @@ class ResidentRegistry
         ]);
 
         $stored = $resident->updated_at?->utc()->format('Y-m-d H:i:s');
-        $submitted = \Illuminate\Support\Carbon::parse($data['updated_at'])->utc()->format('Y-m-d H:i:s');
+        $submitted = Carbon::parse($data['updated_at'])->utc()->format('Y-m-d H:i:s');
         if ($stored !== $submitted) {
             return response()->json(['message' => 'This resident was updated by someone else. Refresh and try again.'], 409);
         }
@@ -258,6 +257,7 @@ class ResidentRegistry
                 ]);
                 if ($inclusion->exists && $inclusion->status === 'active') {
                     $already++;
+
                     continue;
                 }
                 $action = $inclusion->exists ? 'reinstated' : 'added';
@@ -380,6 +380,7 @@ class ResidentRegistry
             $point = $buildingId ? ($points[$buildingId] ?? null) : null;
             if (! $point) {
                 $missing++;
+
                 continue;
             }
             $mapped[] = [

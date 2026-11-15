@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Shared;
 
 use App\Http\Controllers\Controller;
-
 use App\Policies\BarangayReportPolicy;
 use App\Policies\FieldAssessmentPolicy;
 use Illuminate\Http\JsonResponse;

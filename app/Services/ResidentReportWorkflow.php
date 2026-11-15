@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Auth\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -215,6 +216,7 @@ class ResidentReportWorkflow
             $presented = $this->present($row);
             if ($presented['status'] === 'draft') {
                 $draft ??= ['id' => $presented['id'], 'reference' => $presented['reference']];
+
                 continue;
             }
             $counts['submitted']++;
@@ -271,7 +273,7 @@ class ResidentReportWorkflow
             ];
         }
         foreach ($timestamps as $timestamp) {
-            $key = \Illuminate\Support\Carbon::parse($timestamp)->format('Y-m');
+            $key = Carbon::parse($timestamp)->format('Y-m');
             if (isset($months[$key])) {
                 $months[$key]['count']++;
             }
