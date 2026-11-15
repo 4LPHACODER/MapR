@@ -5,6 +5,7 @@
     "scripts": {
         "build": "vite build",
         "dev": "vite",
+        "test:map": "node --test tests/js/hazard-map-location.test.mjs",
         "ui:inventory": "node scripts/ui/primevue-inventory.mjs"
     },
     "devDependencies": {
