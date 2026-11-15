@@ -6,7 +6,7 @@
     "keywords": ["laravel", "framework"],
     "license": "MIT",
     "require": {
-        "php": "^8.2",
+        "php": "~8.5.12",
         "barryvdh/laravel-dompdf": "^3.1",
         "laravel/framework": "^12.0",
         "laravel/tinker": "^2.10.1"
@@ -51,6 +51,9 @@
         ],
         "setup:cdrrmo-local": [
             "@php artisan mapr:bootstrap-local-data"
+        ],
+        "hooks": [
+            "git config core.hooksPath .githooks"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",

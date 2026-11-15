@@ -358,7 +358,7 @@ class AssessmentController extends Controller
                     ->leftJoin('damage_classes as confirmed', 'confirmed.id', '=', 'a.confirmed_damage_class_id')
                     ->first(['a.estimated_cost_php', 'confirmed.class_code', 'confirmed.class_name']);
                 if ($damage) {
-                    $buildingStatusLabel = app(\App\Services\BuildingCostEstimator::class)
+                    $buildingStatusLabel = app(BuildingCostEstimator::class)
                         ->displayLabel($damage->class_code ?? null, $damage->class_name ?? null);
                     $estimatedCost = $damage->estimated_cost_php !== null ? (float) $damage->estimated_cost_php : null;
                 }

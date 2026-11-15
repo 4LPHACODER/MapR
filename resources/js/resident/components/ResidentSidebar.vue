@@ -1,4 +1,5 @@
 <script setup>
+import Button from 'primevue/button';
 import MapIcon from '../../shared/components/MapIcon.vue';
 import ResidentAvatar from './ResidentAvatar.vue';
 import { residentAccount } from '../accountState';
@@ -22,9 +23,9 @@ defineEmits(['toggle-collapse']);
                 <img :src="logoUrl" alt="MapR logo" width="40" height="40">
                 <span class="resident-label">MapR Resident</span>
             </a>
-            <button type="button" class="resident-collapse" :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'" @click="$emit('toggle-collapse')">
-                <MapIcon name="panel" />
-            </button>
+            <Button type="button" class="resident-collapse p-0" severity="secondary" variant="outlined" rounded :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'" @click="$emit('toggle-collapse')">
+                <template #icon="{ class: iconClass }"><MapIcon name="panel" :class="iconClass" /></template>
+            </Button>
         </div>
         <nav>
             <router-link to="/" active-class="" exact-active-class="router-link-active"><MapIcon name="dashboard" /><span class="resident-label">Dashboard</span></router-link>
@@ -36,11 +37,18 @@ defineEmits(['toggle-collapse']);
         <div class="resident-account-area">
             <p class="resident-label"><ResidentAvatar :name="userName" :src="residentAccount.photoUrl || ''" /> {{ userName || jobTitle }}</p>
             <form method="POST" :action="logoutUrl">
+                <!-- native-ok: hidden CSRF token must accompany the native POST logout form. -->
                 <input type="hidden" name="_token" :value="csrfToken">
-                <button type="submit">
+                <Button
+                    type="submit"
+                    class="resident-logout p-0"
+                    severity="secondary"
+                    text
+                    aria-label="Sign out"
+                >
                     <MapIcon name="logout" />
                     <span class="resident-label">Sign out</span>
-                </button>
+                </Button>
             </form>
         </div>
     </aside>

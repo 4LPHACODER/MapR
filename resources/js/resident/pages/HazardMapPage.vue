@@ -1,5 +1,11 @@
 <script setup>
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import Button from 'primevue/button';
+import Checkbox from 'primevue/checkbox';
+import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
+import Slider from 'primevue/slider';
+import ToggleSwitch from 'primevue/toggleswitch';
 import MapIcon from '../../shared/components/MapIcon.vue';
 
 const apiBase = inject('apiBase');
@@ -78,6 +84,22 @@ const siteAreas = computed(() => {
         if (match?.properties?.psgc) present.add(match.properties.psgc);
     });
     return areas.value.filter((area) => present.has(area.psgc));
+});
+const hazardLayerOptions = computed(() => (catalog.value?.layers || []).map((layer) => ({
+    label: layer.name,
+    value: layer.id,
+})));
+const areaOptions = computed(() => siteAreas.value.map((area) => ({
+    label: area.name,
+    value: area.psgc,
+})));
+const activeLayerSelection = computed({
+    get: () => activeId.value || null,
+    set: (value) => { activeId.value = value ?? ''; },
+});
+const areaSelection = computed({
+    get: () => areaPsgc.value || null,
+    set: (value) => { areaPsgc.value = value ?? ''; },
 });
 const filteredPoints = computed(() => (showPoints.value ? areaPoints.value : []));
 const siteOptions = computed(() => areaPoints.value
@@ -731,7 +753,7 @@ async function findNearest() {
         syncSelection();
         if (sheet.value) closePanel();
         await nextTick();
-        if (!(sheet.value && panelOpen.value)) siteClose.value?.focus();
+        if (!(sheet.value && panelOpen.value)) siteClose.value?.$el?.focus();
     } catch (exception) {
         if (token !== routeToken) return;
         nearestSummary.value = '';
@@ -810,7 +832,7 @@ function selectPlace(feature) {
     if (coordinates) map?.easeTo({ center: coordinates, zoom: Math.max(map.getZoom(), 15), padding: fitPadding() });
     if (sheet.value) closePanel();
     nextTick(() => {
-        if (!(sheet.value && panelOpen.value)) siteClose.value?.focus();
+        if (!(sheet.value && panelOpen.value)) siteClose.value?.$el?.focus();
     });
 }
 
@@ -828,7 +850,7 @@ function closeSite() {
     straightLineMeters.value = null;
     clearRouteLine();
     syncSelection();
-    nextTick(() => (nearestButton.value || layersButton.value)?.focus());
+    nextTick(() => (nearestButton.value?.$el || layersButton.value?.$el)?.focus());
 }
 
 function showAllSites() {
@@ -858,12 +880,12 @@ function resetFilters() {
 async function openPanel() {
     panelOpen.value = true;
     await nextTick();
-    panelClose.value?.focus();
+    panelClose.value?.$el?.focus();
 }
 
 function closePanel() {
     panelOpen.value = false;
-    nextTick(() => layersButton.value?.focus());
+    nextTick(() => layersButton.value?.$el?.focus());
 }
 
 let skipPickerOpen = false;
@@ -875,7 +897,7 @@ function openPicker() {
     const current = siteOptions.value.findIndex((option) => option.id === pickerId.value);
     pickerIndex.value = current >= 0 ? current : 0;
     nextTick(() => {
-        pickerInput.value?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        pickerInput.value?.$el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         placePicker();
     });
 }
@@ -886,7 +908,7 @@ function closePicker() {
 }
 
 function placePicker() {
-    const input = pickerInput.value;
+    const input = pickerInput.value?.$el;
     if (!input || !pickerOpen.value) return;
     const rect = input.getBoundingClientRect();
     const margin = 8;
@@ -979,7 +1001,7 @@ function clearPicker() {
     else closePicker();
     pickerId.value = '';
     nextTick(() => {
-        pickerInput.value?.focus();
+        pickerInput.value?.$el?.focus();
         skipPickerOpen = false;
     });
 }
@@ -1119,20 +1141,30 @@ onBeforeUnmount(() => {
         <div class="resident-map-stage" :class="{ 'is-wide': wide, 'is-sheet': sheet && panelOpen }">
             <div ref="mapEl" class="resident-map-canvas" role="application" aria-label="Community hazard map"></div>
             <div class="resident-map-tools">
-                <button ref="layersButton" type="button" aria-label="Layers and filters" title="Layers and filters" :aria-expanded="panelOpen" aria-controls="resident-map-filters" @click="panelOpen ? closePanel() : openPanel()">
-                    <MapIcon name="layers" />
-                    <span v-if="activeCount" class="resident-map-count">{{ activeCount }}</span>
-                </button>
-                <button type="button" aria-label="Use my location" title="Use my location" :aria-busy="locating" @click="useLocation">
-                    <MapIcon name="focus" />
-                </button>
-                <button ref="nearestButton" type="button" class="resident-map-nearest" aria-label="Find nearest site" title="Find nearest site" :aria-busy="finding" @click="findNearest">
-                    <MapIcon name="pin-check" />
-                    <span>Find nearest site</span>
-                </button>
-                <button type="button" :aria-label="wide ? 'Restore map' : 'Expand map'" :title="wide ? 'Restore map' : 'Expand map'" @click="toggleWide">
-                    <MapIcon :name="wide ? 'collapse' : 'collapse'" />
-                </button>
+                <Button
+                    ref="layersButton"
+                    type="button"
+                    severity="secondary"
+                    aria-label="Layers and filters"
+                    title="Layers and filters"
+                    :aria-expanded="panelOpen"
+                    aria-controls="resident-map-filters"
+                    @click="panelOpen ? closePanel() : openPanel()"
+                >
+                    <template #icon="{ class: iconClass }">
+                        <MapIcon name="layers" :class="iconClass" />
+                        <span v-if="activeCount" class="resident-map-count">{{ activeCount }}</span>
+                    </template>
+                </Button>
+                <Button type="button" severity="secondary" aria-label="Use my location" title="Use my location" :aria-busy="locating" @click="useLocation">
+                    <template #icon="{ class: iconClass }"><MapIcon name="focus" :class="iconClass" /></template>
+                </Button>
+                <Button ref="nearestButton" type="button" class="resident-map-nearest" severity="secondary" label="Find nearest site" aria-label="Find nearest site" title="Find nearest site" :aria-busy="finding" @click="findNearest">
+                    <template #icon="{ class: iconClass }"><MapIcon name="pin-check" :class="iconClass" /></template>
+                </Button>
+                <Button type="button" severity="secondary" :aria-label="wide ? 'Restore map' : 'Expand map'" :title="wide ? 'Restore map' : 'Expand map'" @click="toggleWide">
+                    <template #icon="{ class: iconClass }"><MapIcon name="collapse" :class="iconClass" /></template>
+                </Button>
             </div>
             <p class="resident-map-sr" role="status">{{ statusAnnouncement }}</p>
             <div class="resident-map-status-stack">
@@ -1143,6 +1175,7 @@ onBeforeUnmount(() => {
                 <p v-if="hazardMessage" class="resident-map-status" role="status">{{ hazardMessage }}</p>
                 <p v-else-if="selectedHazard" class="resident-map-status" role="status">{{ activeLayer?.name }}: {{ selectedHazard.category || 'Unclassified' }}.</p>
             </div>
+            <!-- native-ok: map layer sheet stays in map stage to preserve viewport and touch behavior. -->
             <aside
                 v-show="panelOpen"
                 id="resident-map-filters"
@@ -1157,62 +1190,82 @@ onBeforeUnmount(() => {
                 <span class="resident-map-handle" aria-hidden="true"></span>
                 <header class="resident-map-filters-head">
                     <h3>Map layers &amp; filters</h3>
-                    <button ref="panelClose" type="button" :aria-label="sheet ? 'Close filters' : 'Collapse filters'" @click="closePanel">
-                        <MapIcon :name="sheet ? 'x' : 'chevron'" :class="{ 'is-collapse': !sheet }" />
-                    </button>
+                    <Button ref="panelClose" type="button" severity="secondary" :aria-label="sheet ? 'Close filters' : 'Collapse filters'" @click="closePanel">
+                        <template #icon="{ class: iconClass }"><MapIcon :name="sheet ? 'x' : 'chevron'" :class="[iconClass, { 'is-collapse': !sheet }]" /></template>
+                    </Button>
                 </header>
                 <div class="resident-map-filters-body" @scroll="placePicker">
                     <section>
-                        <button type="button" class="resident-map-section" :aria-expanded="sections.hazard" aria-controls="resident-map-hazard" @click="sections.hazard = !sections.hazard">
-                            <span>Hazard layer</span>
-                            <MapIcon name="chevron" :class="{ 'is-open': sections.hazard }" />
-                        </button>
+                        <Button type="button" class="resident-map-section" severity="secondary" text label="Hazard layer" iconPos="right" :aria-expanded="sections.hazard" aria-controls="resident-map-hazard" @click="sections.hazard = !sections.hazard">
+                            <template #icon="{ class: iconClass }"><MapIcon name="chevron" :class="[iconClass, { 'is-open': sections.hazard }]" /></template>
+                        </Button>
                         <div v-show="sections.hazard" id="resident-map-hazard" class="resident-map-stack">
-                            <label>Hazard layer
-                                <select v-model="activeId">
-                                    <option value="">None</option>
-                                    <option v-for="layer in catalog?.layers || []" :key="layer.id" :value="layer.id">{{ layer.name }}</option>
-                                </select>
-                            </label>
+                            <label id="resident-map-layer-label" for="resident-map-layer-select">Hazard layer</label>
+                            <Select
+                                v-model="activeLayerSelection"
+                                :options="hazardLayerOptions"
+                                optionLabel="label"
+                                optionValue="value"
+                                inputId="resident-map-layer-select"
+                                        aria-labelledby="resident-map-layer-label"
+                                placeholder="None"
+                                showClear
+                                fluid
+                            />
                             <fieldset v-if="activeLayer?.legend?.length">
                                 <legend>Severity</legend>
-                                <label v-for="item in activeLayer.legend" :key="item.value">
-                                    <input type="checkbox" :checked="severities.includes(item.value)" @change="toggleSeverity(item.value)">
-                                    <i :style="{ background: item.color }"></i><span>{{ item.label }}</span>
+                                <label v-for="(item, index) in activeLayer.legend" :key="item.value">
+                                    <Checkbox
+                                        :inputId="`resident-map-severity-${index}`"
+                                        :modelValue="severities.includes(item.value)"
+                                        binary
+                                        :aria-labelledby="`resident-map-severity-label-${index}`"
+                                        @update:modelValue="toggleSeverity(item.value)"
+                                    />
+                                    <i :style="{ background: item.color }"></i><span :id="`resident-map-severity-label-${index}`">{{ item.label }}</span>
                                 </label>
                             </fieldset>
                             <template v-if="activeId">
-                                <button type="button" class="resident-map-check" :disabled="!position || locating" @click="checkHazard">Check hazard at my location</button>
+                                <Button type="button" class="resident-map-check" severity="secondary" variant="outlined" label="Check hazard at my location" :disabled="!position || locating" @click="checkHazard" />
                             </template>
                             <p v-else>Select a hazard layer before checking this location.</p>
                         </div>
                     </section>
                     <section>
-                        <button type="button" class="resident-map-section" :aria-expanded="sections.points" aria-controls="resident-map-points" @click="sections.points = !sections.points">
-                            <span>Evacuation sites</span>
-                            <MapIcon name="chevron" :class="{ 'is-open': sections.points }" />
-                        </button>
+                        <Button type="button" class="resident-map-section" severity="secondary" text label="Evacuation sites" iconPos="right" :aria-expanded="sections.points" aria-controls="resident-map-points" @click="sections.points = !sections.points">
+                            <template #icon="{ class: iconClass }"><MapIcon name="chevron" :class="[iconClass, { 'is-open': sections.points }]" /></template>
+                        </Button>
                         <div v-show="sections.points" id="resident-map-points" class="resident-map-stack">
-                            <label class="resident-map-toggle resident-map-switch"><span>Show evacuation sites</span><input v-model="showPoints" type="checkbox"></label>
+                            <label class="resident-map-toggle resident-map-switch">
+                                <span id="resident-map-show-points-label">Show evacuation sites</span>
+                                <ToggleSwitch v-model="showPoints" inputId="resident-map-show-points" aria-labelledby="resident-map-show-points-label" />
+                            </label>
                             <p v-if="pointsError" class="resident-map-inline-error" role="alert">
                                 {{ pointsError }}
-                                <button type="button" class="resident-map-text" @click="showPlaces">Try again</button>
+                                <Button type="button" class="resident-map-text" text label="Try again" @click="showPlaces" />
                             </p>
                             <template v-else-if="showPoints && !sitesUnavailable">
-                                <label>Evacuation-site area
-                                    <select v-model="areaPsgc" @change="chooseArea">
-                                        <option value="">All Tandag City</option>
-                                        <option v-for="area in siteAreas" :key="area.psgc" :value="area.psgc">{{ area.name }}</option>
-                                    </select>
-                                </label>
-                                <button v-if="areaPsgc" type="button" class="resident-map-text" @click="showAllSites">Show all Tandag sites</button>
+                                <label id="resident-map-area-label" for="resident-map-area-select">Evacuation-site area</label>
+                                <Select
+                                    v-model="areaSelection"
+                                    :options="areaOptions"
+                                    optionLabel="label"
+                                    optionValue="value"
+                                    inputId="resident-map-area-select"
+                                    aria-labelledby="resident-map-area-label"
+                                    placeholder="All Tandag City"
+                                    showClear
+                                    fluid
+                                    @change="chooseArea"
+                                />
+                                <Button v-if="areaPsgc" type="button" class="resident-map-text" text label="Show all Tandag sites" @click="showAllSites" />
                                 <div ref="pickerRoot" class="resident-map-picker">
                                     <div class="resident-map-picker-head">
                                         <span id="resident-map-picker-label">Find an evacuation site</span>
                                         <span class="resident-map-count-label">{{ siteCountLabel }}</span>
                                     </div>
                                     <div class="resident-map-picker-control">
-                                        <input
+                                        <InputText
                                             ref="pickerInput"
                                             type="text"
                                             role="combobox"
@@ -1227,8 +1280,10 @@ onBeforeUnmount(() => {
                                             @input="onPickerInput"
                                             @keydown="onPickerKeydown"
                                             @blur="onPickerBlur"
-                                        >
-                                        <button v-if="pickerId" type="button" aria-label="Clear selected site" @mousedown.prevent @click="clearPicker"><MapIcon name="x" /></button>
+                                        />
+                                        <Button v-if="pickerId" type="button" class="p-0" severity="secondary" text rounded aria-label="Clear selected site" @mousedown.prevent @click="clearPicker">
+                                            <template #icon="{ class: iconClass }"><MapIcon name="x" :class="iconClass" /></template>
+                                        </Button>
                                     </div>
                                     <ul v-show="pickerOpen" id="resident-map-picker-list" class="resident-map-picker-list" role="listbox" aria-labelledby="resident-map-picker-label" :style="pickerStyle">
                                         <li v-if="!pickerMatches.length" class="resident-map-picker-empty" role="presentation">{{ pickerEmptyMessage }}</li>
@@ -1252,27 +1307,31 @@ onBeforeUnmount(() => {
                         </div>
                     </section>
                     <section>
-                        <button type="button" class="resident-map-section" :aria-expanded="sections.more" aria-controls="resident-map-more" @click="sections.more = !sections.more">
-                            <span>More map options</span>
-                            <MapIcon name="chevron" :class="{ 'is-open': sections.more }" />
-                        </button>
+                        <Button type="button" class="resident-map-section" severity="secondary" text label="More map options" iconPos="right" :aria-expanded="sections.more" aria-controls="resident-map-more" @click="sections.more = !sections.more">
+                            <template #icon="{ class: iconClass }"><MapIcon name="chevron" :class="[iconClass, { 'is-open': sections.more }]" /></template>
+                        </Button>
                         <div v-show="sections.more" id="resident-map-more" class="resident-map-stack">
                             <label v-if="activeId">Layer opacity
-                                <input v-model.number="opacity" type="range" min="0.15" max="0.8" step="0.05" aria-label="Layer opacity">
+                                <Slider v-model="opacity" :min="0.15" :max="0.8" :step="0.05" aria-label="Layer opacity" class="w-full" />
                             </label>
-                            <label class="resident-map-toggle"><input v-model="showBoundaries" type="checkbox"> Barangay boundaries</label>
-                            <label class="resident-map-toggle"><input v-model="showRivers" type="checkbox"> Rivers</label>
+                            <label class="resident-map-toggle">
+                                <ToggleSwitch v-model="showBoundaries" inputId="resident-map-show-boundaries" aria-labelledby="resident-map-show-boundaries-label" />
+                                <span id="resident-map-show-boundaries-label">Barangay boundaries</span>
+                            </label>
+                            <label class="resident-map-toggle">
+                                <ToggleSwitch v-model="showRivers" inputId="resident-map-show-rivers" aria-labelledby="resident-map-show-rivers-label" />
+                                <span id="resident-map-show-rivers-label">Rivers</span>
+                            </label>
                             <div class="resident-map-style">
-                                <button type="button" :aria-pressed="!satellite" @click="satellite && toggleStyle()">Map</button>
-                                <button type="button" :aria-pressed="satellite" @click="!satellite && toggleStyle()">Satellite</button>
+                                <Button type="button" variant="outlined" :severity="satellite ? 'secondary' : undefined" label="Map" :aria-pressed="!satellite" @click="satellite && toggleStyle()" />
+                                <Button type="button" variant="outlined" :severity="satellite ? undefined : 'secondary'" label="Satellite" :aria-pressed="satellite" @click="!satellite && toggleStyle()" />
                             </div>
                         </div>
                     </section>
                     <section>
-                        <button type="button" class="resident-map-section" :aria-expanded="sections.legend" aria-controls="resident-map-legend" @click="sections.legend = !sections.legend">
-                            <span>Legend</span>
-                            <MapIcon name="chevron" :class="{ 'is-open': sections.legend }" />
-                        </button>
+                        <Button type="button" class="resident-map-section" severity="secondary" text label="Legend" iconPos="right" :aria-expanded="sections.legend" aria-controls="resident-map-legend" @click="sections.legend = !sections.legend">
+                            <template #icon="{ class: iconClass }"><MapIcon name="chevron" :class="[iconClass, { 'is-open': sections.legend }]" /></template>
+                        </Button>
                         <div v-show="sections.legend" id="resident-map-legend" class="resident-map-stack">
                             <p v-if="activeLayer"><strong>{{ activeLayer.name }}</strong></p>
                             <p v-else>No hazard layer is selected.</p>
@@ -1285,21 +1344,21 @@ onBeforeUnmount(() => {
                         </div>
                     </section>
                     <section>
-                        <button type="button" class="resident-map-section" :aria-expanded="sections.about" aria-controls="resident-map-about" @click="sections.about = !sections.about">
-                            <span>About this data</span>
-                            <MapIcon name="chevron" :class="{ 'is-open': sections.about }" />
-                        </button>
+                        <Button type="button" class="resident-map-section" severity="secondary" text label="About this data" iconPos="right" :aria-expanded="sections.about" aria-controls="resident-map-about" @click="sections.about = !sections.about">
+                            <template #icon="{ class: iconClass }"><MapIcon name="chevron" :class="[iconClass, { 'is-open': sections.about }]" /></template>
+                        </Button>
                         <div v-show="sections.about" id="resident-map-about" class="resident-map-stack">
                             <p>Listed evacuation sites are the verified records available for Tandag City. A facility is included only when that record lists it as an evacuation site. The list may not include every site in the city.</p>
                             <p>Dataset date 2021-07-22. Availability is not confirmed unless a current source says the site is open.</p>
                             <p v-if="activeLayer">{{ activeLayer.name }}: {{ activeLayer.source }}. {{ activeLayer.date }}</p>
                         </div>
                     </section>
-                    <button v-if="sheet" type="button" class="resident-map-text" @click="sheetTall = !sheetTall">{{ sheetTall ? 'Show more map' : 'Expand panel' }}</button>
-                    <button type="button" class="resident-map-text" @click="resetMapView">Reset map view</button>
-                    <button v-if="filtersChanged" type="button" class="resident-map-text" @click="resetFilters">Reset filters</button>
+                    <Button v-if="sheet" type="button" class="resident-map-text" text :label="sheetTall ? 'Show more map' : 'Expand panel'" @click="sheetTall = !sheetTall" />
+                    <Button type="button" class="resident-map-text" text label="Reset map view" @click="resetMapView" />
+                    <Button v-if="filtersChanged" type="button" class="resident-map-text" text label="Reset filters" @click="resetFilters" />
                 </div>
             </aside>
+            <!-- native-ok: site detail sheet stays in map stage to preserve viewport and touch behavior. -->
             <aside
                 v-if="selectedPlace"
                 v-show="!(sheet && panelOpen)"
@@ -1313,10 +1372,12 @@ onBeforeUnmount(() => {
                 <header class="resident-map-detail-head">
                     <MapIcon name="building" />
                     <h3>{{ selectedPlace.name }}</h3>
-                    <button type="button" :aria-label="siteExpanded ? 'Collapse site details' : 'Expand site details'" @click="siteExpanded = !siteExpanded">
-                        <MapIcon name="chevron" :class="{ 'is-open': siteExpanded }" />
-                    </button>
-                    <button ref="siteClose" type="button" aria-label="Close site" @click="closeSite"><MapIcon name="x" /></button>
+                    <Button type="button" severity="secondary" :aria-label="siteExpanded ? 'Collapse site details' : 'Expand site details'" @click="siteExpanded = !siteExpanded">
+                        <template #icon="{ class: iconClass }"><MapIcon name="chevron" :class="[iconClass, { 'is-open': siteExpanded }]" /></template>
+                    </Button>
+                    <Button ref="siteClose" type="button" severity="secondary" aria-label="Close site" @click="closeSite">
+                        <template #icon="{ class: iconClass }"><MapIcon name="x" :class="iconClass" /></template>
+                    </Button>
                 </header>
                 <p v-if="!siteExpanded" class="resident-map-site-summary">{{ siteSummary }}</p>
                 <div v-show="siteExpanded" class="resident-map-detail-body">
@@ -1325,17 +1386,17 @@ onBeforeUnmount(() => {
                     <p>Listed evacuation site</p>
                     <p>{{ selectedPlace.availability || 'Availability not confirmed.' }}</p>
                     <p v-if="nearestSummary">{{ nearestSummary }}</p>
-                    <button v-if="areaPsgc" type="button" class="resident-map-text" @click="showAllSites">Show all Tandag sites</button>
+                    <Button v-if="areaPsgc" type="button" class="resident-map-text" text label="Show all Tandag sites" @click="showAllSites" />
                     <p v-if="routeResult">{{ formatTrip(routeResult.distance, routeResult.duration) }}</p>
                     <p v-if="straightLineMeters && !routeResult">Nearest by straight-line distance, about {{ formatDistance(straightLineMeters) }}.</p>
                     <div class="resident-map-style" role="group" aria-label="Travel mode">
-                        <button type="button" :aria-pressed="travelMode === 'walking'" @click="setTravelMode('walking')">Walking</button>
-                        <button type="button" :aria-pressed="travelMode === 'driving'" @click="setTravelMode('driving')">Driving</button>
+                        <Button type="button" variant="outlined" :severity="travelMode === 'walking' ? undefined : 'secondary'" label="Walking" :aria-pressed="travelMode === 'walking'" @click="setTravelMode('walking')" />
+                        <Button type="button" variant="outlined" :severity="travelMode === 'driving' ? undefined : 'secondary'" label="Driving" :aria-pressed="travelMode === 'driving'" @click="setTravelMode('driving')" />
                     </div>
-                    <button type="button" class="resident-map-primary" :disabled="routing || locating" @click="getDirections">{{ routing ? 'Getting directions…' : 'Get directions' }}</button>
+                    <Button type="button" class="resident-map-primary" :label="routing ? 'Getting directions…' : 'Get directions'" :disabled="routing || locating" @click="getDirections" />
                     <p v-if="routeError" class="resident-map-inline-error" role="alert">
                         {{ routeError }}
-                        <button type="button" class="resident-map-text" @click="getDirections">Try again</button>
+                        <Button type="button" class="resident-map-text" text label="Try again" @click="getDirections" />
                     </p>
                     <a v-if="routeError && externalDirections" class="resident-map-text" :href="externalDirections" target="_blank" rel="noopener noreferrer">Open directions in Google Maps</a>
                     <p v-if="routeResult" class="resident-map-route-note">Suggested route only. Road conditions and site availability may change. Follow CDRRMO instructions.</p>
@@ -1346,13 +1407,13 @@ onBeforeUnmount(() => {
                             <li v-for="(step, index) in routeResult.steps" :key="index">{{ step.instruction }}</li>
                         </ol>
                     </details>
-                    <button v-if="routeResult || routeError" type="button" class="resident-map-text" @click="clearRoute">Clear route</button>
+                    <Button v-if="routeResult || routeError" type="button" class="resident-map-text" text label="Clear route" @click="clearRoute" />
                     <details class="resident-map-site-info">
                         <summary>Site information</summary>
                         <p>Source: {{ selectedPlace.source }}</p>
                         <p>Dataset date: {{ selectedPlace.dataset_date }}</p>
                     </details>
-                    <button v-if="sheet" type="button" class="resident-map-text" @click="siteExpanded = false">Show more map</button>
+                    <Button v-if="sheet" type="button" class="resident-map-text" text label="Show more map" @click="siteExpanded = false" />
                 </div>
             </aside>
         </div>

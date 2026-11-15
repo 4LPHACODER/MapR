@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -106,7 +107,7 @@ class ReportLineage
                 'position' => $slot['position'],
                 'image' => $this->signatureImage($signed),
                 'caption' => $signed && ! empty($signed->signed_at)
-                    ? 'Signed '.\Illuminate\Support\Carbon::parse($signed->signed_at)->timezone('Asia/Manila')->format('d M Y')
+                    ? 'Signed '.Carbon::parse($signed->signed_at)->timezone('Asia/Manila')->format('d M Y')
                     : 'Awaiting signature',
             ];
         }, $slots);

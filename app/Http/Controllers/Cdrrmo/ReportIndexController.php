@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\Cdrrmo;
 
-use App\Http\Controllers\Controller;
-use App\Http\Controllers\Bdrrm\BarangayReportController;
 use App\Http\Controllers\Assessor\AssessmentController;
+use App\Http\Controllers\Bdrrm\BarangayReportController;
+use App\Http\Controllers\Controller;
 use App\Http\Controllers\Shared\ReportFlagController;
 use App\Services\ReportWorkflow;
 use Illuminate\Http\JsonResponse;

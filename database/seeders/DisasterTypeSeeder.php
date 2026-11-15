@@ -18,7 +18,7 @@ class DisasterTypeSeeder extends Seeder
         foreach ($rows as $row) {
             DB::table('disaster_types')->updateOrInsert(
                 ['name' => $row['name']],
-                ['updated_at' => now(), 'created_at' => now()],
+                fn (bool $exists) => ['updated_at' => now(), ...($exists ? [] : ['created_at' => now()])],
             );
         }
     }

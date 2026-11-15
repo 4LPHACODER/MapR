@@ -1,9 +1,14 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-return new class extends Migration {
- public function up(): void { DB::unprepared(<<<'SQL'
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        DB::unprepared(<<<'SQL'
 CREATE TABLE `resident_vulnerabilities` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `verification_status` VARCHAR(16) NOT NULL,
@@ -17,6 +22,11 @@ CREATE TABLE `resident_vulnerabilities` (
   UNIQUE (`resident_id`, `vulnerability_category_id`),
   CHECK (verification_status IN ('unverified','verified','rejected'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-SQL); }
- public function down(): void { Schema::dropIfExists('resident_vulnerabilities'); }
+SQL);
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('resident_vulnerabilities');
+    }
 };

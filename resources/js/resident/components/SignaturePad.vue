@@ -1,5 +1,7 @@
 <script setup>
 import { inject, onBeforeUnmount, onMounted, ref } from 'vue';
+import Button from 'primevue/button';
+import Message from 'primevue/message';
 
 const props = defineProps({
     recorded: { type: Boolean, default: false },
@@ -182,6 +184,7 @@ onBeforeUnmount(() => {
         <h3 id="resident-signature-label">{{ label }}</h3>
         <p class="resident-lead">{{ lead }}</p>
         <p v-if="recorded" class="resident-muted">The original signature remains on record.</p>
+        <!-- native-ok: canvas captures signature strokes and exports the saved PNG. -->
         <canvas
             ref="canvas"
             :aria-label="label"
@@ -191,11 +194,11 @@ onBeforeUnmount(() => {
             @pointercancel="end"
         ></canvas>
         <div class="resident-signature-actions">
-            <button type="button" class="resident-secondary" :disabled="saving" @click="clearPad">Clear Signature</button>
-            <button v-if="error" type="button" class="resident-primary" :disabled="saving" @click="save">Retry</button>
+            <Button type="button" label="Clear Signature" severity="secondary" variant="outlined" class="resident-secondary" :disabled="saving" @click="clearPad" />
+            <Button v-if="error" type="button" label="Retry" class="resident-primary" :disabled="saving" @click="save" />
         </div>
         <p v-if="saving" class="resident-muted" role="status">Saving signature…</p>
-        <p v-else-if="status" class="resident-ok" role="status">{{ status }}</p>
-        <p v-if="error" class="resident-error" role="alert">{{ error }}</p>
+        <Message v-else-if="status" severity="success" :closable="false" role="status">{{ status }}</Message>
+        <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
     </section>
 </template>

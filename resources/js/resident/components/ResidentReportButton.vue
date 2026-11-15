@@ -1,6 +1,7 @@
 <script setup>
 import { computed, useId } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import Button from 'primevue/button';
 import MapIcon from '../../shared/components/MapIcon.vue';
 import { residentAccount } from '../accountState';
 
@@ -22,10 +23,12 @@ function openReport() {
 </script>
 
 <template>
-    <button
+    <Button
         type="button"
         class="resident-report-plus"
         :class="{ 'is-active': onReport, 'is-disabled': !canReport }"
+        :severity="canReport ? undefined : 'secondary'"
+        :variant="canReport && onReport ? 'outlined' : undefined"
         aria-label="Report an incident"
         :aria-disabled="canReport ? 'false' : 'true'"
         :aria-describedby="canReport ? undefined : reasonId"
@@ -33,7 +36,7 @@ function openReport() {
         :title="reason"
         @click="openReport"
     >
-        <MapIcon name="plus" />
-        <span v-if="!canReport" :id="reasonId" class="resident-profile-sr">{{ reason }}</span>
-    </button>
+        <template #icon="{ class: iconClass }"><MapIcon name="plus" :class="iconClass" /></template>
+    </Button>
+    <span v-if="!canReport" :id="reasonId" class="resident-profile-sr">{{ reason }}</span>
 </template>

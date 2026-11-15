@@ -1,6 +1,8 @@
 <script setup>
 import { computed, inject, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import Button from 'primevue/button';
+import Message from 'primevue/message';
 import MapIcon from '../../shared/components/MapIcon.vue';
 import ReportPdfViewer from '../../shared/components/ReportPdfViewer.vue';
 import StatusBadge from '../components/StatusBadge.vue';
@@ -83,12 +85,12 @@ onMounted(loadReport);
 
 <template>
     <section class="resident-report-view">
-        <p v-if="error" class="resident-error" role="alert">{{ error }}</p>
+        <Message v-if="error" severity="error" :closable="false" class="resident-error" role="alert">{{ error }}</Message>
         <template v-else-if="report">
             <div class="resident-report-toolbar">
-                <button type="button" class="resident-report-back" @click="backToReports">
+                <Button type="button" class="resident-report-back" @click="backToReports">
                     <MapIcon name="chevron" class="resident-back-icon" /> Back to My Reports
-                </button>
+                </Button>
                 <div class="resident-report-identity">
                     <strong>{{ report.reference }}</strong>
                     <StatusBadge :label="report.label" />
@@ -97,19 +99,19 @@ onMounted(loadReport);
                     <router-link v-if="report.editable" class="resident-secondary" :to="`/report/${report.id}`">
                         <MapIcon name="pencil" /> Edit Report
                     </router-link>
-                    <button type="button" class="resident-primary" :disabled="downloading" :aria-busy="downloading" @click="downloadPdf">
+                    <Button type="button" class="resident-primary" :disabled="downloading" :aria-busy="downloading" @click="downloadPdf">
                         <MapIcon name="download" /> {{ downloading ? 'Preparing PDF…' : 'Download PDF' }}
-                    </button>
-                    <button type="button" class="resident-report-more" aria-label="More report actions" aria-haspopup="menu" :aria-expanded="menuOpen" @click="menuOpen = !menuOpen">
-                        <MapIcon name="more" />
-                    </button>
+                    </Button>
+                    <Button type="button" text rounded class="resident-report-more" aria-label="More report actions" aria-haspopup="menu" :aria-expanded="menuOpen" @click="menuOpen = !menuOpen">
+                        <template #icon><MapIcon name="more" /></template>
+                    </Button>
                     <div v-if="menuOpen" class="resident-report-menu" role="menu">
                         <router-link role="menuitem" :to="trackTo" @click="menuOpen = false"><MapIcon name="history" /> Track</router-link>
                     </div>
                 </div>
             </div>
             <p v-if="report.edit_message" class="resident-report-lock">{{ report.edit_message }}</p>
-            <p v-if="pdfError" class="resident-error" role="alert">{{ pdfError }}</p>
+            <Message v-if="pdfError" severity="error" :closable="false" class="resident-error" role="alert">{{ pdfError }}</Message>
             <ReportPdfViewer :document-url="documentUrl" @error="pdfError = $event" />
         </template>
         <p v-else>Loading the report…</p>

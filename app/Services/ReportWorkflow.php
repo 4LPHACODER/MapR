@@ -304,7 +304,7 @@ class ReportWorkflow
         if ($user->role?->code !== 'rdana') {
             abort(403, 'Only the assigned assessor can submit this assessment.');
         }
-        app(\App\Services\ReportAssignmentService::class)->assertAssignee($user, 'barangay_report', (int) $assessment->barangay_report_id, 'rdana');
+        app(ReportAssignmentService::class)->assertAssignee($user, 'barangay_report', (int) $assessment->barangay_report_id, 'rdana');
         if (Schema::hasTable('building_damage_cost_assessments')) {
             $saved = DB::table('building_damage_cost_assessments')
                 ->where('barangay_report_id', $assessment->barangay_report_id)
@@ -853,7 +853,7 @@ class ReportWorkflow
 
     private function assertBarangayMember(User $user, int $barangayId): void
     {
-        $ids = app(\App\Services\AssignmentScope::class)->activeBarangayIds($user->id);
+        $ids = app(AssignmentScope::class)->activeBarangayIds($user->id);
         if (! in_array($barangayId, $ids, true)) {
             abort(403, 'That barangay is outside your assignment.');
         }

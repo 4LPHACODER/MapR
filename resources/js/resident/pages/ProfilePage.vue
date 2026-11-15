@@ -1,12 +1,17 @@
 <script setup>
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { onBeforeRouteLeave } from 'vue-router';
+import Button from 'primevue/button';
+import { useConfirm } from 'primevue/useconfirm';
+import InputText from 'primevue/inputtext';
+import Message from 'primevue/message';
+import Select from 'primevue/select';
 import MapIcon from '../../shared/components/MapIcon.vue';
-import ConfirmDialog from '../components/ConfirmDialog.vue';
 import ProfilePhotoControl from '../components/ProfilePhotoControl.vue';
 import { applyResidentAccount, residentAccount } from '../accountState';
 
 const apiBase = inject('apiBase');
+const confirm = useConfirm();
 const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
 const logoutUrl = document.getElementById('resident-app')?.dataset.logoutUrl || '/logout';
 const profile = ref(null);
@@ -23,8 +28,12 @@ const menuTrigger = ref(null);
 const menuEl = ref(null);
 const menuPosition = ref({ top: 0, left: 0 });
 const logoutForm = ref(null);
-const leavePrompt = ref(null);
 const photoControl = ref(null);
+const sections = [
+    { label: 'All information', value: 'all' },
+    { label: 'Account information', value: 'account' },
+    { label: 'Contact details', value: 'contact' },
+];
 
 const dirty = computed(() => contact.value !== savedContact.value);
 const describedBy = computed(() => (fieldError.value ? 'resident-contact-help resident-contact-error' : 'resident-contact-help'));
@@ -145,27 +154,31 @@ function onLogout(event) {
     if (!dirty.value) return;
     event.preventDefault();
     closeMenu(false);
-    leavePrompt.value = { kind: 'logout' };
+    requestDiscardConfirmation(() => logoutForm.value?.submit());
 }
 
-function confirmLeave() {
-    const prompt = leavePrompt.value;
-    leavePrompt.value = null;
-    discard();
-    if (prompt?.kind === 'route') prompt.resolve(true);
-    if (prompt?.kind === 'logout') logoutForm.value?.submit();
-}
-
-function cancelLeave() {
-    const prompt = leavePrompt.value;
-    leavePrompt.value = null;
-    prompt?.resolve?.(false);
+function requestDiscardConfirmation(onAccept, onReject = () => {}) {
+    confirm.require({
+        header: 'Discard contact changes?',
+        message: 'Your contact number has not been saved.',
+        acceptLabel: 'Discard changes',
+        rejectLabel: 'Cancel',
+        defaultFocus: 'reject',
+        acceptProps: { severity: 'danger' },
+        rejectProps: { severity: 'secondary', outlined: true },
+        accept: () => {
+            discard();
+            onAccept();
+        },
+        reject: onReject,
+        onHide: onReject,
+    });
 }
 
 onBeforeRouteLeave(() => {
     if (!dirty.value) return true;
     return new Promise((resolve) => {
-        leavePrompt.value = { kind: 'route', resolve };
+        requestDiscardConfirmation(() => resolve(true), () => resolve(false));
     });
 });
 
@@ -177,7 +190,6 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-    leavePrompt.value?.resolve?.(false);
     window.removeEventListener('pointerdown', onPointerDown);
     window.removeEventListener('resize', onViewport);
     window.removeEventListener('scroll', onViewport, true);
@@ -193,9 +205,9 @@ onBeforeUnmount(() => {
         </div>
     </section>
     <p v-if="loading" class="resident-profile-sr">Loading your profile…</p>
-    <div v-else-if="loadError" class="resident-profile-error" role="alert">
-        <p class="resident-error">{{ loadError }}</p>
-        <button type="button" class="resident-secondary" @click="load">Retry</button>
+    <div v-else-if="loadError" class="resident-profile-error">
+        <Message severity="error" :closable="false" class="resident-error">{{ loadError }}</Message>
+        <Button type="button" severity="secondary" variant="outlined" class="resident-secondary" @click="load">Retry</Button>
     </div>
     <section v-else-if="profile" class="resident-profile resident-stack">
         <article class="resident-card resident-profile-summary">
@@ -207,7 +219,7 @@ onBeforeUnmount(() => {
                     <p class="resident-profile-place"><MapIcon name="pin" /> <span>{{ profile.barangay_name || 'Not assigned' }}</span></p>
                 </div>
             </div>
-            <button
+            <Button
                 type="button"
                 class="resident-profile-actions"
                 aria-haspopup="menu"
@@ -215,21 +227,25 @@ onBeforeUnmount(() => {
                 :aria-expanded="menuOpen"
                 @click="toggleMenu"
             >
-                <MapIcon name="more" />
-                <MapIcon name="chevron" class="is-chevron" />
-            </button>
+                <template #icon>
+                    <MapIcon name="more" />
+                    <MapIcon name="chevron" class="is-chevron" />
+                </template>
+            </Button>
             <p class="resident-profile-intro">View your account information and update your contact details.</p>
-            <p v-if="residentAccount.photoNotice" :class="residentAccount.photoNoticeError ? 'resident-error' : 'resident-ok'" :role="residentAccount.photoNoticeError ? 'alert' : 'status'">{{ residentAccount.photoNotice }}</p>
+            <Message
+                v-if="residentAccount.photoNotice"
+                :severity="residentAccount.photoNoticeError ? 'error' : 'success'"
+                :closable="false"
+                :class="residentAccount.photoNoticeError ? 'resident-error' : 'resident-ok'"
+                :role="residentAccount.photoNoticeError ? 'alert' : 'status'"
+            >{{ residentAccount.photoNotice }}</Message>
         </article>
         <p v-if="!profile.reporting_open" class="resident-reason">Your barangay is not assigned yet. Ask barangay staff to assign it before reporting.</p>
         <div class="resident-profile-filter">
             <label>
                 <span><MapIcon name="layers" /> Show section</span>
-                <select v-model="section">
-                    <option value="all">All information</option>
-                    <option value="account">Account information</option>
-                    <option value="contact">Contact details</option>
-                </select>
+                <Select v-model="section" input-id="resident-profile-section" :options="sections" option-label="label" option-value="value" />
             </label>
         </div>
         <div class="resident-profile-grid">
@@ -250,7 +266,7 @@ onBeforeUnmount(() => {
                 <p class="resident-profile-note">Keep your contact number up to date.</p>
                 <form @submit.prevent="save">
                     <label for="resident-contact-number">Contact number</label>
-                    <input
+                    <InputText
                         id="resident-contact-number"
                         v-model="contact"
                         type="tel"
@@ -258,17 +274,17 @@ onBeforeUnmount(() => {
                         autocomplete="tel"
                         :aria-invalid="fieldError ? 'true' : 'false'"
                         :aria-describedby="describedBy"
-                    >
+                    />
                     <p id="resident-contact-help" class="resident-profile-help">Up to 32 characters. Leading zeros and country codes are kept as entered.</p>
-                    <p v-if="fieldError" id="resident-contact-error" class="resident-error" role="alert">{{ fieldError }}</p>
+                    <Message v-if="fieldError" id="resident-contact-error" severity="error" :closable="false" class="resident-error">{{ fieldError }}</Message>
                     <div class="resident-profile-contact-actions">
-                        <button type="submit" class="resident-primary" :disabled="saving || !dirty">
+                        <Button type="submit" class="resident-primary" :disabled="saving || !dirty">
                             <MapIcon name="save" /> {{ saving ? 'Saving…' : 'Save Changes' }}
-                        </button>
-                        <button v-if="dirty" type="button" class="resident-profile-discard" @click="discard">Discard changes</button>
+                        </Button>
+                        <Button v-if="dirty" type="button" text class="resident-profile-discard" @click="discard">Discard changes</Button>
                     </div>
                 </form>
-                <p v-if="message" class="resident-ok">{{ message }}</p>
+                <Message v-if="message" severity="success" :closable="false" class="resident-ok" role="status">{{ message }}</Message>
             </section>
         </div>
         <Teleport to="body">
@@ -281,18 +297,11 @@ onBeforeUnmount(() => {
                 @keydown="onMenuKeydown"
             >
                 <form ref="logoutForm" method="POST" :action="logoutUrl" @submit="onLogout">
+                    <!-- native-ok: logout form submits the CSRF token -->
                     <input type="hidden" name="_token" :value="csrf">
-                    <button type="submit" role="menuitem"><MapIcon name="logout" /> Sign out</button>
+                    <Button type="submit" text role="menuitem"><MapIcon name="logout" /> Sign out</Button>
                 </form>
             </div>
         </Teleport>
-        <ConfirmDialog
-            v-if="leavePrompt"
-            title="Discard contact changes?"
-            message="Your contact number has not been saved."
-            confirm-label="Discard changes"
-            @confirm="confirmLeave"
-            @cancel="cancelLeave"
-        />
     </section>
 </template>

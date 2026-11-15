@@ -1,9 +1,14 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-return new class extends Migration {
- public function up(): void { DB::unprepared(<<<'SQL'
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        DB::unprepared(<<<'SQL'
 CREATE TABLE `disaster_incidents` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `incident_reference` VARCHAR(191) NOT NULL,
@@ -20,6 +25,11 @@ CREATE TABLE `disaster_incidents` (
   UNIQUE (`incident_reference`),
   CHECK (incident_status IN ('active','closed'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-SQL); }
- public function down(): void { Schema::dropIfExists('disaster_incidents'); }
+SQL);
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('disaster_incidents');
+    }
 };

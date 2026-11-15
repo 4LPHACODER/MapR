@@ -9,6 +9,7 @@ use App\Services\BuildingCostEstimator;
 use App\Services\BuildingDamageAssessmentWorkflow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -150,7 +151,7 @@ class BuildingDamageAssessmentController extends Controller
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, object>|object|null  $primaryBuilding
+     * @param  Collection<int, object>|object|null  $primaryBuilding
      * @return array{resident_name: ?string, household_reference: ?string, building_reference: ?string, building_id: ?int, status: string}
      */
     private function reportLinkage(int $reportId, mixed $primaryBuilding): array

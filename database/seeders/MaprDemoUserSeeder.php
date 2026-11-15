@@ -51,6 +51,7 @@ class MaprDemoUserSeeder extends Seeder
             if ($existing) {
                 $created[$account['email']] = $existing;
                 $this->command?->info('Skipped existing '.$account['email']);
+
                 continue;
             }
 

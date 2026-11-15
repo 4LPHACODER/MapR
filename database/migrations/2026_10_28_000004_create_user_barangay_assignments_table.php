@@ -1,9 +1,14 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-return new class extends Migration {
- public function up(): void { DB::unprepared(<<<'SQL'
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        DB::unprepared(<<<'SQL'
 CREATE TABLE `user_barangay_assignments` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `assigned_at` DATETIME(6) NOT NULL,
@@ -20,6 +25,11 @@ CREATE TABLE `user_barangay_assignments` (
   UNIQUE (`user_id`, `active_barangay_id`),
   CHECK (revoked_at IS NULL OR revoked_at >= assigned_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-SQL); }
- public function down(): void { Schema::dropIfExists('user_barangay_assignments'); }
+SQL);
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('user_barangay_assignments');
+    }
 };

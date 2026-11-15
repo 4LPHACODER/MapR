@@ -8,6 +8,7 @@ use App\Policies\ResidentIncidentReportPolicy;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -736,7 +737,7 @@ class ResidentReportWorkflow
                 ->where('reports.submitted_at', '<', $end->copy()->utc())
                 ->pluck('submitted_at');
             foreach ($stamps as $stamp) {
-                $key = \Illuminate\Support\Carbon::parse($stamp, 'UTC')->timezone($timezone)->format('Y-m');
+                $key = Carbon::parse($stamp, 'UTC')->timezone($timezone)->format('Y-m');
                 if (isset($months[$key])) {
                     $months[$key]['count']++;
                 }
@@ -809,6 +810,7 @@ class ResidentReportWorkflow
             $presented = $this->present($row);
             if ($presented['status'] === 'draft') {
                 $draft ??= ['id' => $presented['id'], 'reference' => $presented['reference']];
+
                 continue;
             }
             $counts['submitted']++;
@@ -865,7 +867,7 @@ class ResidentReportWorkflow
             ];
         }
         foreach ($timestamps as $timestamp) {
-            $key = \Illuminate\Support\Carbon::parse($timestamp)->format('Y-m');
+            $key = Carbon::parse($timestamp)->format('Y-m');
             if (isset($months[$key])) {
                 $months[$key]['count']++;
             }

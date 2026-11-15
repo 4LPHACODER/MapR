@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Auth\User;
+use App\Services\ReportAssignmentService;
 use App\Services\ReportWorkflow;
 use Database\Seeders\MapRWorkflowPersonnelSeeder;
 use Illuminate\Database\Schema\Blueprint;
@@ -10,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\Support\CreatesMaprAuthSchema;
 use Tests\TestCase;
 
@@ -184,7 +186,7 @@ class ReportWorkflowContinuityTest extends TestCase
         try {
             app(ReportWorkflow::class)->releaseBarangayReportForAssessor($assessor, $row);
             $this->fail('Release should wait for the captain.');
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $exception) {
+        } catch (HttpException $exception) {
             $this->assertSame(422, $exception->getStatusCode());
         }
 
@@ -221,12 +223,12 @@ class ReportWorkflowContinuityTest extends TestCase
         ])->assertOk();
         $this->assertSame('returned', DB::table('field_assessments')->where('id', $assessmentId)->value('assessment_status'));
         $this->assertSame('assessor_draft', DB::table('field_assessments')->where('id', $assessmentId)->value('workflow_stage'));
-        $this->assertSame('draft', app(\App\Services\ReportAssignmentService::class)->assessmentBucket($report));
+        $this->assertSame('draft', app(ReportAssignmentService::class)->assessmentBucket($report));
 
         $this->actingAs($assessor)->postJson('/rdana/api/assessments/'.$assessmentId.'/submit-assessed')->assertOk();
         $this->assertSame('pending_admin_verification', DB::table('field_assessments')->where('id', $assessmentId)->value('workflow_stage'));
         $this->assertNotSame('returned', DB::table('field_assessments')->where('id', $assessmentId)->value('assessment_status'));
-        $this->assertSame('completed', app(\App\Services\ReportAssignmentService::class)->assessmentBucket($report));
+        $this->assertSame('completed', app(ReportAssignmentService::class)->assessmentBucket($report));
 
         $city = $cityEarly;
         $this->actingAs($city)->postJson('/rdana/api/assessments/'.$assessmentId.'/forward')->assertStatus(422);
@@ -490,6 +492,7 @@ class ReportWorkflowContinuityTest extends TestCase
 
     public function test_personnel_seeder_is_idempotent_and_refuses_production(): void
     {
+        config(['mapr.demo_password' => 'configured-workflow-password']);
         DB::table('barangays')->insert([
             'barangay_code' => '166819008',
             'barangay_name' => 'Mabua',
@@ -502,7 +505,7 @@ class ReportWorkflowContinuityTest extends TestCase
         $this->seed(MapRWorkflowPersonnelSeeder::class);
         $this->assertSame($count, User::query()->count());
         $this->assertSame($hash, User::query()->where('email', 'jesnard.plaza@mapr.test')->value('password'));
-        $this->assertTrue(Hash::check('H4ckm3!_', $hash));
+        $this->assertTrue(Hash::check('configured-workflow-password', $hash));
 
         $this->app['env'] = 'production';
         $this->expectException(RuntimeException::class);

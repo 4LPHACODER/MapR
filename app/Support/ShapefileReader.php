@@ -9,9 +9,7 @@ class ShapefileReader
 {
     private ?string $encoding = null;
 
-    public function __construct(private readonly string $basePath)
-    {
-    }
+    public function __construct(private readonly string $basePath) {}
 
     /**
      * @return list<array{name: string, length: int}>

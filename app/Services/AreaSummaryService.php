@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Support\MapLocationEligibility;
+use App\Support\MapSourceLocation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -132,7 +133,7 @@ class AreaSummaryService
             return null;
         }
 
-        $source = \App\Support\MapSourceLocation::buildingSqlConstraint('buildings');
+        $source = MapSourceLocation::buildingSqlConstraint('buildings');
 
         return (int) (DB::selectOne(
             "SELECT COALESCE(SUM(households.source_household_size), 0) AS aggregate

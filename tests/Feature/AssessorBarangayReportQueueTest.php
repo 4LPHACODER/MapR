@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Auth\User;
+use App\Services\ReportWorkflow;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -312,7 +313,7 @@ class AssessorBarangayReportQueueTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $withoutAssignment = app(\App\Services\ReportWorkflow::class)->backfillAssessorAssignmentsForReviewQueue();
+        $withoutAssignment = app(ReportWorkflow::class)->backfillAssessorAssignmentsForReviewQueue();
         $this->assertSame(0, $withoutAssignment['linked']);
         $this->assertSame(1, $withoutAssignment['missing_assessor']);
 
@@ -327,7 +328,7 @@ class AssessorBarangayReportQueueTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $backfill = app(\App\Services\ReportWorkflow::class)->backfillAssessorAssignmentsForReviewQueue();
+        $backfill = app(ReportWorkflow::class)->backfillAssessorAssignmentsForReviewQueue();
         $this->assertSame(1, $backfill['linked']);
         $this->assertSame(1, DB::table('field_assessments')->where('barangay_report_id', $reportId)->where('assigned_assessor_id', $assessor->id)->count());
 

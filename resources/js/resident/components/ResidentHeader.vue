@@ -1,6 +1,7 @@
 <script setup>
 import { inject, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import Button from 'primevue/button';
 import MapIcon from '../../shared/components/MapIcon.vue';
 import ResidentAvatar from './ResidentAvatar.vue';
 import ResidentReportButton from './ResidentReportButton.vue';
@@ -38,10 +39,21 @@ watch(() => route.fullPath, () => {
         <div class="resident-header-tools">
             <ResidentReportButton />
             <div class="resident-notify">
-                <button type="button" aria-label="Notifications" :aria-expanded="notesOpen" @click="notesOpen = !notesOpen; accountOpen = false">
-                    <MapIcon name="bell" />
-                    <span v-if="attention.length" class="resident-notify-count">{{ attention.length }}</span>
-                </button>
+                <Button
+                    type="button"
+                    class="p-0"
+                    severity="secondary"
+                    variant="outlined"
+                    rounded
+                    aria-label="Notifications"
+                    :aria-expanded="notesOpen"
+                    @click="notesOpen = !notesOpen; accountOpen = false"
+                >
+                    <template #icon="{ class: iconClass }">
+                        <MapIcon name="bell" :class="iconClass" />
+                        <span v-if="attention.length" class="resident-notify-count">{{ attention.length }}</span>
+                    </template>
+                </Button>
                 <div v-if="notesOpen" class="resident-notify-panel" role="region" aria-label="Notifications">
                     <p v-if="!attention.length">No updates need your attention.</p>
                     <router-link v-for="item in attention" :key="item.id" :to="`/reports/${item.id}/track`" @click="notesOpen = false">
@@ -51,9 +63,9 @@ watch(() => route.fullPath, () => {
                 </div>
             </div>
             <div class="resident-account-menu">
-                <button type="button" :aria-label="`Account menu for ${userName || 'resident'}`" :aria-expanded="accountOpen" @click="accountOpen = !accountOpen; notesOpen = false">
+                <Button type="button" class="p-0" severity="secondary" variant="outlined" rounded :aria-label="`Account menu for ${userName || 'resident'}`" :aria-expanded="accountOpen" @click="accountOpen = !accountOpen; notesOpen = false">
                     <ResidentAvatar :name="userName" :src="residentAccount.photoUrl || ''" />
-                </button>
+                </Button>
                 <div v-if="accountOpen" class="resident-notify-panel">
                     <p>{{ userName }}</p>
                     <router-link to="/profile" @click="accountOpen = false">My Profile</router-link>

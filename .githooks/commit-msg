@@ -1,0 +1,2 @@
+#!/bin/sh
+exec "$(dirname "$0")/../scripts/ci/check-commit-message.sh" "$1"

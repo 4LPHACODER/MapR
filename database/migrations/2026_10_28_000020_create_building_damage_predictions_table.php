@@ -1,9 +1,14 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-return new class extends Migration {
- public function up(): void { DB::unprepared(<<<'SQL'
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        DB::unprepared(<<<'SQL'
 CREATE TABLE `building_damage_predictions` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `confidence_score` DECIMAL(8,7) NULL,
@@ -29,6 +34,11 @@ CREATE TABLE `building_damage_predictions` (
   CHECK (inference_time_ms IS NULL OR inference_time_ms >= 0),
   CHECK (prediction_status <> 'succeeded' OR (predicted_damage_class_id IS NOT NULL AND predicted_at IS NOT NULL))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-SQL); }
- public function down(): void { Schema::dropIfExists('building_damage_predictions'); }
+SQL);
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('building_damage_predictions');
+    }
 };

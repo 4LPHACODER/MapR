@@ -1,5 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue';
+import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
 import MapIcon from '../../shared/components/MapIcon.vue';
 
 const props = defineProps({
@@ -10,7 +12,7 @@ const props = defineProps({
 });
 const emit = defineEmits(['add', 'remove-server', 'remove-pending', 'retry']);
 const over = ref(false);
-const enlargeDialog = ref(null);
+const enlargeVisible = ref(false);
 const enlarged = ref(null);
 const counter = computed(() => {
     const count = props.photos.length;
@@ -26,7 +28,7 @@ function drop(event) {
 
 function enlarge(src, name) {
     enlarged.value = { src, name };
-    enlargeDialog.value?.showModal();
+    enlargeVisible.value = true;
 }
 </script>
 
@@ -43,10 +45,12 @@ function enlarge(src, name) {
             <div class="resident-photo-actions">
                 <label class="resident-primary">
                     <MapIcon name="camera" /> Take Photo
+                    <!-- native-ok: hidden file input preserves the camera capture drop-zone control. -->
                     <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" @change="emit('add', $event, 'capture')">
                 </label>
                 <label class="resident-secondary">
                     <MapIcon name="download" /> Upload Photos
+                    <!-- native-ok: hidden file input preserves multi-file selection for the custom drop zone. -->
                     <input type="file" accept="image/jpeg,image/png,image/webp" multiple @change="emit('add', $event, 'upload')">
                 </label>
             </div>
@@ -56,23 +60,54 @@ function enlarge(src, name) {
             <li v-for="(photo, index) in photos" :key="`saved-${photo.id}`">
                 <img :src="`/resident/api/reports/${reportId}/photos/${photo.id}`" :alt="photo.name || 'Incident photo'">
                 <span>{{ index + 1 }}. {{ photo.name || 'Photo' }}</span>
-                <button type="button" :aria-label="`Preview ${photo.name || 'photo ' + (index + 1)}`" @click="enlarge(`/resident/api/reports/${reportId}/photos/${photo.id}`, photo.name)">Preview</button>
-                <button type="button" :aria-label="`Remove ${photo.name || 'photo ' + (index + 1)}`" @click="emit('remove-server', photo)">Remove</button>
+                <Button
+                    type="button"
+                    :label="`Preview ${photo.name || 'photo ' + (index + 1)}`"
+                    severity="secondary"
+                    variant="outlined"
+                    @click="enlarge(`/resident/api/reports/${reportId}/photos/${photo.id}`, photo.name)"
+                >Preview</Button>
+                <Button
+                    type="button"
+                    :label="`Remove ${photo.name || 'photo ' + (index + 1)}`"
+                    severity="danger"
+                    @click="emit('remove-server', photo)"
+                >Remove</Button>
             </li>
             <li v-for="(file, index) in pending" :key="file.key">
                 <img :src="file.preview" :alt="file.file.name">
                 <span>{{ file.file.name }}</span>
                 <span v-if="file.uploading">{{ progress[file.key] != null ? `${progress[file.key]}%` : 'Uploading…' }}</span>
                 <p v-if="file.error" class="resident-photo-error">{{ file.error }}</p>
-                <button v-if="file.error" type="button" :aria-label="`Retry ${file.file.name}`" @click="emit('retry', file.key)">Retry</button>
-                <button type="button" :aria-label="`Remove ${file.file.name}`" @click="emit('remove-pending', index)">Remove</button>
+                <Button
+                    v-if="file.error"
+                    type="button"
+                    :label="`Retry ${file.file.name}`"
+                    severity="secondary"
+                    variant="outlined"
+                    @click="emit('retry', file.key)"
+                >Retry</Button>
+                <Button
+                    type="button"
+                    :label="`Remove ${file.file.name}`"
+                    severity="danger"
+                    @click="emit('remove-pending', index)"
+                >Remove</Button>
             </li>
         </ul>
-        <dialog ref="enlargeDialog" class="resident-wizard-dialog" aria-label="Photo preview" @close="enlarged = null">
+        <Dialog
+            v-model:visible="enlargeVisible"
+            class="resident-wizard-dialog"
+            aria-label="Photo preview"
+            modal
+            :draggable="false"
+            :closable="false"
+            @hide="enlarged = null"
+        >
             <template v-if="enlarged">
                 <img :src="enlarged.src" :alt="enlarged.name || 'Incident photo'">
-                <button type="button" class="resident-secondary" @click="enlargeDialog.close()">Close</button>
+                <Button type="button" label="Close" severity="secondary" variant="outlined" class="resident-secondary" @click="enlargeVisible = false" />
             </template>
-        </dialog>
+        </Dialog>
     </section>
 </template>

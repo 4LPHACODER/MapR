@@ -343,6 +343,7 @@ class ResidentHazardExporter
             foreach ($polygon[0] as $point) {
                 if ($bounds === null) {
                     $bounds = [$point, $point];
+
                     continue;
                 }
                 $bounds[0][0] = min($bounds[0][0], $point[0]);
@@ -379,6 +380,7 @@ class ResidentHazardExporter
             $point = [round($lng, 6), round($lat, 6)];
             if ($bounds === null) {
                 $bounds = [$point, $point];
+
                 continue;
             }
             $bounds[0][0] = min($bounds[0][0], $point[0]);

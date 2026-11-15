@@ -1,9 +1,14 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-return new class extends Migration {
- public function up(): void { DB::unprepared(<<<'SQL'
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        DB::unprepared(<<<'SQL'
 CREATE TABLE `ai_models` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `model_name` VARCHAR(191) NOT NULL,
@@ -20,6 +25,11 @@ CREATE TABLE `ai_models` (
   CHECK (architecture = 'EfficientNetB0' AND optimizer = 'AdamW'),
   CHECK (deployment_status IN ('inactive','active','retired'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-SQL); }
- public function down(): void { Schema::dropIfExists('ai_models'); }
+SQL);
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('ai_models');
+    }
 };

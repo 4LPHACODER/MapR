@@ -7,11 +7,13 @@ use App\Http\Controllers\Shared\ReportFlagController;
 use App\Policies\BarangayReportPolicy;
 use App\Policies\ResidentIncidentReportPolicy;
 use App\Services\AssignmentScope;
+use App\Services\BuildingDamageAssessmentWorkflow;
 use App\Services\BuildingRegistry;
+use App\Services\ReportAssignmentService;
 use App\Services\ReportSignatoryCatalog;
 use App\Services\ReportWorkflow;
-use App\Services\ResidentReportWorkflow;
 use App\Services\ResidentReportDocument;
+use App\Services\ResidentReportWorkflow;
 use App\Services\SignatureConfirmation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -310,7 +312,7 @@ class BarangayReportController extends Controller
         if ($request->user()->role?->code !== 'bdrrm') {
             abort(403, 'Only the assigned BDRRM officer can start this review.');
         }
-        app(\App\Services\ReportAssignmentService::class)->assertAssignee($request->user(), 'resident_incident_report', $submission, 'bdrrm', true);
+        app(ReportAssignmentService::class)->assertAssignee($request->user(), 'resident_incident_report', $submission, 'bdrrm', true);
         $this->residentReports->startReview($request->user(), $row);
         $fresh = DB::table('resident_incident_reports')->where('id', $submission)->first();
 
@@ -405,7 +407,7 @@ class BarangayReportController extends Controller
         if ($request->user()->role?->code !== 'bdrrm') {
             abort(403, 'Only assigned BDRRM personnel can accept this report.');
         }
-        app(\App\Services\ReportAssignmentService::class)->assertAssignee($request->user(), 'resident_incident_report', $submission, 'bdrrm', true);
+        app(ReportAssignmentService::class)->assertAssignee($request->user(), 'resident_incident_report', $submission, 'bdrrm', true);
         if ($request->exists('estimated_repair_cost')) {
             abort(422, 'BDRRM cannot record the estimated repair cost.');
         }
@@ -603,10 +605,10 @@ class BarangayReportController extends Controller
         }
         $damage = null;
         if (Schema::hasTable('building_damage_cost_assessments') && Schema::hasTable('damage_classes')) {
-            $damageRows = app(\App\Services\BuildingDamageAssessmentWorkflow::class)->forReport((int) $row->id, 'confirmed');
+            $damageRows = app(BuildingDamageAssessmentWorkflow::class)->forReport((int) $row->id, 'confirmed');
             $damage = $damageRows[0] ?? null;
             if ($damage === null) {
-                $draftRows = app(\App\Services\BuildingDamageAssessmentWorkflow::class)->forReport((int) $row->id, 'draft');
+                $draftRows = app(BuildingDamageAssessmentWorkflow::class)->forReport((int) $row->id, 'draft');
                 $damage = $draftRows[0] ?? null;
             }
         }
