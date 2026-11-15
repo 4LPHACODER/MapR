@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Auth\User;
 use App\Models\Registry\Household;
 use App\Models\Registry\IncidentResidentInclusion;
 use App\Models\Registry\IncidentResidentInclusionEvent;
@@ -21,8 +22,17 @@ class ResidentRegistry
 {
     public function __construct(private ActivityLogger $activity) {}
 
+    public function denyPersonnel(?User $user): void
+    {
+        $user?->loadMissing('role');
+        if ($user?->role?->code === 'bdrrm') {
+            abort(403, 'Residents Records are limited to the barangay secretary and captain.');
+        }
+    }
+
     public function summary(Request $request): JsonResponse
     {
+        $this->denyPersonnel($request->user());
         if (! Schema::hasTable('residents')) {
             return response()->json([
                 'registered_residents' => 0,
@@ -62,6 +72,7 @@ class ResidentRegistry
 
     public function index(Request $request): JsonResponse
     {
+        $this->denyPersonnel($request->user());
         if (! Schema::hasTable('residents')) {
             return response()->json([
                 'data' => [],
@@ -101,6 +112,7 @@ class ResidentRegistry
 
     public function show(Request $request, Resident $resident): JsonResponse
     {
+        $this->denyPersonnel($request->user());
         $resident->load(['household.building', 'household.barangay', 'household.residents' => fn ($q) => $q->where('residency_status', 'active')]);
         $this->assertResidentVisible($request, $resident);
         $points = $this->pointsFor(array_filter([$resident->household?->building?->id]));
@@ -347,6 +359,7 @@ class ResidentRegistry
 
     public function reports(Request $request, Resident $resident): JsonResponse
     {
+        $this->denyPersonnel($request->user());
         $resident->load('household.barangay');
         $this->assertResidentVisible($request, $resident);
         $incidentId = $request->filled('incident_id') ? $request->integer('incident_id') : null;

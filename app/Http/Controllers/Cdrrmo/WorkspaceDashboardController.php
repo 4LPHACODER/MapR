@@ -141,6 +141,7 @@ class WorkspaceDashboardController extends Controller
             ->when($incidentId, fn ($q) => $q->where('br.disaster_incident_id', $incidentId))
             ->when($barangayId, fn ($q) => $q->where('br.barangay_id', $barangayId))
             ->where('fa.assessment_status', 'submitted')
+            ->when(Schema::hasColumn('field_assessments', 'workflow_stage'), fn ($q) => $q->where('fa.workflow_stage', 'forwarded_cdrrmo'))
             ->orderBy('fa.submitted_at')
             ->orderBy('fa.updated_at')
             ->limit(20)
@@ -197,6 +198,7 @@ class WorkspaceDashboardController extends Controller
             ->when($incidentId, fn ($q) => $q->where('br.disaster_incident_id', $incidentId))
             ->when($barangayId, fn ($q) => $q->where('br.barangay_id', $barangayId))
             ->where('fa.assessment_status', 'submitted')
+            ->when(Schema::hasColumn('field_assessments', 'workflow_stage'), fn ($q) => $q->where('fa.workflow_stage', 'forwarded_cdrrmo'))
             ->count();
     }
 

@@ -5,11 +5,16 @@ import FieldApp from './assessor/App.vue';
 import DashboardPage from './assessor/pages/DashboardPage.vue';
 import MapPage from './assessor/pages/MapPage.vue';
 import QueuePage from './assessor/pages/QueuePage.vue';
-import ReportPage from './assessor/pages/ReportPage.vue';
+import BarangayReportDetailPage from './assessor/pages/BarangayReportDetailPage.vue';
+import FieldAssessmentDetailPage from './assessor/pages/FieldAssessmentDetailPage.vue';
 import RegistryPage from './assessor/pages/RegistryPage.vue';
 import ResidentsPage from './assessor/pages/ResidentsPage.vue';
+import BuildingsPage from './bdrrm/pages/BuildingsPage.vue';
 import ProfilePage from './assessor/pages/ProfilePage.vue';
 import '../css/shared/workspace.css';
+import '../css/bdrrm/reports.css';
+import '../css/bdrrm/submissions.css';
+import '../css/bdrrm/buildings.css';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 
@@ -22,19 +27,24 @@ if (root) {
         window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
     }
 
+    const roleCode = root.dataset.roleCode || '';
     const router = createRouter({
         history: createWebHistory('/rdana'),
         routes: [
             { path: '/', component: DashboardPage, meta: { title: 'Assessor Dashboard' } },
             { path: '/map', component: MapPage, meta: { title: 'Assessment Map' } },
+            { path: '/buildings', component: BuildingsPage, meta: { title: 'Building Records' } },
+            // Kept for deep links; removed from sidebar navigation.
             { path: '/incidents', component: RegistryPage, meta: { title: 'Disaster Incidents', source: 'incidents' } },
             { path: '/residents', component: ResidentsPage, meta: { title: 'Residents' } },
-            { path: '/reports/barangay', component: QueuePage, meta: { title: 'Initial Barangay Reports', source: 'barangay', status: '' } },
-            { path: '/reports/field', component: QueuePage, meta: { title: 'Field Assessments', source: 'field', status: '' } },
+            { path: '/reports/barangay', component: QueuePage, meta: { title: 'Barangay Reports', source: 'barangay', status: '' } },
+            { path: '/reports/barangay/:id', component: BarangayReportDetailPage, meta: { title: 'Barangay Report' } },
+            { path: '/reports/field', component: QueuePage, meta: { title: 'Field Assessment Reports', source: 'field', status: '' } },
             { path: '/reports/drafts', component: QueuePage, meta: { title: 'Drafts', source: 'field', status: 'draft' } },
             { path: '/reports/returned', component: QueuePage, meta: { title: 'Returned for Correction', source: 'field', status: 'returned' } },
             { path: '/reports/submitted', component: QueuePage, meta: { title: 'Submitted Reports', source: 'field', status: 'submitted' } },
-            { path: '/assessments/:id', component: ReportPage, meta: { title: 'Field Assessment', kind: 'assessment' } },
+            { path: '/assessments/:id/view', component: FieldAssessmentDetailPage, meta: { title: 'Field Assessment', kind: 'assessment' } },
+            { path: '/assessments/:id', component: FieldAssessmentDetailPage, meta: { title: 'Field Assessment', kind: 'assessment' } },
             { path: '/profile', component: ProfilePage, meta: { title: 'Profile' } },
         ],
     });
@@ -49,6 +59,7 @@ if (root) {
     })
         .use(router)
         .provide('apiBase', '/rdana/api')
+        .provide('roleCode', roleCode)
         .provide('mapboxToken', root.dataset.mapboxToken || '')
         .provide('mapboxStyle', root.dataset.mapboxStyle || '')
         .provide('floodClasses', JSON.parse(root.dataset.floodClasses || '{}'))

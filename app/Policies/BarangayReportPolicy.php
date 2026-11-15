@@ -16,8 +16,8 @@ class BarangayReportPolicy
 
         return match ($user->role?->code) {
             'cdrrmo_admin' => true,
-            'bdrrm' => in_array($barangayId, $this->scope->activeBarangayIds($user->id), true),
-            'rdana' => $this->scope->assessorCanOpenReport($user, (int) $report->id),
+            'bdrrm', 'barangay_secretary', 'barangay_captain' => in_array($barangayId, $this->scope->activeBarangayIds($user->id), true),
+            'rdana', 'rdana_admin_officer', 'rdana_city_assessor' => $this->scope->assessorCanOpenReport($user, (int) $report->id),
             default => false,
         };
     }

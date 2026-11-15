@@ -96,6 +96,16 @@ function previewHref(row) {
     return `/rdana/reports/barangay/${row.id}/preview`;
 }
 
+function detailHref(row) {
+    if (row.kind === 'field_assessment') return `/assessments/${row.id}`;
+    return `/reports/barangay/${row.id}`;
+}
+
+function openReport(row) {
+    menuId.value = null;
+    router.push(detailHref(row));
+}
+
 function openLocation(row) {
     menuId.value = null;
     router.push({
@@ -155,7 +165,7 @@ function resume(row) {
                 <option v-for="barangay in payload?.barangays || []" :key="barangay.id" :value="String(barangay.id)">{{ barangay.name }}</option>
             </select>
             <select v-model="filters.assessment_status" aria-label="Assessment status">
-                <option value="">Reports awaiting assessment</option>
+                <option value="">Barangay Reports</option>
                 <option value="draft">Field assessments in draft</option>
                 <option value="returned">Returned for correction</option>
                 <option value="submitted">Submitted field assessments</option>
@@ -209,10 +219,10 @@ function resume(row) {
                 <section class="cdrrmo-review-panel" aria-labelledby="assessor-queue-heading">
                     <header class="cdrrmo-review-header">
                         <div>
-                            <h3 id="assessor-queue-heading" class="cdrrmo-section-title">Reports awaiting assessment</h3>
-                            <p class="cdrrmo-muted">Initial barangay reports in the study barangays. Editing a field assessment still requires that it be assigned to this account.</p>
+                            <h3 id="assessor-queue-heading" class="cdrrmo-section-title">Barangay Reports</h3>
+                            <p class="cdrrmo-muted">Unassigned and pending barangay reports in the study barangays. Opening an assessment requires an active assignment to this account.</p>
                         </div>
-                        <router-link class="mapr-button mapr-button-secondary" to="/reports/barangay">All barangay reports</router-link>
+                        <router-link class="mapr-button mapr-button-secondary" to="/reports/barangay">Open Barangay Reports</router-link>
                     </header>
                     <p v-if="actionError" class="cdrrmo-error" role="alert">{{ actionError }}</p>
                     <div class="cdrrmo-table-wrap">
@@ -238,14 +248,14 @@ function resume(row) {
                                     <td>{{ formatWhen(row.received_at) }}</td>
                                     <td>{{ row.label || row.status }}</td>
                                     <td class="report-row-actions">
-                                        <a class="residents-icon-btn" :href="previewHref(row)" target="_blank" rel="noopener" title="View report" aria-label="View report"><MapIcon name="eye" /></a>
-                                        <button v-if="row.kind === 'barangay_report' && !row.draft_id" type="button" class="residents-icon-btn" title="Review and start assessment" aria-label="Review and start assessment" @click="startReview(row)"><MapIcon name="clipboard-check" /></button>
-                                        <button v-if="row.draft_id" type="button" class="residents-icon-btn" title="Resume draft" aria-label="Resume draft" @click="resume(row)"><MapIcon name="pencil" /></button>
+                                        <button type="button" class="residents-icon-btn" title="View report" aria-label="View report" @click="openReport(row)"><MapIcon name="eye" /></button>
+                                        <button v-if="row.kind === 'barangay_report' && !row.draft_id" type="button" class="residents-icon-btn" title="Assess Report" aria-label="Assess Report" @click="startReview(row)"><MapIcon name="clipboard-check" /></button>
+                                        <button v-if="row.draft_id" type="button" class="residents-icon-btn" title="Assess Report" aria-label="Assess Report" @click="resume(row)"><MapIcon name="clipboard-check" /></button>
                                         <button type="button" class="residents-icon-btn" title="Open linked location" aria-label="Open linked location" @click="openLocation(row)"><MapIcon name="pin" /></button>
                                         <div class="residents-menu">
                                             <button type="button" class="residents-icon-btn" title="More actions" aria-label="More actions" :aria-expanded="menuId === row.id" @click.stop="menuId = menuId === row.id ? null : row.id"><MapIcon name="more" /></button>
                                             <div v-if="menuId === row.id" class="residents-menu-panel" role="menu">
-                                                <a role="menuitem" :href="previewHref(row)" target="_blank" rel="noopener">Open A4 preview</a>
+                                                <button type="button" role="menuitem" @click="openReport(row)">View report</button>
                                                 <a role="menuitem" :href="`${previewHref(row)}?format=pdf`">Download PDF</a>
                                                 <button v-if="row.kind === 'field_assessment'" type="button" role="menuitem" @click="router.push(`/assessments/${row.id}`)">Open assessment</button>
                                             </div>

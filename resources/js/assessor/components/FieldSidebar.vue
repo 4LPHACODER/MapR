@@ -47,13 +47,16 @@ onMounted(async () => {
             <router-link to="/map" @click="$emit('close')">
                 <MapIcon name="map" /><span v-if="!collapsed">Assessment Map</span>
             </router-link>
-            <router-link to="/incidents" @click="$emit('close')"><MapIcon name="disaster" /><span v-if="!collapsed">Disaster Incidents</span></router-link>
-            <router-link to="/residents" @click="$emit('close')"><MapIcon name="users" /><span v-if="!collapsed">Residents</span></router-link>
+            <router-link to="/buildings" @click="$emit('close')">
+                <MapIcon name="building-2" /><span v-if="!collapsed">Building Records</span>
+            </router-link>
             <button type="button" class="cdrrmo-nav-toggle" :aria-expanded="reportsOpen" @click="reportsOpen = !reportsOpen">
                 <MapIcon name="reports" /><span v-if="!collapsed">Reports</span>
             </button>
             <div v-show="reportsOpen && !collapsed" class="cdrrmo-nav-sub">
-                <router-link to="/reports/barangay" @click="$emit('close')">Initial Barangay Reports <span v-if="badges.barangay_reports" class="cdrrmo-badge">{{ badges.barangay_reports }}</span></router-link>
+                <router-link to="/reports/barangay" @click="$emit('close')" title="Barangay reports awaiting or undergoing RDANA assessment">
+                    Barangay Reports <span v-if="badges.barangay_reports" class="cdrrmo-badge">{{ badges.barangay_reports }}</span>
+                </router-link>
                 <router-link to="/reports/field" @click="$emit('close')">Field Assessment Reports <span v-if="badges.field_assessments" class="cdrrmo-badge">{{ badges.field_assessments }}</span></router-link>
                 <router-link to="/reports/drafts" @click="$emit('close')">Drafts <span v-if="badges.drafts" class="cdrrmo-badge">{{ badges.drafts }}</span></router-link>
                 <router-link to="/reports/returned" @click="$emit('close')">Returned for Correction <span v-if="badges.returned" class="cdrrmo-badge">{{ badges.returned }}</span></router-link>

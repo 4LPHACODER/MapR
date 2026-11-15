@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Shared;
 use App\Http\Controllers\Controller;
 use App\Policies\BarangayReportPolicy;
 use App\Policies\FieldAssessmentPolicy;
+use App\Policies\ResidentIncidentReportPolicy;
+use App\Services\ActivityLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,22 +18,41 @@ class ReportFlagController extends Controller
     {
         abort_unless(Schema::hasTable('report_flags'), 404);
         $data = $request->validate([
-            'subject_type' => ['required', 'in:barangay_report,field_assessment,consolidated_report'],
+            'subject_type' => ['required', 'in:barangay_report,field_assessment,consolidated_report,resident_incident_report'],
             'subject_id' => ['required', 'integer'],
             'category' => ['required', 'string', 'max:80'],
             'reason' => ['required', 'string', 'min:10', 'max:2000'],
+            'section' => ['nullable', 'string', 'max:120'],
         ]);
+        if ($data['subject_type'] === 'resident_incident_report' && ! in_array($data['category'], ['Photographs', 'Description', 'Location', 'Other'], true)) {
+            abort(422, 'Choose Photographs, Description, Location, or Other.');
+        }
+        $reason = trim($data['reason']);
+        $section = trim((string) ($data['section'] ?? ''));
+        if ($section !== '') {
+            $reason = 'Section: '.$section."\n".$reason;
+        }
+        if (strlen($reason) > 2000) {
+            abort(422, 'The flag reason is too long.');
+        }
         $this->authorizeSubject($request, $data['subject_type'], (int) $data['subject_id']);
         DB::table('report_flags')->insert([
             'subject_type' => $data['subject_type'],
             'subject_id' => $data['subject_id'],
             'category' => $data['category'],
-            'reason' => $data['reason'],
+            'reason' => $reason,
             'status' => 'open',
             'opened_by' => $request->user()->id,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+        app(ActivityLogger::class)->log(
+            $request->user(),
+            'report_flag_opened',
+            'Opened a '.$data['category'].' flag.',
+            $data['subject_type'],
+            (int) $data['subject_id'],
+        );
 
         return response()->json(['data' => self::forSubject($data['subject_type'], (int) $data['subject_id'])], 201);
     }
@@ -39,9 +60,15 @@ class ReportFlagController extends Controller
     public function resolve(Request $request, int $flag): JsonResponse
     {
         abort_unless(Schema::hasTable('report_flags'), 404);
-        abort_unless(in_array($request->user()?->role?->code, ['cdrrmo_admin', 'rdana'], true), 403, 'Only a reviewer can resolve a flag.');
         $row = DB::table('report_flags')->where('id', $flag)->first();
         abort_if($row === null, 404);
+        $role = $request->user()?->role?->code;
+        $residentFlag = $row->subject_type === 'resident_incident_report';
+        abort_unless(
+            $residentFlag ? $role === 'bdrrm' : in_array($role, ['cdrrmo_admin', 'rdana'], true),
+            403,
+            'Only a reviewer can resolve a flag.',
+        );
         abort_if($row->status === 'resolved', 409, 'This flag is already resolved.');
         $data = $request->validate([
             'resolution' => ['required', 'string', 'min:10', 'max:2000'],
@@ -54,6 +81,13 @@ class ReportFlagController extends Controller
             'resolution' => $data['resolution'],
             'updated_at' => now(),
         ]);
+        app(ActivityLogger::class)->log(
+            $request->user(),
+            'report_flag_resolved',
+            'Resolved a report flag.',
+            $row->subject_type,
+            (int) $row->subject_id,
+        );
 
         return response()->json(['data' => self::forSubject($row->subject_type, (int) $row->subject_id)]);
     }
@@ -97,6 +131,13 @@ class ReportFlagController extends Controller
             $row = DB::table('field_assessments')->where('id', $id)->first();
             abort_if($row === null, 404);
             abort_unless(app(FieldAssessmentPolicy::class)->view($user, $row), 403);
+
+            return;
+        }
+        if ($type === 'resident_incident_report') {
+            $row = DB::table('resident_incident_reports')->where('id', $id)->first();
+            abort_if($row === null, 404);
+            abort_unless(app(ResidentIncidentReportPolicy::class)->view($user, $row), 403);
 
             return;
         }

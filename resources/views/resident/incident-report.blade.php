@@ -154,7 +154,7 @@
         </tr>
     </table>
 
-    <h2>Office endorsements</h2>
+    <h2>Report declaration and endorsements</h2>
     <p class="muted">A pending line is the configured officeholder. It is not a signature on this report. A completed line names the person who signed the linked document.</p>
     <table class="signatures">
         @foreach (array_chunk($endorsements, 2) as $pair)
@@ -167,9 +167,15 @@
                                 <img src="{{ $endorsement['image'] }}" alt="Recorded endorsement signature">
                             @endif
                         </div>
-                        <div>{{ $endorsement['name'] }}</div>
-                        <div class="muted">{{ $endorsement['position'] }}</div>
-                        <div class="muted">{{ $endorsement['caption'] }}</div>
+                        @if ($endorsement['name'] !== '')
+                            <div>{{ $endorsement['name'] }}</div>
+                        @endif
+                        @if ($endorsement['position'] !== '')
+                            <div class="muted">{{ $endorsement['position'] }}</div>
+                        @endif
+                        @if ($endorsement['caption'] !== '')
+                            <div class="muted">{{ $endorsement['caption'] }}</div>
+                        @endif
                         @if ($endorsement['document'])
                             <div class="muted">{{ $endorsement['document'] }}</div>
                         @endif

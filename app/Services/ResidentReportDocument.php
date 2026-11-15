@@ -11,7 +11,10 @@ use Illuminate\Support\Facades\Storage;
 
 class ResidentReportDocument
 {
-    public function __construct(private readonly ResidentReportWorkflow $reports) {}
+    public function __construct(
+        private readonly ResidentReportWorkflow $reports,
+        private readonly ReportSignatoryCatalog $signatories,
+    ) {}
 
     /**
      * @return array<string, mixed>
@@ -204,73 +207,7 @@ class ResidentReportDocument
      */
     private function endorsements(object $row, ?string $barangayCode): array
     {
-        $captain = is_string($barangayCode) ? config('mapr_reference.barangay_captains.'.$barangayCode) : null;
-        $barangayReport = null;
-        if (! empty($row->barangay_report_id) && Schema::hasTable('barangay_reports')) {
-            $barangayReport = DB::table('barangay_reports')->where('id', $row->barangay_report_id)->first();
-        }
-        $assessment = null;
-        if ($barangayReport && Schema::hasTable('field_assessments')) {
-            $assessment = DB::table('field_assessments')->where('barangay_report_id', $barangayReport->id)->orderByDesc('id')->first();
-        }
-        $consolidated = null;
-        if ($assessment && Schema::hasTable('consolidated_report_assessments') && Schema::hasTable('consolidated_reports')) {
-            $consolidatedId = DB::table('consolidated_report_assessments')->where('field_assessment_id', $assessment->id)->value('consolidated_report_id');
-            $consolidated = $consolidatedId ? DB::table('consolidated_reports')->where('id', $consolidatedId)->first() : null;
-        }
-        $verifier = config('mapr_reference.assessor_verifier');
-        $approver = config('mapr_reference.assessor_approver');
-        $noted = config('mapr_reference.signatories.noted_by');
-        $approved = config('mapr_reference.signatories.approved_by');
-
-        return [
-            $this->slot('Barangay endorsement', is_string($captain) && $captain !== '' ? $captain : 'Assigned barangay captain', 'Punong Barangay', $barangayReport ? 'barangay_report_id' : null, $barangayReport->id ?? null, 'barangay_signer', 'Barangay report', $barangayReport->report_reference ?? null),
-            $this->slot('Verified by', (string) ($verifier['name'] ?? 'Assigned verifier'), (string) ($verifier['title'] ?? 'Assessor'), $assessment ? 'field_assessment_id' : null, $assessment->id ?? null, 'verified_by', 'Field assessment', $assessment->assessment_reference ?? null),
-            $this->slot('Approved by', (string) ($approver['name'] ?? 'Assigned approver'), (string) ($approver['title'] ?? 'Acting City Assessor'), $assessment ? 'field_assessment_id' : null, $assessment->id ?? null, 'approved_by', 'Field assessment', $assessment->assessment_reference ?? null),
-            $this->slot('Noted by', (string) ($noted['name'] ?? 'Assigned officer'), trim((string) (($noted['title'] ?? '').' '.($noted['office'] ?? ''))), $consolidated ? 'consolidated_report_id' : null, $consolidated->id ?? null, 'noted_by', 'Consolidated report', $consolidated->report_reference ?? null),
-            $this->slot('Approved by', (string) ($approved['name'] ?? 'Assigned officer'), (string) ($approved['title'] ?? 'CDRRMO'), $consolidated ? 'consolidated_report_id' : null, $consolidated->id ?? null, 'approved_by', 'Consolidated report', $consolidated->report_reference ?? null),
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function slot(string $title, string $pendingName, string $position, ?string $column, ?int $id, string $role, string $documentLabel, ?string $documentReference): array
-    {
-        $signed = null;
-        if ($column !== null && $id !== null && Schema::hasTable('report_signatures')) {
-            $signed = DB::table('report_signatures')
-                ->where($column, $id)
-                ->where('signature_role', $role)
-                ->where('mechanism', 'authenticated_e_signature')
-                ->first();
-        }
-        $name = $pendingName;
-        $image = null;
-        $caption = 'Pending endorsement';
-        $document = null;
-        if ($signed) {
-            $signer = Schema::hasTable('users') ? DB::table('users')->where('id', $signed->signer_user_id)->first() : null;
-            $recorded = $this->personName($signer);
-            if ($recorded !== '') {
-                $name = $recorded;
-            }
-            $image = $this->assetPath($signed->user_signature_asset_id ?? null);
-            $caption = 'Signed '.$this->when($signed->signed_at);
-            if (is_string($documentReference) && $documentReference !== '') {
-                $document = $documentLabel.' '.$documentReference;
-            }
-        }
-
-        return [
-            'title' => $title,
-            'name' => $name,
-            'position' => $position,
-            'caption' => $caption,
-            'image' => $image,
-            'document' => $document,
-            'signed' => $signed !== null,
-        ];
+        return $this->signatories->residentOfficeEndorsements($row, $barangayCode);
     }
 
     private function assetPath(mixed $assetId): ?string

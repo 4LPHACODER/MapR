@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, inject, onMounted, ref } from 'vue';
 import MapIcon from '../../shared/components/MapIcon.vue';
 
 const logoUrl = '/images/mapr-logo.png';
@@ -15,6 +15,8 @@ const props = defineProps({
 });
 defineEmits(['close', 'toggle-collapse']);
 
+const roleCode = inject('roleCode', '');
+const showResidents = ['barangay_secretary', 'barangay_captain'].includes(roleCode);
 const badges = ref({});
 const reportsOpen = ref(true);
 const initials = computed(() => {
@@ -51,7 +53,7 @@ onMounted(async () => {
                 <MapIcon name="users" /><span v-if="!collapsed">Resident Submissions</span>
                 <span v-if="!collapsed && badges.submissions" class="cdrrmo-badge">{{ badges.submissions }}</span>
             </router-link>
-            <router-link to="/buildings" @click="$emit('close')"><MapIcon name="pin" /><span v-if="!collapsed">Building Records</span></router-link>
+            <router-link v-if="showResidents" to="/residents" @click="$emit('close')"><MapIcon name="users-round" /><span v-if="!collapsed">Residents Records</span></router-link>
             <button type="button" class="cdrrmo-nav-toggle" :aria-expanded="reportsOpen" @click="reportsOpen = !reportsOpen">
                 <MapIcon name="reports" /><span v-if="!collapsed">Reports</span>
             </button>

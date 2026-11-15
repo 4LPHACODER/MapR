@@ -1,8 +1,10 @@
 <?php
 
 use App\Http\Controllers\Assessor\AssessmentController;
+use App\Http\Controllers\Assessor\BuildingDamageAssessmentController;
 use App\Http\Controllers\Assessor\PageController;
 use App\Http\Controllers\Assessor\ResidentController;
+use App\Http\Controllers\Bdrrm\BarangayReportController;
 use App\Http\Controllers\Shared\BuildingLocationCorrectionController;
 use App\Http\Controllers\Shared\ContextController;
 use App\Http\Controllers\Shared\HouseholdController;
@@ -10,11 +12,12 @@ use App\Http\Controllers\Shared\ImportedDocumentController;
 use App\Http\Controllers\Shared\MapDataController;
 use App\Http\Controllers\Shared\PhotoController;
 use App\Http\Controllers\Shared\PreviewController;
+use App\Http\Controllers\Shared\ReportAssignmentController;
 use App\Http\Controllers\Shared\ReportFlagController;
 use App\Http\Controllers\Shared\SignatureAssetController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth', 'role:rdana', 'field.scope'])->prefix('rdana')->group(function () {
+Route::middleware(['auth', 'role:rdana,rdana_admin_officer,rdana_city_assessor', 'field.scope'])->prefix('rdana')->group(function () {
     Route::get('api/summary', [ContextController::class, 'summary']);
     Route::get('api/navigation', [ContextController::class, 'navigation']);
     Route::get('api/profile', [ContextController::class, 'profile']);
@@ -33,8 +36,26 @@ Route::middleware(['auth', 'role:rdana', 'field.scope'])->prefix('rdana')->group
     Route::get('api/residents/{resident}', [ResidentController::class, 'show']);
     Route::get('reports/barangay/{report}/preview', [PreviewController::class, 'barangay']);
     Route::get('api/damage-classes', [AssessmentController::class, 'damageClasses']);
+    Route::get('api/buildings', [BarangayReportController::class, 'buildings']);
     Route::get('api/barangay-reports', [AssessmentController::class, 'barangayReports']);
+    Route::get('api/barangay-reports/{report}', [BarangayReportController::class, 'show']);
+    Route::get('api/barangay-reports/{report}/damage-assessment', [BuildingDamageAssessmentController::class, 'show']);
+    Route::get('api/barangay-reports/{report}/damage-assessment/history', [BuildingDamageAssessmentController::class, 'history']);
+    Route::get('api/barangay-reports/{report}/damage-assessment/buildings', [BuildingDamageAssessmentController::class, 'searchBuildings']);
+    Route::post('api/barangay-reports/{report}/damage-assessment/link-building', [BuildingDamageAssessmentController::class, 'linkBuilding']);
+    Route::post('api/barangay-reports/{report}/damage-assessment/calculate', [BuildingDamageAssessmentController::class, 'calculate']);
+    Route::post('api/barangay-reports/{report}/damage-assessment/classify', [BuildingDamageAssessmentController::class, 'classify']);
+    Route::post('api/barangay-reports/{report}/damage-assessment', [BuildingDamageAssessmentController::class, 'store']);
+    Route::post('api/barangay-reports/{report}/damage-assessment/{assessment}/confirm', [BuildingDamageAssessmentController::class, 'confirm']);
     Route::post('api/barangay-reports/{report}/start', [AssessmentController::class, 'start']);
+    Route::get('api/personnel', [ReportAssignmentController::class, 'personnel']);
+    Route::post('api/barangay-reports/assign', [ReportAssignmentController::class, 'assignAssessors']);
+    Route::post('api/barangay-reports/{report}/assign', [ReportAssignmentController::class, 'assignAssessor']);
+    Route::post('api/assessments/{assessment}/submit-assessed', [ReportAssignmentController::class, 'submitAssessment']);
+    Route::post('api/assessments/{assessment}/verify-officer', [ReportAssignmentController::class, 'verifyAssessment']);
+    Route::post('api/assessments/{assessment}/forward', [ReportAssignmentController::class, 'forwardAssessment']);
+    Route::post('api/assessments/{assessment}/return', [ReportAssignmentController::class, 'returnAssessment']);
+    Route::post('api/barangay-reports/{report}/damage-assessment/revise', [BuildingDamageAssessmentController::class, 'revise']);
     Route::post('api/barangay-reports/{report}/return', [AssessmentController::class, 'returnReport']);
     Route::get('api/assessments', [AssessmentController::class, 'index']);
     Route::get('api/assessments/{assessment}', [AssessmentController::class, 'show']);

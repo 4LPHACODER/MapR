@@ -1,10 +1,10 @@
 <script setup>
-import { computed, onMounted, onUnmounted, provide, reactive, ref } from 'vue';
+import { computed, inject, onMounted, onUnmounted, provide, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import FieldSidebar from './components/FieldSidebar.vue';
 import FieldHeader from './components/FieldHeader.vue';
 
-defineProps({
+const props = defineProps({
     userName: { type: String, default: '' },
     userEmail: { type: String, default: '' },
     jobTitle: { type: String, default: '' },
@@ -12,6 +12,8 @@ defineProps({
     homeUrl: { type: String, default: '/' },
     csrfToken: { type: String, default: '' },
 });
+provide('officerName', computed(() => props.userName));
+const roleCode = inject('roleCode', '');
 
 const route = useRoute();
 const drawerOpen = ref(false);
@@ -49,6 +51,7 @@ provide('reportContext', {
     },
     openReportPreview() {},
     openResidentsWithArea(router) {
+        if (roleCode === 'bdrrm') return;
         router.push({ path: '/buildings' });
     },
 });

@@ -13,11 +13,13 @@ class AssignmentScope
     {
         $user = $request->user();
         $code = $user?->role?->code;
-        if ($user === null || ! in_array($code, ['bdrrm', 'rdana'], true)) {
+        $barangayRoles = ['bdrrm', 'barangay_secretary', 'barangay_captain'];
+        $assessorRoles = ['rdana', 'rdana_admin_officer', 'rdana_city_assessor'];
+        if ($user === null || ! in_array($code, [...$barangayRoles, ...$assessorRoles], true)) {
             return;
         }
 
-        $ids = $code === 'bdrrm'
+        $ids = in_array($code, $barangayRoles, true)
             ? $this->activeBarangayIds($user->id)
             : array_values(array_unique(array_merge(
                 $this->activeBarangayIds($user->id),
@@ -25,7 +27,7 @@ class AssignmentScope
             )));
 
         $request->attributes->set('scoped_barangay_ids', $ids);
-        $request->attributes->set('field_role', $code);
+        $request->attributes->set('field_role', in_array($code, $barangayRoles, true) ? 'bdrrm' : 'rdana');
 
         if ($request->filled('barangay_id') && ! in_array($request->integer('barangay_id'), $ids, true)) {
             abort(403, 'That barangay is outside your assignment.');
@@ -82,7 +84,7 @@ class AssignmentScope
 
     public function assessorCanOpenReport(User $user, int $barangayReportId): bool
     {
-        if ($user->role?->code !== 'rdana') {
+        if (! in_array($user->role?->code, ['rdana', 'rdana_admin_officer', 'rdana_city_assessor'], true)) {
             return false;
         }
 
@@ -91,7 +93,31 @@ class AssignmentScope
             return false;
         }
 
-        if (in_array((int) $report->barangay_id, $this->activeBarangayIds($user->id), true)) {
+        $inBarangay = in_array((int) $report->barangay_id, $this->activeBarangayIds($user->id), true);
+
+        // Ordinary assessors may only open reports assigned to them.
+        if ($user->role?->code === 'rdana') {
+            if (Schema::hasTable('report_assignments')) {
+                $assigned = DB::table('report_assignments')
+                    ->where('subject_type', 'barangay_report')
+                    ->where('subject_id', $barangayReportId)
+                    ->where('assignment_role', 'rdana')
+                    ->where('is_active', true)
+                    ->where('assignee_user_id', $user->id)
+                    ->exists();
+                if ($assigned) {
+                    return true;
+                }
+            }
+
+            return Schema::hasTable('field_assessments')
+                && DB::table('field_assessments')
+                    ->where('barangay_report_id', $barangayReportId)
+                    ->where('assigned_assessor_id', $user->id)
+                    ->exists();
+        }
+
+        if ($inBarangay) {
             return true;
         }
 
@@ -103,5 +129,32 @@ class AssignmentScope
             ->where('barangay_report_id', $barangayReportId)
             ->where('assigned_assessor_id', $user->id)
             ->exists();
+    }
+
+    /**
+     * Match assessorCanOpenReport: active barangay assignment OR per-report field assessment.
+     * Do not use merged ids() barangays from unrelated assessments.
+     */
+    public function constrainAssessorVisibleReports($query, User $user, string $reportIdColumn = 'reports.id', string $barangayColumn = 'reports.barangay_id')
+    {
+        $active = $this->activeBarangayIds($user->id);
+
+        return $query->where(function ($inner) use ($user, $active, $reportIdColumn, $barangayColumn) {
+            $applied = false;
+            if ($active !== []) {
+                $inner->whereIn($barangayColumn, $active);
+                $applied = true;
+            }
+            if (Schema::hasTable('field_assessments')) {
+                $method = $applied ? 'orWhereIn' : 'whereIn';
+                $inner->{$method}($reportIdColumn, function ($assigned) use ($user) {
+                    $assigned->select('barangay_report_id')
+                        ->from('field_assessments')
+                        ->where('assigned_assessor_id', $user->id);
+                });
+            } elseif (! $applied) {
+                $inner->whereRaw('1 = 0');
+            }
+        });
     }
 }

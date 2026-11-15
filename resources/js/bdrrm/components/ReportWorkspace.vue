@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import MapIcon from '../../shared/components/MapIcon.vue';
 
 const props = defineProps({
@@ -14,6 +14,7 @@ const props = defineProps({
     zoom: { type: String, default: '100%' },
     detailsOpen: { type: Boolean, default: false },
     menuOpen: { type: Boolean, default: false },
+    backTo: { type: String, default: '' },
 });
 const emit = defineEmits(['save', 'sign', 'submit', 'verify', 'upload', 'return-report', 'flag', 'resolve-flag', 'update:editing', 'update:zoom', 'update:detailsOpen', 'update:menuOpen']);
 const flagForm = ref({ category: 'Review', reason: '' });
@@ -60,6 +61,25 @@ function printPreview() {
     if (previewHref.value) window.open(previewHref.value, '_blank', 'noopener');
 }
 
+function formatWhen(value) {
+    if (!value) return '';
+    const date = new Date(String(value).includes('T') ? value : `${String(value).replace(' ', 'T')}Z`);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return `${new Intl.DateTimeFormat('en-PH', {
+        timeZone: 'Asia/Manila',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    }).format(date)} PHT`;
+}
+
+watch(() => props.detailsOpen, (open) => {
+    if (!open) return;
+    requestAnimationFrame(() => document.getElementById('report-history')?.scrollIntoView({ block: 'nearest' }));
+}, { immediate: true });
+
 function signatureState(role) {
     const row = (props.record.signatures || []).find((item) => item.signature_role === role && item.mechanism === 'authenticated_e_signature');
     if (!row) return { label: 'Awaiting signature', signed: false };
@@ -77,12 +97,13 @@ function signatureState(role) {
                 <p>{{ instruction }}</p>
             </div>
             <div class="report-workspace-actions">
+                <router-link v-if="backTo" class="mapr-button mapr-button-secondary" :to="backTo">Back</router-link>
                 <span class="report-badge">{{ record.label }}</span>
                 <span>v{{ record.version || 1 }}</span>
                 <span>{{ saveState }}</span>
                 <button v-if="record.can_edit && readOnly" type="button" class="mapr-button mapr-button-secondary" @click="emit('update:editing', true)">Edit</button>
                 <button v-if="record.can_edit" type="button" class="mapr-button mapr-button-secondary" :disabled="saving || readOnly" @click="emit('save')">Save Draft</button>
-                <a v-if="previewHref" class="mapr-button mapr-button-secondary" :href="previewHref" target="_blank" rel="noopener">Preview</a>
+                <a v-if="previewHref" class="mapr-button mapr-button-secondary" :href="previewHref">Preview</a>
                 <button v-if="previewHref" type="button" class="mapr-button mapr-button-secondary" @click="printPreview">Print</button>
                 <button v-if="canSign" type="button" class="mapr-button mapr-button-primary" :disabled="saving" @click="emit('sign')">Review &amp; Sign</button>
                 <button type="button" class="mapr-button mapr-button-secondary" aria-label="More actions" @click="emit('update:menuOpen', !menuOpen)">More</button>
@@ -121,19 +142,18 @@ function signatureState(role) {
                     <table>
                         <tbody>
                             <tr><th>Report reference</th><td>{{ record.reference }}</td><th>Status</th><td>{{ record.label }}</td></tr>
-                            <tr><th>Incident</th><td>{{ record.incident?.reference || 'Not recorded' }}</td><th>Disaster</th><td>{{ record.incident?.disaster_type || 'Not recorded' }}</td></tr>
-                            <tr><th>Source report</th><td>{{ record.barangay_report?.reference || 'Not recorded' }}</td><th>Barangay</th><td>{{ record.barangay?.name || 'Not recorded' }}</td></tr>
-                            <tr><th>Assessor</th><td>{{ record.assessor?.name || profile?.name || 'Not recorded' }}</td><th>Building</th><td>{{ record.building?.reference || 'Not recorded' }}</td></tr>
+                            <tr><th>Incident</th><td>{{ record.incident?.name || record.incident_name || 'Not recorded' }}</td><th>Barangay</th><td>{{ record.barangay?.name || record.barangay_name || 'Not recorded' }}</td></tr>
+                            <tr><th>Building</th><td>{{ record.building_reference || 'Not linked' }}</td><th>Linked resident submission</th><td>{{ record.resident_reference || 'None recorded' }}</td></tr>
                         </tbody>
                     </table>
                     <section>
-                        <h4>1. Building and location verification</h4>
+                        <h4>1. Building and location</h4>
                         <p>Household: {{ record.household?.reference || 'Not linked' }}</p>
                         <router-link class="mapr-button mapr-button-secondary" to="/map"><MapIcon name="pin" /> View on Map</router-link>
                         <p>Location remarks: {{ form.verification_notes || 'Not recorded' }}</p>
                     </section>
                     <section>
-                        <h4>2. Damage assessment</h4>
+                        <h4>2. Report description</h4>
                         <p v-if="record.predictions?.length">Preliminary classification: {{ record.predictions[0].prediction_status }}. {{ record.predictions[0].failure_reason || '' }}</p>
                         <label>Observations
                             <textarea v-if="!readOnly" v-model="form[narrative]" rows="4" @focus="remember"></textarea>
@@ -167,16 +187,21 @@ function signatureState(role) {
                 </article>
             </div>
             <aside class="report-details" :class="{ 'is-open': detailsOpen }">
+                <section v-if="record.status === 'returned' || record.return_reason" id="report-feedback">
+                    <h3><MapIcon name="undo" /> Correction feedback</h3>
+                    <p>{{ record.return_reason || 'Correction feedback is not available.' }}</p>
+                    <p v-if="record.returned_at">Returned {{ formatWhen(record.returned_at) }}</p>
+                    <p v-else>Returned date is not recorded.</p>
+                </section>
                 <section>
-                    <h3><MapIcon name="file" /> Source report</h3>
-                    <p>{{ record.barangay_report?.reference || 'No source report' }}</p>
-                    <p>{{ record.barangay_report?.signed ? 'Signed source' : (record.barangay_report?.label || 'No signature recorded') }}</p>
+                    <h3><MapIcon name="link" /> Linked resident submission</h3>
+                    <p>{{ record.resident_reference || 'No resident submission is linked to this report.' }}</p>
                 </section>
                 <section>
                     <h3><MapIcon name="link" /> Linked records</h3>
                     <p>Incident: {{ record.incident?.reference || 'Not linked' }}</p>
                     <p>Barangay: {{ record.barangay?.name || 'Not linked' }}</p>
-                    <p>Building: {{ record.building?.reference || 'Not linked' }}</p>
+                    <p>Building: {{ record.building_reference || 'Not linked' }}</p>
                     <p>Household: {{ record.household?.reference || 'Not linked' }}</p>
                 </section>
                 <section>
@@ -187,8 +212,8 @@ function signatureState(role) {
                         </li>
                     </ul>
                 </section>
-                <section>
-                    <h3>Workflow</h3>
+                <section id="report-history">
+                    <h3><MapIcon name="history" /> Review history</h3>
                     <ul>
                         <li v-for="(event, index) in record.timeline || []" :key="index">{{ event.summary }} · {{ event.created_at }}</li>
                         <li v-if="!(record.timeline || []).length">No workflow event is recorded yet.</li>

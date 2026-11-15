@@ -79,3 +79,17 @@
     color: #0f172a;
     font-weight: 600;
 }
+
+.resident-linked-building {
+    margin: 0.75rem 0 1rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+    display: grid;
+    gap: 0.45rem;
+}
+
+.resident-linked-building p {
+    margin: 0;
+}

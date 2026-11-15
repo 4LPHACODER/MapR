@@ -25,9 +25,28 @@ const previewPhoto = ref(null);
 const narrative = computed(() => 'findings');
 const readOnly = computed(() => !props.record.can_edit || (!props.editing && ['signed', 'submitted', 'finalized'].includes(props.record.status)));
 const title = computed(() => 'Field Assessment Report');
-const instruction = computed(() => 'Review the assigned assessment. Verification and approval are separate signatures.');
+const instruction = computed(() => {
+    const capacity = props.profile?.signing_capacity;
+    if (capacity === 'assessed_by') return 'Complete the damage assessment, then review and sign as Assessed by.';
+    if (capacity === 'verified_by') return 'Verify the submitted assessment as Administrative Officer III.';
+    if (capacity === 'approved_by') return 'Note and forward the verified assessment as City Assessor.';
+    return 'Review the assigned assessment. Verification and approval are separate signatures.';
+});
 const scale = computed(() => ({ '75%': 0.75, '100%': 1, '125%': 1.25, '150%': 1.5, 'Fit width': 1 }[props.zoom] || 1));
-const canSign = computed(() => props.profile?.signing_capacity === 'verified_by' || props.profile?.signing_capacity === 'approved_by');
+const canSign = computed(() => {
+    const capacity = props.profile?.signing_capacity;
+    if (capacity === 'assessed_by') return Boolean(props.record.can_submit_assessed);
+    if (capacity === 'verified_by') return Boolean(props.record.can_verify_officer);
+    if (capacity === 'approved_by') return Boolean(props.record.can_forward_city);
+    return false;
+});
+const signLabel = computed(() => {
+    const capacity = props.profile?.signing_capacity;
+    if (capacity === 'assessed_by') return 'Review & Sign Assessment';
+    if (capacity === 'verified_by') return 'Verify and Sign';
+    if (capacity === 'approved_by') return 'Note and Sign';
+    return 'Review & Sign';
+});
 const previewHref = computed(() => `/rdana/assessments/${props.record.id}/preview`);
 const photoReportId = computed(() => props.record.barangay_report?.id || props.record.id);
 
@@ -53,8 +72,9 @@ function photoUrl(photo) {
 }
 
 const signatureSlots = computed(() => [
+    { role: 'assessed_by', title: 'Assessed by', name: props.record.assessor?.name || 'Assigned RDANA assessor', position: 'RDANA Assessor' },
     { role: 'verified_by', title: 'Verified by', name: 'Mark L. Merillo', position: 'Administrative Officer III' },
-    { role: 'approved_by', title: 'Approved by', name: 'Engr. Lovy R. Dedicatoria, LAOO II', position: 'Acting City Assessor' },
+    { role: 'approved_by', title: 'Noted by', name: 'Engr. Lovy R. Dedicatoria, LAOO II', position: 'Acting City Assessor' },
 ]);
 
 function printPreview() {
@@ -85,7 +105,7 @@ function signatureState(role) {
                 <button v-if="record.can_edit" type="button" class="mapr-button mapr-button-secondary" :disabled="saving || readOnly" @click="emit('save')">Save Draft</button>
                 <a v-if="previewHref" class="mapr-button mapr-button-secondary" :href="previewHref" target="_blank" rel="noopener">Preview</a>
                 <button v-if="previewHref" type="button" class="mapr-button mapr-button-secondary" @click="printPreview">Print</button>
-                <button v-if="canSign" type="button" class="mapr-button mapr-button-primary" :disabled="saving" @click="emit('sign')">Review &amp; Sign</button>
+                <button v-if="canSign" type="button" class="mapr-button mapr-button-primary" :disabled="saving" @click="emit('sign')">{{ signLabel }}</button>
                 <button type="button" class="mapr-button mapr-button-secondary" aria-label="More actions" @click="emit('update:menuOpen', !menuOpen)">More</button>
                 <div v-if="menuOpen" class="report-menu" role="menu">
                     <a v-if="previewHref" role="menuitem" :href="`${previewHref}?format=pdf`">Download PDF</a>

@@ -15,4 +15,6 @@ return [
         'style' => env('MAPBOX_STYLE', 'mapbox://styles/mapbox/satellite-streets-v12'),
     ],
 
+    'damage_inference_url' => env('MAPR_DAMAGE_INFERENCE_URL', ''),
+
 ];

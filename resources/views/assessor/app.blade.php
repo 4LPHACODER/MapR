@@ -13,6 +13,7 @@
         data-user-email="{{ $user?->email }}"
         data-job-title="{{ $user?->job_title ?: $roleName }}"
         data-role="rdana"
+        data-role-code="{{ $user?->role?->code }}"
         data-mapbox-token="{{ $mapboxToken }}"
         data-mapbox-style="{{ $mapboxStyle }}"
         data-flood-classes="{{ json_encode($floodClasses) }}"

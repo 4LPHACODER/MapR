@@ -436,8 +436,8 @@ onBeforeUnmount(() => {
     <section class="residents-page">
         <header class="residents-header">
             <div>
-                <h2 class="cdrrmo-page-title">Residents</h2>
-                <p class="cdrrmo-page-lead">Review resident records across the four study barangays. Editing stays with accounts that already have that permission.</p>
+                <h2 class="cdrrmo-page-title">Residents Records</h2>
+                <p class="cdrrmo-page-lead">{{ apiBase?.includes('/bdrrm') ? 'View and manage authorized resident and household information within your barangay.' : 'Review resident records across the four study barangays. Editing stays with accounts that already have that permission.' }}</p>
             </div>
             <div class="residents-header-actions">
                 <button type="button" class="mapr-button mapr-button-secondary" @click="reloadAll">

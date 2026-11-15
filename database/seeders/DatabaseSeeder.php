@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
 
         if (app()->environment(['local', 'testing'])) {
             $this->call(MaprDemoUserSeeder::class);
+            $this->call(MapRWorkflowPersonnelSeeder::class);
         } else {
             $this->command?->warn('Skipped MaprDemoUserSeeder (runs only in local or testing).');
         }

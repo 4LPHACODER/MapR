@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use App\Models\Auth\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class ReportWorkflow
@@ -20,6 +22,10 @@ class ReportWorkflow
             'submitted' => 'Submitted',
             'returned' => 'Returned for correction',
             'finalized' => 'Finalized',
+            'assessor_draft' => 'Assessor draft',
+            'pending_admin_verification' => 'Awaiting administrative verification',
+            'pending_city_assessor' => 'Awaiting city assessor notation',
+            'forwarded_cdrrmo' => 'Forwarded to CDRRMO',
             default => $status ?: 'Unknown',
         };
     }
@@ -90,29 +96,331 @@ class ReportWorkflow
             'submitted_at' => now(),
             'updated_at' => now(),
         ]);
-        $this->assignReviewingAssessor($report);
+        $this->assignReviewingAssessor($report, $user);
         $this->logger->log($user, 'barangay_report_submitted', 'Submitted '.$report->report_reference.' for assessor review.', 'barangay_report', (int) $report->id);
     }
 
-    private function assignReviewingAssessor(object $report): void
+    public function releaseBarangayReportForAssessor(User $user, object $report): void
     {
-        if (! Schema::hasTable('user_barangay_assignments') || ! Schema::hasTable('roles')) {
+        if (! $this->hasSignature('barangay_report_id', (int) $report->id, 'barangay_signer')) {
+            abort(422, 'The barangay captain must approve this report before it is released to RDANA.');
+        }
+        if (! in_array($report->report_status, ['draft', 'returned'], true)) {
+            return;
+        }
+        if (trim((string) $report->report_description) === '') {
+            abort(422, 'A report description is required before handoff.');
+        }
+
+        $update = [
+            'report_status' => 'review',
+            'submitted_at' => now(),
+            'updated_at' => now(),
+        ];
+        if (Schema::hasColumn('barangay_reports', 'workflow_stage')) {
+            $update['workflow_stage'] = 'handed_to_rdana';
+        }
+        DB::table('barangay_reports')->where('id', $report->id)->update($update);
+        $this->assignReviewingAssessor($report, $user);
+        $this->logger->log($user, 'barangay_report_handed_off', 'Handed off '.$report->report_reference.' to assessor review.', 'barangay_report', (int) $report->id);
+    }
+
+    /**
+     * Start a field assessment only when an explicit RDANA report assignment already exists.
+     * Captain handoff leaves reports Unassigned until AO III / City Assessor assigns personnel.
+     */
+    private function assignReviewingAssessor(object $report, ?User $actor = null): void
+    {
+        if (! Schema::hasTable('report_assignments')) {
+            if ($actor) {
+                $this->logger->log(
+                    $actor,
+                    'assessor_assignment_missing',
+                    'Report '.$report->report_reference.' was handed to RDANA without an assessor assignment.',
+                    'barangay_report',
+                    (int) $report->id,
+                );
+            }
+
             return;
         }
 
-        $assessorId = DB::table('user_barangay_assignments as assignments')
-            ->join('users', 'users.id', '=', 'assignments.user_id')
-            ->join('roles', 'roles.id', '=', 'users.role_id')
-            ->where('roles.code', 'rdana')
-            ->where('assignments.barangay_id', $report->barangay_id)
-            ->whereNull('assignments.revoked_at')
-            ->orderBy('assignments.assigned_at')
-            ->value('users.id');
+        $assessorId = DB::table('report_assignments')
+            ->where('subject_type', 'barangay_report')
+            ->where('subject_id', $report->id)
+            ->where('assignment_role', 'rdana')
+            ->where('is_active', true)
+            ->value('assignee_user_id');
 
         $assessor = $assessorId ? User::query()->find($assessorId) : null;
         if ($assessor) {
             $this->startAssessment($assessor, $report);
+
+            return;
         }
+
+        if ($actor) {
+            $this->logger->log(
+                $actor,
+                'assessor_assignment_missing',
+                'Report '.$report->report_reference.' is awaiting RDANA assessor assignment.',
+                'barangay_report',
+                (int) $report->id,
+            );
+        }
+    }
+
+    /**
+     * Link field assessments for handed-off reports that already have an active RDANA assignment
+     * but still lack a field assessment draft.
+     *
+     * @return array{scanned: int, linked: int, skipped: int, missing_assessor: int}
+     */
+    public function backfillAssessorAssignmentsForReviewQueue(): array
+    {
+        $result = ['scanned' => 0, 'linked' => 0, 'skipped' => 0, 'missing_assessor' => 0];
+        if (! Schema::hasTable('barangay_reports') || ! Schema::hasTable('field_assessments') || ! Schema::hasTable('report_assignments')) {
+            return $result;
+        }
+
+        $reports = DB::table('barangay_reports')
+            ->whereIn('report_status', ['review', 'signed', 'submitted'])
+            ->orderBy('id')
+            ->get(['id', 'report_reference', 'barangay_id', 'report_status']);
+
+        foreach ($reports as $report) {
+            $result['scanned']++;
+            $exists = DB::table('field_assessments')->where('barangay_report_id', $report->id)->exists();
+            if ($exists) {
+                $result['skipped']++;
+
+                continue;
+            }
+
+            $assessorId = DB::table('report_assignments')
+                ->where('subject_type', 'barangay_report')
+                ->where('subject_id', $report->id)
+                ->where('assignment_role', 'rdana')
+                ->where('is_active', true)
+                ->value('assignee_user_id');
+
+            $assessor = $assessorId ? User::query()->find($assessorId) : null;
+            if (! $assessor) {
+                $result['missing_assessor']++;
+
+                continue;
+            }
+
+            $this->startAssessment($assessor, $report);
+            $result['linked']++;
+        }
+
+        return $result;
+    }
+
+    public function endorseBySecretary(User $user, object $report, ?array $endorsement = null): void
+    {
+        $user->loadMissing('role');
+        if ($user->role?->code !== 'barangay_secretary') {
+            abort(403, 'Only the barangay secretary can check and sign this report.');
+        }
+        $this->assertBarangayMember($user, (int) $report->barangay_id);
+        if (! in_array($report->report_status, ['draft', 'returned'], true)) {
+            abort(422, 'This report is no longer awaiting barangay checking.');
+        }
+        if (Schema::hasColumn('barangay_reports', 'workflow_stage') && ($report->workflow_stage ?? null) !== 'pending_secretary') {
+            abort(422, 'This report is not awaiting Secretary checking.');
+        }
+        $this->assertBdrrmReviewed($report);
+        $storedPath = null;
+        try {
+            $assetId = $this->resolveEndorsementAsset($user, $endorsement, $storedPath);
+            $this->storeSignature($user, 'barangay_report_id', (int) $report->id, 'barangay_secretary', $report, $assetId);
+            if (Schema::hasColumn('barangay_reports', 'workflow_stage')) {
+                DB::table('barangay_reports')->where('id', $report->id)->update([
+                    'workflow_stage' => 'pending_captain',
+                    'updated_at' => now(),
+                ]);
+            }
+            $this->logger->log($user, 'barangay_report_endorsed', 'Checked and signed '.$report->report_reference.' for the punong barangay.', 'barangay_report', (int) $report->id);
+        } catch (\Throwable $exception) {
+            if (is_string($storedPath) && $storedPath !== '') {
+                Storage::disk('local')->delete($storedPath);
+            }
+            throw $exception;
+        }
+    }
+
+    private function assertBdrrmReviewed(object $report): void
+    {
+        if (! Schema::hasTable('resident_incident_reports') || ! Schema::hasTable('report_signatures') || ! Schema::hasColumn('report_signatures', 'resident_incident_report_id')) {
+            return;
+        }
+        $resident = DB::table('resident_incident_reports')->where('barangay_report_id', $report->id)->first();
+        if ($resident === null) {
+            return;
+        }
+        $signed = DB::table('report_signatures')
+            ->where('resident_incident_report_id', $resident->id)
+            ->where('signature_role', 'bdrrm_reviewer')
+            ->exists();
+        if (! $signed) {
+            abort(422, 'The assigned BDRRM officer must sign this report before it can be checked.');
+        }
+    }
+
+    public function approveByCaptain(User $user, object $report, ?array $endorsement = null): void
+    {
+        $user->loadMissing('role');
+        if ($user->role?->code !== 'barangay_captain') {
+            abort(403, 'Only the punong barangay can endorse this report.');
+        }
+        $this->assertBarangayMember($user, (int) $report->barangay_id);
+        if (Schema::hasColumn('barangay_reports', 'workflow_stage') && ($report->workflow_stage ?? null) !== 'pending_captain') {
+            abort(422, 'This report is not awaiting Captain endorsement.');
+        }
+        if (! $this->hasSignature('barangay_report_id', (int) $report->id, 'barangay_secretary')) {
+            abort(422, 'The barangay secretary must check and sign this report before captain endorsement.');
+        }
+        $this->assertBdrrmReviewed($report);
+        $storedPath = null;
+        try {
+            $assetId = $this->resolveEndorsementAsset($user, $endorsement, $storedPath);
+            $this->storeSignature($user, 'barangay_report_id', (int) $report->id, 'barangay_signer', $report, $assetId);
+            $fresh = DB::table('barangay_reports')->where('id', $report->id)->first();
+            $this->releaseBarangayReportForAssessor($user, $fresh);
+            $this->logger->log($user, 'barangay_report_captain_approved', 'Endorsed '.$report->report_reference.' for RDANA.', 'barangay_report', (int) $report->id);
+        } catch (\Throwable $exception) {
+            if (is_string($storedPath) && $storedPath !== '') {
+                Storage::disk('local')->delete($storedPath);
+            }
+            throw $exception;
+        }
+    }
+
+    public function submitAssessedDamage(User $user, object $assessment): void
+    {
+        $user->loadMissing('role');
+        if ($user->role?->code !== 'rdana') {
+            abort(403, 'Only the assigned assessor can submit this assessment.');
+        }
+        app(ReportAssignmentService::class)->assertAssignee($user, 'barangay_report', (int) $assessment->barangay_report_id, 'rdana');
+        if (Schema::hasTable('building_damage_cost_assessments')) {
+            $saved = DB::table('building_damage_cost_assessments')
+                ->where('barangay_report_id', $assessment->barangay_report_id)
+                ->whereIn('assessment_status', ['draft', 'confirmed'])
+                ->exists();
+            abort_unless($saved, 422, 'Save the damage assessment before submitting.');
+        }
+        $this->storeSignature($user, 'field_assessment_id', (int) $assessment->id, 'assessed_by', $assessment);
+        $update = [
+            // Clear prior return so assessmentBucket can treat this as completed / awaiting verification.
+            'assessment_status' => Schema::hasColumn('field_assessments', 'assessment_status') ? 'draft' : null,
+            'updated_at' => now(),
+        ];
+        if ($update['assessment_status'] === null) {
+            unset($update['assessment_status']);
+        }
+        if (Schema::hasColumn('field_assessments', 'workflow_stage')) {
+            $update['workflow_stage'] = 'pending_admin_verification';
+        }
+        if (Schema::hasColumn('field_assessments', 'return_reason')) {
+            $update['return_reason'] = null;
+        }
+        if (Schema::hasColumn('field_assessments', 'returned_at')) {
+            $update['returned_at'] = null;
+        }
+        DB::table('field_assessments')->where('id', $assessment->id)->update($update);
+        $this->logger->log($user, 'field_assessment_assessed', 'Submitted '.$assessment->assessment_reference.' for administrative verification.', 'field_assessment', (int) $assessment->id);
+    }
+
+    public function verifyByAdminOfficer(User $user, object $assessment): void
+    {
+        $user->loadMissing('role');
+        if ($user->role?->code !== 'rdana_admin_officer') {
+            abort(403, 'Only the RDANA administrative officer can verify this assessment.');
+        }
+        if (! $this->hasSignature('field_assessment_id', (int) $assessment->id, 'assessed_by')) {
+            abort(422, 'The assigned assessor must sign before verification.');
+        }
+        $this->storeSignature($user, 'field_assessment_id', (int) $assessment->id, 'verified_by', $assessment);
+        $update = ['updated_at' => now()];
+        if (Schema::hasColumn('field_assessments', 'workflow_stage')) {
+            $update['workflow_stage'] = 'pending_city_assessor';
+        }
+        DB::table('field_assessments')->where('id', $assessment->id)->update($update);
+        $this->logger->log($user, 'field_assessment_verified_by_officer', 'Verified '.$assessment->assessment_reference.'.', 'field_assessment', (int) $assessment->id);
+    }
+
+    public function approveAndForward(User $user, object $assessment): void
+    {
+        $user->loadMissing('role');
+        if ($user->role?->code !== 'rdana_city_assessor' && ! $this->matchesApprover($user)) {
+            abort(403, 'Only the city assessor can approve this assessment.');
+        }
+        if (! $this->hasSignature('field_assessment_id', (int) $assessment->id, 'verified_by')) {
+            abort(422, 'Administrative verification is required before city approval.');
+        }
+        $this->storeSignature($user, 'field_assessment_id', (int) $assessment->id, 'approved_by', $assessment);
+        $update = [
+            'assessment_status' => 'submitted',
+            'submitted_at' => now(),
+            'updated_at' => now(),
+        ];
+        if (Schema::hasColumn('field_assessments', 'workflow_stage')) {
+            $update['workflow_stage'] = 'forwarded_cdrrmo';
+        }
+        DB::table('field_assessments')->where('id', $assessment->id)->update($update);
+        $this->logger->log($user, 'field_assessment_forwarded', 'Forwarded '.$assessment->assessment_reference.' to CDRRMO.', 'field_assessment', (int) $assessment->id);
+    }
+
+    public function returnFieldAssessment(User $user, object $assessment, string $reason): void
+    {
+        $user->loadMissing('role');
+        $role = $user->role?->code;
+        if (! in_array($role, ['rdana_admin_officer', 'rdana_city_assessor'], true)) {
+            abort(403, 'Only RDANA supervisors can return an assessment for correction.');
+        }
+        $reason = trim($reason);
+        if (strlen($reason) < 10) {
+            abort(422, 'Provide a clear correction reason.');
+        }
+        $stage = (string) ($assessment->workflow_stage ?? '');
+        if (! in_array($stage, ['pending_admin_verification', 'pending_city_assessor'], true)
+            && ! $this->hasSignature('field_assessment_id', (int) $assessment->id, 'assessed_by')) {
+            abort(422, 'Only a submitted assessment awaiting verification can be returned.');
+        }
+
+        $update = [
+            'assessment_status' => 'returned',
+            'updated_at' => now(),
+        ];
+        if (Schema::hasColumn('field_assessments', 'return_reason')) {
+            $update['return_reason'] = $reason;
+        }
+        if (Schema::hasColumn('field_assessments', 'returned_at')) {
+            $update['returned_at'] = now();
+        }
+        if (Schema::hasColumn('field_assessments', 'workflow_stage')) {
+            $update['workflow_stage'] = 'assessor_draft';
+        }
+        DB::table('field_assessments')->where('id', $assessment->id)->update($update);
+
+        // Keep assessed_by history on the document, but clear it so the assessor can re-sign after corrections.
+        if (Schema::hasTable('report_signatures')) {
+            DB::table('report_signatures')
+                ->where('field_assessment_id', $assessment->id)
+                ->whereIn('signature_role', ['assessed_by', 'verified_by', 'approved_by'])
+                ->delete();
+        }
+
+        $this->logger->log(
+            $user,
+            'field_assessment_returned',
+            'Returned '.$assessment->assessment_reference.' for correction. '.$reason,
+            'field_assessment',
+            (int) $assessment->id,
+        );
     }
 
     public function signBarangay(User $user, object $report): void
@@ -177,6 +485,10 @@ class ReportWorkflow
 
     public function startAssessment(User $assessor, object $report): int
     {
+        if (! Schema::hasTable('field_assessments')) {
+            return 0;
+        }
+
         $existing = DB::table('field_assessments')
             ->where('barangay_report_id', $report->id)
             ->where('assigned_assessor_id', $assessor->id)
@@ -185,7 +497,7 @@ class ReportWorkflow
             return (int) $existing;
         }
 
-        $id = DB::table('field_assessments')->insertGetId([
+        $payload = [
             'assessment_reference' => $this->reference('FA'),
             'findings' => null,
             'assessment_status' => 'draft',
@@ -193,7 +505,11 @@ class ReportWorkflow
             'assigned_assessor_id' => $assessor->id,
             'created_at' => now(),
             'updated_at' => now(),
-        ]);
+        ];
+        if (Schema::hasColumn('field_assessments', 'workflow_stage')) {
+            $payload['workflow_stage'] = 'assessor_draft';
+        }
+        $id = DB::table('field_assessments')->insertGetId($payload);
         $this->logger->log($assessor, 'field_assessment_started', 'Started field assessment for '.$report->report_reference.'.', 'field_assessment', $id);
 
         return $id;
@@ -380,7 +696,71 @@ class ReportWorkflow
             || ($name !== '' && strcasecmp(trim($user->display_name), trim($name)) === 0);
     }
 
-    private function storeSignature(User $user, string $column, int $id, string $role, object $document): void
+    /**
+     * @param  array{use_saved?: bool, file?: mixed}|null  $endorsement
+     */
+    private function resolveEndorsementAsset(User $user, ?array $endorsement, ?string &$storedPath): ?int
+    {
+        if ($endorsement === null) {
+            abort(422, 'Draw a signature or choose your saved signature before continuing.');
+        }
+        $file = $endorsement['file'] ?? null;
+        if ($file instanceof UploadedFile) {
+            return $this->storeHeldSignature($user, $file, $storedPath);
+        }
+        if (! empty($endorsement['use_saved'])) {
+            $id = $this->currentSignatureAssetId($user);
+            if ($id === null) {
+                abort(422, 'No saved signature is available.');
+            }
+
+            return $id;
+        }
+
+        abort(422, 'Draw a signature or choose your saved signature before continuing.');
+    }
+
+    private function storeHeldSignature(User $user, UploadedFile $file, ?string &$storedPath): int
+    {
+        $path = $file->getRealPath();
+        $bytes = $path ? (int) filesize($path) : 0;
+        if ($bytes < 1 || $bytes > 2 * 1024 * 1024) {
+            abort(422, 'The electronic-signature image must be between 1 byte and 2 MB.');
+        }
+        $contents = $path ? (string) file_get_contents($path) : '';
+        if (preg_match('/<\s*(svg|script|html)\b|<\?xml/i', $contents) === 1) {
+            abort(422, 'SVG and other non-image files are not accepted.');
+        }
+        $info = $path ? @getimagesize($path) : false;
+        $mime = is_array($info) ? (string) ($info['mime'] ?? '') : '';
+        if (! in_array($mime, ['image/png', 'image/jpeg'], true)) {
+            abort(422, 'Only a PNG or JPEG electronic-signature image is accepted.');
+        }
+        $width = (int) ($info[0] ?? 0);
+        $height = (int) ($info[1] ?? 0);
+        if ($width < 16 || $height < 16 || $width > 4000 || $height > 4000) {
+            abort(422, 'The electronic-signature image must be between 16 and 4000 pixels on each side.');
+        }
+        $extension = $mime === 'image/png' ? 'png' : 'jpg';
+        $storedPath = 'signature-images/'.Str::uuid().'.'.$extension;
+        Storage::disk('local')->put($storedPath, $contents);
+        $stamp = now();
+
+        return (int) DB::table('user_signature_assets')->insertGetId([
+            'user_id' => $user->id,
+            'storage_path' => $storedPath,
+            'mime_type' => $mime,
+            'byte_size' => $bytes,
+            'width' => $width,
+            'height' => $height,
+            'sha256' => hash('sha256', $contents),
+            'is_current' => false,
+            'created_at' => $stamp,
+            'updated_at' => $stamp,
+        ]);
+    }
+
+    private function storeSignature(User $user, string $column, int $id, string $role, object $document, ?int $assetId = null): void
     {
         if ($role === 'approved_by' && (int) $user->id === (int) ($document->assigned_assessor_id ?? 0)) {
             abort(403, 'The verifying officer cannot apply the approving signature.');
@@ -403,7 +783,7 @@ class ReportWorkflow
             'updated_at' => now(),
         ];
         if (Schema::hasColumn('report_signatures', 'user_signature_asset_id')) {
-            $payload['user_signature_asset_id'] = $this->currentSignatureAssetId($user);
+            $payload['user_signature_asset_id'] = $assetId ?? $this->currentSignatureAssetId($user);
         }
         if (Schema::hasColumn('report_signatures', 'signature_statement')) {
             $payload['signature_statement'] = null;
@@ -469,6 +849,14 @@ class ReportWorkflow
     private function reference(string $prefix): string
     {
         return $prefix.'-'.now()->year.'-'.Str::upper(Str::random(6));
+    }
+
+    private function assertBarangayMember(User $user, int $barangayId): void
+    {
+        $ids = app(AssignmentScope::class)->activeBarangayIds($user->id);
+        if (! in_array($barangayId, $ids, true)) {
+            abort(403, 'That barangay is outside your assignment.');
+        }
     }
 
     private function barangayCode(int $barangayId): string

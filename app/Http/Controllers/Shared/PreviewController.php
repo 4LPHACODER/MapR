@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Shared;
 use App\Http\Controllers\Controller;
 use App\Policies\BarangayReportPolicy;
 use App\Policies\FieldAssessmentPolicy;
+use App\Services\BuildingCostEstimator;
+use App\Services\ReportLineage;
+use App\Services\ReportSignatoryCatalog;
 use App\Services\ReportWorkflow;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -20,6 +23,8 @@ class PreviewController extends Controller
     public function __construct(
         private readonly BarangayReportPolicy $reports,
         private readonly ReportWorkflow $workflow,
+        private readonly ReportLineage $lineage,
+        private readonly ReportSignatoryCatalog $signatories,
     ) {}
 
     public function barangay(Request $request, int $report): View|Response
@@ -31,10 +36,16 @@ class PreviewController extends Controller
         $incident = Schema::hasTable('disaster_incidents')
             ? DB::table('disaster_incidents')->where('id', $row->disaster_incident_id)->first()
             : null;
-        $import = $this->importFor('barangay_report_id', (int) $row->id, (string) $row->report_reference);
-        $building = $this->linkedReference('buildings', 'building_reference', $import->resolved_building_id ?? null, $import->source_building_reference ?? null);
-        $household = $this->linkedReference('households', 'household_reference', $import->resolved_household_id ?? null, $import->source_household_reference ?? null);
-        $resident = $this->linkedReference('residents', 'registry_reference', $import->resolved_resident_id ?? null, $import->source_resident_reference ?? null);
+        $resolved = $this->resolvedRegistry('barangay_report_id', (int) $row->id, (string) $row->report_reference);
+        $building = $resolved['building'];
+        $household = $resolved['household'];
+        $resident = $resolved['resident'];
+        $incidentName = $this->incidentCaption($incident->incident_name ?? null, $resolved['reported_incident_type'] ?? null);
+        $request->user()?->loadMissing('role');
+        $isAssessor = in_array($request->user()?->role?->code, ['rdana', 'rdana_admin_officer', 'rdana_city_assessor'], true);
+        $statusLabel = $isAssessor && $row->report_status === 'review'
+            ? 'Barangay Report'
+            : $this->workflow->label($row->report_status);
 
         return $this->render($request, [
             'kind' => 'barangay',
@@ -43,19 +54,29 @@ class PreviewController extends Controller
             'office_line' => 'Barangay '.($barangay->barangay_name ?? 'Not recorded'),
             'title' => 'Building Damage and Resident Impact Report',
             'logos' => $this->logos('barangay', $barangay->barangay_code ?? null),
+            'back_url' => $isAssessor ? '/rdana/reports/barangay' : null,
+            'back_label' => $isAssessor ? 'Back to Barangay Reports' : null,
             'rows' => [
-                ['label' => 'Incident', 'value' => $incident->incident_name ?? 'Not recorded'],
+                ['label' => 'Incident', 'value' => $incidentName],
                 ['label' => 'Barangay', 'value' => $barangay->barangay_name ?? 'Not recorded'],
                 ['label' => 'Resident reference', 'value' => $resident],
                 ['label' => 'Building reference', 'value' => $building],
                 ['label' => 'Household reference', 'value' => $household],
                 ['label' => 'Reported observation', 'value' => $this->text($row->report_description ?? null)],
-                ['label' => 'Workflow status', 'value' => $this->workflow->label($row->report_status)],
+                ['label' => 'Workflow status', 'value' => $statusLabel],
             ],
             'impact' => $this->impact($building, $household, $resident),
-            'signatures' => $this->signatureSlots('barangay_report_id', (int) $row->id, [
-                ['role' => 'barangay_signer', 'title' => 'Signed by', 'name' => $this->captain($barangay->barangay_code ?? null), 'position' => 'Punong Barangay'],
-            ]),
+            'photos' => $this->barangayPhotos((int) $row->id),
+            'damage_assessments' => $this->currentDamageAssessments((int) $row->id),
+            'signatures' => array_merge(
+                $resolved['resident_report_id'] ? $this->lineage->sourceSignatureSlots((int) $resolved['resident_report_id']) : [],
+                $this->signatories->resolveParentSlots(
+                    'barangay_report_id',
+                    (int) $row->id,
+                    $this->signatories->barangaySlots($barangay->barangay_code ?? null),
+                ),
+                $this->signatories->barangayForwardEndorsementSlots($row),
+            ),
         ]);
     }
 
@@ -69,33 +90,81 @@ class PreviewController extends Controller
         $incident = $report && Schema::hasTable('disaster_incidents')
             ? DB::table('disaster_incidents')->where('id', $report->disaster_incident_id)->first()
             : null;
-        $import = $this->importFor('field_assessment_id', (int) $row->id, (string) $row->assessment_reference);
-        $building = $this->linkedReference('buildings', 'building_reference', $import->resolved_building_id ?? null, $import->source_building_reference ?? null);
-        $household = $this->linkedReference('households', 'household_reference', $import->resolved_household_id ?? null, $import->source_household_reference ?? null);
-        $resident = $this->linkedReference('residents', 'registry_reference', $import->resolved_resident_id ?? null, $import->source_resident_reference ?? null);
+        $disasterType = null;
+        if ($incident && Schema::hasTable('disaster_types') && ! empty($incident->disaster_type_id)) {
+            $disasterType = DB::table('disaster_types')->where('id', $incident->disaster_type_id)->value('name');
+        }
+        $lineage = $report
+            ? $this->lineage->forBarangayReport((int) $report->id)
+            : [
+                'resident_report_id' => null,
+                'resident_report_reference' => null,
+                'resident_reference' => 'Not recorded',
+                'building_reference' => 'Not recorded',
+                'household_reference' => 'Not recorded',
+                'reported_incident_type' => null,
+            ];
+        $resolved = $report
+            ? $this->resolvedRegistry('barangay_report_id', (int) $report->id, (string) $report->report_reference)
+            : ['resident' => 'Not recorded', 'building' => 'Not recorded', 'household' => 'Not recorded', 'resident_report_id' => null, 'reported_incident_type' => null];
+        $building = $resolved['building'];
+        $household = $resolved['household'];
+        $resident = $resolved['resident'];
+        $incidentName = $this->incidentCaption($incident->incident_name ?? null, $resolved['reported_incident_type'] ?? null);
+        $assessorName = $this->assessorName($row) ?: 'Not recorded';
+        $workflowLabel = $this->workflow->label(
+            property_exists($row, 'workflow_stage') && $row->workflow_stage
+                ? $row->workflow_stage
+                : $row->assessment_status
+        );
+        $residentReport = null;
+        if (! empty($lineage['resident_report_id']) && Schema::hasTable('resident_incident_reports')) {
+            $residentReport = DB::table('resident_incident_reports')->where('id', $lineage['resident_report_id'])->first();
+        }
+        $request->user()?->loadMissing('role');
+        $isAssessor = in_array($request->user()?->role?->code, ['rdana', 'rdana_admin_officer', 'rdana_city_assessor'], true);
 
         return $this->render($request, [
             'kind' => 'field',
             'reference' => $row->assessment_reference,
             'prepared_at' => $this->prepared($row->updated_at ?? null),
             'office_line' => "City Assessor's Office",
-            'title' => 'Building Damage and Resident Impact Report',
-            'logos' => $this->logos('field', null),
+            'title' => 'Field Assessment Report',
+            'subtitle' => 'Building Damage and Resident Impact Assessment',
+            'logos' => $this->logos('field', $barangay->barangay_code ?? null),
+            'back_url' => $isAssessor ? '/rdana/reports/field' : null,
+            'back_label' => $isAssessor ? 'Back to Field Assessment Reports' : null,
             'rows' => [
-                ['label' => 'Incident', 'value' => $incident->incident_name ?? 'Not recorded'],
+                ['label' => 'Field Assessment Reference', 'value' => $row->assessment_reference],
+                ['label' => 'Source Barangay Report Reference', 'value' => $report->report_reference ?? 'Not recorded'],
+                ['label' => 'Source Resident Report Reference', 'value' => $lineage['resident_report_reference'] ?: 'Not recorded'],
+                ['label' => 'Incident', 'value' => $incidentName],
+                ['label' => 'Disaster Type', 'value' => $this->text($disasterType)],
                 ['label' => 'Barangay', 'value' => $barangay->barangay_name ?? 'Not recorded'],
-                ['label' => 'Source report', 'value' => $report->report_reference ?? 'Not recorded'],
-                ['label' => 'Resident reference', 'value' => $resident],
-                ['label' => 'Building reference', 'value' => $building],
-                ['label' => 'Household reference', 'value' => $household],
-                ['label' => 'Assessor finding', 'value' => $this->text($row->findings ?? null)],
-                ['label' => 'Workflow status', 'value' => $this->workflow->label($row->assessment_status)],
+                ['label' => 'Assigned RDANA Assessor', 'value' => $assessorName],
+                ['label' => 'Date Prepared', 'value' => $this->prepared($row->updated_at ?? null)],
+                ['label' => 'Assessment Status', 'value' => $workflowLabel],
+                ['label' => 'Reporting Resident', 'value' => $resident],
+                ['label' => 'Resident Registry Reference', 'value' => $resident],
+                ['label' => 'Household Reference', 'value' => $household],
+                ['label' => 'Building Reference', 'value' => $building],
+                ['label' => 'Original Incident Description', 'value' => $this->text($residentReport->incident_description ?? null)],
+                ['label' => 'Barangay Findings', 'value' => $this->text($report->report_description ?? null)],
+                ['label' => 'Assessor Findings', 'value' => $this->text($row->findings ?? null)],
             ],
+            'verification' => $this->assessmentVerification((int) $row->id),
             'impact' => $this->impact($building, $household, $resident),
-            'signatures' => $this->signatureSlots('field_assessment_id', (int) $row->id, [
-                ['role' => 'verified_by', 'title' => 'Verified by', 'name' => 'Mark L. Merillo', 'position' => 'Administrative Officer III'],
-                ['role' => 'approved_by', 'title' => 'Approved by', 'name' => 'Engr. Lovy R. Dedicatoria, LAOO II', 'position' => 'Acting City Assessor'],
-            ]),
+            'photos' => $report ? $this->barangayPhotos((int) $report->id) : [],
+            'damage_assessments' => $report ? $this->currentDamageAssessments((int) $report->id) : null,
+            'signatures' => array_merge(
+                $resolved['resident_report_id'] ? $this->lineage->sourceSignatureSlots((int) $resolved['resident_report_id']) : [],
+                $report ? $this->signatories->resolveParentSlots(
+                    'barangay_report_id',
+                    (int) $report->id,
+                    $this->signatories->barangaySlots($barangay->barangay_code ?? null),
+                ) : [],
+                $report ? $this->signatories->barangayForwardEndorsementSlots($report) : [],
+            ),
         ]);
     }
 
@@ -126,10 +195,11 @@ class PreviewController extends Controller
                 'residents' => 'Not recorded',
                 'validation' => 'Not a field verification',
             ],
-            'signatures' => $this->signatureSlots('consolidated_report_id', (int) $row->id, [
-                ['role' => 'noted_by', 'title' => 'Noted by', 'name' => 'Lester Lito C. Talan, LPT, MST Sci (CAR)', 'position' => 'LDRRMO II, Head, Research & Planning Div.'],
-                ['role' => 'approved_by', 'title' => 'Approved by', 'name' => 'Reyveen John B. Geli, RN, DPA', 'position' => 'Head, CDRRMO'],
-            ]),
+            'signatures' => $this->signatories->resolveParentSlots(
+                'consolidated_report_id',
+                (int) $row->id,
+                $this->signatories->consolidatedSlots(),
+            ),
         ]);
     }
 
@@ -137,11 +207,14 @@ class PreviewController extends Controller
     {
         $payload['font_regular'] = '/usr/share/fonts/google-carlito-fonts/Carlito-Regular.ttf';
         $payload['font_bold'] = '/usr/share/fonts/google-carlito-fonts/Carlito-Bold.ttf';
+        $payload['damage_assessments'] = $payload['damage_assessments'] ?? null;
+        $payload['photos'] = $payload['photos'] ?? [];
         if ($request->query('format') === 'pdf') {
+            unset($payload['back_url'], $payload['back_label']);
             $pdf = Pdf::loadView('shared.official-document', $payload)
                 ->setPaper('a4', 'portrait')
                 ->setOption('isRemoteEnabled', false)
-                ->setOption('chroot', [base_path(), '/usr/share/fonts'])
+                ->setOption('chroot', [base_path(), storage_path(), '/usr/share/fonts'])
                 ->setOption('defaultFont', 'MaprCarlito');
             $name = $payload['reference'].'.pdf';
             if ($request->query('inline') === '1') {
@@ -152,6 +225,37 @@ class PreviewController extends Controller
         }
 
         return view('shared.official-document', $payload);
+    }
+
+    /**
+     * @return list<array{number: int, path: ?string, caption: string}>
+     */
+    private function barangayPhotos(int $reportId): array
+    {
+        if (! Schema::hasTable('incident_photos') || ! Schema::hasColumn('incident_photos', 'barangay_report_id')) {
+            return [];
+        }
+
+        $photos = [];
+        $rows = DB::table('incident_photos')
+            ->where('barangay_report_id', $reportId)
+            ->orderBy('id')
+            ->get();
+        $number = 1;
+        foreach ($rows as $photo) {
+            $path = null;
+            if (is_string($photo->file_path) && $photo->file_path !== '' && Storage::disk('local')->exists($photo->file_path)) {
+                $path = Storage::disk('local')->path($photo->file_path);
+            }
+            $photos[] = [
+                'number' => $number,
+                'path' => $path,
+                'caption' => 'Photo '.$number,
+            ];
+            $number++;
+        }
+
+        return $photos;
     }
 
     private function logos(string $kind, ?string $barangayCode): array
@@ -169,11 +273,98 @@ class PreviewController extends Controller
             '166819005' => 'BRGY_BONGTUD_LOGO.jpg',
             '166819015' => 'BRGY_AWASIAN_LOGO.jpg',
         ];
-        if ($kind === 'barangay' && isset($barangayLogos[$barangayCode])) {
+        if (in_array($kind, ['barangay', 'field'], true) && isset($barangayLogos[$barangayCode])) {
             $logos[] = ['path' => base_path('assets/'.$barangayLogos[$barangayCode]), 'alt' => 'Barangay logo'];
         }
 
         return array_values(array_filter($logos, fn (array $logo) => is_file($logo['path'])));
+    }
+
+    /**
+     * @return list<array{label: string, value: string}>|null
+     */
+    private function assessmentVerification(int $fieldAssessmentId): ?array
+    {
+        if (! Schema::hasTable('building_verifications')) {
+            return null;
+        }
+
+        $verification = DB::table('building_verifications as bv')
+            ->leftJoin('users', 'users.id', '=', 'bv.verified_by')
+            ->where('bv.field_assessment_id', $fieldAssessmentId)
+            ->orderByDesc('bv.id')
+            ->first([
+                'bv.*',
+                'users.first_name',
+                'users.last_name',
+            ]);
+
+        if ($verification === null) {
+            return [
+                ['label' => 'Location Checked', 'value' => 'Not recorded'],
+                ['label' => 'Household Link Checked', 'value' => 'Not recorded'],
+                ['label' => 'Building Link Verification', 'value' => 'Not recorded'],
+                ['label' => 'Location Remarks', 'value' => 'Not recorded'],
+                ['label' => 'Verification Date', 'value' => 'Not recorded'],
+                ['label' => 'Verifying Assessor', 'value' => 'Not recorded'],
+            ];
+        }
+
+        $verifier = trim(implode(' ', array_filter([
+            (string) ($verification->first_name ?? ''),
+            (string) ($verification->last_name ?? ''),
+        ], fn ($part) => $part !== ''))) ?: 'Not recorded';
+
+        return [
+            ['label' => 'Location Checked', 'value' => $verification->location_verified ? 'Yes' : 'No'],
+            ['label' => 'Household Link Checked', 'value' => $verification->household_link_verified ? 'Yes' : 'No'],
+            ['label' => 'Building Link Verification', 'value' => $verification->building_id ? 'Linked' : 'Not linked'],
+            ['label' => 'Location Remarks', 'value' => $this->text($verification->verification_notes ?? null)],
+            ['label' => 'Verification Date', 'value' => $this->prepared($verification->verified_at ?? $verification->updated_at ?? null)],
+            ['label' => 'Verifying Assessor', 'value' => $verifier],
+        ];
+    }
+
+    /**
+     * @return array{resident: string, building: string, household: string, resident_report_id: ?int, reported_incident_type: ?string}
+     */
+    private function resolvedRegistry(string $column, int $id, string $reference): array
+    {
+        $lineage = $column === 'barangay_report_id'
+            ? $this->lineage->forBarangayReport($id)
+            : [
+                'resident_report_id' => null,
+                'resident_reference' => 'Not recorded',
+                'building_reference' => 'Not recorded',
+                'household_reference' => 'Not recorded',
+                'reported_incident_type' => null,
+            ];
+        $import = $this->importFor($column, $id, $reference);
+        $importedBuilding = $this->linkedReference('buildings', 'building_reference', $import->resolved_building_id ?? null, $import->source_building_reference ?? null);
+        $importedHousehold = $this->linkedReference('households', 'household_reference', $import->resolved_household_id ?? null, $import->source_household_reference ?? null);
+        $importedResident = $this->linkedReference('residents', 'registry_reference', $import->resolved_resident_id ?? null, $import->source_resident_reference ?? null);
+
+        return [
+            'resident' => $lineage['resident_reference'] !== 'Not recorded' ? $lineage['resident_reference'] : $importedResident,
+            'building' => $lineage['building_reference'] !== 'Not recorded' ? $lineage['building_reference'] : $importedBuilding,
+            'household' => $lineage['household_reference'] !== 'Not recorded' ? $lineage['household_reference'] : $importedHousehold,
+            'resident_report_id' => $lineage['resident_report_id'],
+            'reported_incident_type' => $lineage['reported_incident_type'],
+        ];
+    }
+
+    private function incidentCaption(?string $official, ?string $custom): string
+    {
+        $official = is_string($official) ? trim($official) : '';
+        $custom = is_string($custom) ? trim($custom) : '';
+        if ($official !== '' && $custom !== '') {
+            return $official.' — '.$custom;
+        }
+        if ($custom !== '') {
+            return $custom;
+        }
+
+        return $official !== '' ? $official : 'Not recorded';
     }
 
     private function importFor(string $column, int $id, string $reference): ?object
@@ -222,6 +413,19 @@ class PreviewController extends Controller
 
         return array_map(function (array $slot) use ($rows) {
             $signed = $rows->first(fn ($row) => $row->signature_role === $slot['role'] && $row->mechanism === 'authenticated_e_signature');
+            $name = $slot['name'];
+            if ($signed && Schema::hasTable('users')) {
+                $signer = DB::table('users')->where('id', $signed->signer_user_id)->first();
+                if ($signer) {
+                    $signedName = trim(implode(' ', array_filter([
+                        (string) ($signer->first_name ?? ''),
+                        (string) ($signer->last_name ?? ''),
+                    ], fn ($part) => $part !== '')));
+                    if ($signedName !== '') {
+                        $name = $signedName;
+                    }
+                }
+            }
             $image = null;
             $assetId = $signed && property_exists($signed, 'user_signature_asset_id') ? $signed->user_signature_asset_id : null;
             if ($signed && Schema::hasTable('user_signature_assets') && $assetId) {
@@ -233,7 +437,7 @@ class PreviewController extends Controller
 
             return [
                 'title' => $slot['title'],
-                'name' => $slot['name'],
+                'name' => $name,
                 'position' => $slot['position'],
                 'image' => $image,
                 'caption' => $signed ? 'Signed '.Carbon::parse($signed->signed_at)->timezone('Asia/Manila')->format('d M Y') : 'Awaiting signature',
@@ -241,11 +445,21 @@ class PreviewController extends Controller
         }, $slots);
     }
 
-    private function captain(?string $code): string
+    private function assessorName(object $assessment): ?string
     {
-        $name = $code ? config('mapr_reference.barangay_captains.'.$code) : null;
+        if (! Schema::hasTable('users') || empty($assessment->assigned_assessor_id)) {
+            return null;
+        }
+        $user = DB::table('users')->where('id', $assessment->assigned_assessor_id)->first();
+        if ($user === null) {
+            return null;
+        }
+        $name = trim(implode(' ', array_filter([
+            (string) ($user->first_name ?? ''),
+            (string) ($user->last_name ?? ''),
+        ], fn ($part) => $part !== '')));
 
-        return is_string($name) && $name !== '' ? $name : 'Assigned barangay captain';
+        return $name !== '' ? $name : null;
     }
 
     private function prepared(mixed $value): string
@@ -262,5 +476,131 @@ class PreviewController extends Controller
         $text = trim((string) $value);
 
         return $text === '' ? 'Not recorded' : $text;
+    }
+
+    /**
+     * Current damage assessments for the official document (confirmed preferred, else draft).
+     *
+     * @return array{buildings: list<array<string, string>>, aggregate: string, incomplete: list<string>}|null
+     */
+    private function currentDamageAssessments(int $reportId): ?array
+    {
+        if (! Schema::hasTable('building_damage_cost_assessments') || ! Schema::hasTable('damage_classes')) {
+            return null;
+        }
+
+        $query = DB::table('building_damage_cost_assessments as a')
+            ->leftJoin('buildings', 'buildings.id', '=', 'a.building_id')
+            ->leftJoin('users as assessor', 'assessor.id', '=', 'a.assessed_by')
+            ->leftJoin('users as confirmer', 'confirmer.id', '=', 'a.confirmed_by')
+            ->where('a.barangay_report_id', $reportId)
+            ->whereIn('a.assessment_status', ['draft', 'confirmed'])
+            ->orderByDesc('a.id');
+        $select = [
+            'a.*',
+            'buildings.building_reference',
+            'assessor.first_name as assessed_by_first_name',
+            'assessor.last_name as assessed_by_last_name',
+            'confirmer.first_name as confirmed_by_first_name',
+            'confirmer.last_name as confirmed_by_last_name',
+        ];
+        if (Schema::hasColumn('building_damage_cost_assessments', 'proposed_damage_class_id')) {
+            $query->leftJoin('damage_classes as proposed', 'proposed.id', '=', 'a.proposed_damage_class_id');
+            $select[] = 'proposed.class_code as proposed_class_code';
+            $select[] = 'proposed.class_name as proposed_class_name';
+        }
+        if (Schema::hasColumn('building_damage_cost_assessments', 'confirmed_damage_class_id')) {
+            $query->leftJoin('damage_classes as confirmed', 'confirmed.id', '=', 'a.confirmed_damage_class_id');
+            $select[] = 'confirmed.class_code as confirmed_class_code';
+            $select[] = 'confirmed.class_name as confirmed_class_name';
+        }
+        $rows = $query->get($select);
+
+        if ($rows->isEmpty()) {
+            return null;
+        }
+
+        $estimator = app(BuildingCostEstimator::class);
+        $byBuilding = [];
+        foreach ($rows as $row) {
+            $buildingKey = (int) $row->building_id;
+            if (isset($byBuilding[$buildingKey])) {
+                continue;
+            }
+            if ($row->assessment_status === 'confirmed') {
+                $byBuilding[$buildingKey] = $row;
+
+                continue;
+            }
+            $confirmed = $rows->first(fn ($candidate) => (int) $candidate->building_id === $buildingKey && $candidate->assessment_status === 'confirmed');
+            $byBuilding[$buildingKey] = $confirmed ?: $row;
+        }
+
+        $buildings = [];
+        $total = 0.0;
+        $incomplete = [];
+
+        foreach ($byBuilding as $row) {
+            $statusCode = $row->confirmed_class_code ?: $row->proposed_class_code;
+            $statusName = $row->confirmed_class_name ?: $row->proposed_class_name;
+            $buildingStatus = $estimator->displayLabel($statusCode, $statusName ?: null);
+            if ($buildingStatus === '' || $buildingStatus === 'Awaiting Classification') {
+                $buildingStatus = $statusName ?: 'Awaiting Classification';
+            }
+            $costLabel = in_array($row->cost_status, ['calculated', 'zero_confirmed'], true) && $row->estimated_cost_php !== null
+                ? 'PHP '.number_format((float) $row->estimated_cost_php, 2, '.', ',')
+                : 'Pending Required Assessment Data';
+
+            if (in_array($row->cost_status, ['calculated', 'zero_confirmed'], true) && $row->estimated_cost_php !== null) {
+                $total += (float) $row->estimated_cost_php;
+            } else {
+                $incomplete[] = $row->building_reference ?: ('Building #'.$row->building_id);
+            }
+
+            $assessorName = trim(implode(' ', array_filter([
+                (string) ($row->confirmed_by_first_name ?: $row->assessed_by_first_name ?? ''),
+                (string) ($row->confirmed_by_last_name ?: $row->assessed_by_last_name ?? ''),
+            ], fn ($part) => $part !== ''))) ?: 'Not recorded';
+
+            $source = (string) ($row->classification_source ?? 'manual');
+            $sourceLabel = match ($source) {
+                'ai' => 'EfficientNetB0 prediction',
+                'ai_corrected' => 'EfficientNetB0 prediction with manual correction',
+                'supervisor_corrected' => 'Supervisor correction',
+                default => 'Manual classification',
+            };
+
+            $buildings[] = [
+                'building_reference' => $row->building_reference ?: ('Building #'.$row->building_id),
+                'building_status' => $buildingStatus,
+                'estimated_cost' => $costLabel,
+                'assessment_status' => (string) $row->assessment_status,
+                'criteria_version' => $this->text($row->criteria_version ?? null),
+                'assessor' => $assessorName,
+                'assessed_at' => $this->prepared($row->confirmed_at ?? $row->updated_at ?? null),
+                'remarks' => $this->text($row->remarks ?? null),
+                'classification_source' => $sourceLabel,
+                'occupancy_key' => $this->text($row->occupancy_key ?? null),
+                'construction_type' => $this->text($row->construction_type ?? null),
+                'construction_grade' => $this->text($row->construction_grade ?? null),
+                'total_floor_area_m2' => isset($row->total_floor_area_m2) && $row->total_floor_area_m2 !== null
+                    ? number_format((float) $row->total_floor_area_m2, 2, '.', ',').' m²'
+                    : 'Not recorded',
+                'assessed_floor_area_m2' => isset($row->assessed_floor_area_m2) && $row->assessed_floor_area_m2 !== null
+                    ? number_format((float) $row->assessed_floor_area_m2, 2, '.', ',').' m²'
+                    : 'Not recorded',
+                'unit_cost_php' => isset($row->unit_cost_php) && $row->unit_cost_php !== null
+                    ? 'PHP '.number_format((float) $row->unit_cost_php, 2, '.', ',')
+                    : 'Not recorded',
+            ];
+        }
+
+        return [
+            'buildings' => $buildings,
+            'aggregate' => $incomplete === []
+                ? 'PHP '.number_format($total, 2, '.', ',')
+                : 'Partial aggregate only — incomplete building estimates remain',
+            'incomplete' => $incomplete,
+        ];
     }
 }

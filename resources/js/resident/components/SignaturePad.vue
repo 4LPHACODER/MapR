@@ -1,8 +1,11 @@
 <script setup>
 import { inject, onBeforeUnmount, onMounted, ref } from 'vue';
 
-defineProps({
+const props = defineProps({
     recorded: { type: Boolean, default: false },
+    manual: { type: Boolean, default: false },
+    label: { type: String, default: 'Resident Electronic Signature' },
+    lead: { type: String, default: 'Draw your signature below using your finger, mouse, or stylus.' },
 });
 const emit = defineEmits(['ready', 'busy']);
 
@@ -79,7 +82,7 @@ function end() {
     if (!drawing) return;
     drawing = false;
     current = null;
-    if (hasInk()) save();
+    if (!props.manual && hasInk()) save();
 }
 
 async function drawPreview(url) {
@@ -113,7 +116,7 @@ async function save() {
     }
 }
 
-async function clearPad() {
+function clearDrawing() {
     strokes = [];
     current = null;
     loaded = null;
@@ -121,6 +124,11 @@ async function clearPad() {
     error.value = '';
     emit('ready', false);
     paint();
+}
+
+async function clearPad() {
+    clearDrawing();
+    if (props.manual) return;
     try {
         await window.axios.delete(`${apiBase}/signature`);
     } catch (exception) {
@@ -128,12 +136,29 @@ async function clearPad() {
     }
 }
 
+function exportPng() {
+    return new Promise((resolve) => {
+        if (!canvas.value || !hasInk()) {
+            resolve(null);
+            return;
+        }
+        canvas.value.toBlob((blob) => resolve(blob), 'image/png');
+    });
+}
+
+defineExpose({
+    hasInk: () => hasInk(),
+    exportPng,
+    clearDrawing,
+});
+
 onMounted(async () => {
     paint();
     if (canvas.value) {
         observer = new ResizeObserver(() => paint());
         observer.observe(canvas.value);
     }
+    if (props.manual) return;
     try {
         const signature = (await window.axios.get(`${apiBase}/signature`)).data.signature;
         if (signature?.preview_url) {
@@ -154,12 +179,12 @@ onBeforeUnmount(() => {
 
 <template>
     <section class="resident-signature" aria-labelledby="resident-signature-label">
-        <h3 id="resident-signature-label">Resident Electronic Signature</h3>
-        <p class="resident-lead">Draw your signature below using your finger, mouse, or stylus.</p>
+        <h3 id="resident-signature-label">{{ label }}</h3>
+        <p class="resident-lead">{{ lead }}</p>
         <p v-if="recorded" class="resident-muted">The original signature remains on record.</p>
         <canvas
             ref="canvas"
-            aria-label="Resident electronic signature"
+            :aria-label="label"
             @pointerdown.prevent="start"
             @pointermove.prevent="move"
             @pointerup="end"

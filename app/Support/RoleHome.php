@@ -10,14 +10,22 @@ class RoleHome
     public const PREFIXES = [
         'resident' => '/resident',
         'bdrrm' => '/bdrrm',
+        'barangay_secretary' => '/bdrrm',
+        'barangay_captain' => '/bdrrm',
         'rdana' => '/rdana',
+        'rdana_admin_officer' => '/rdana',
+        'rdana_city_assessor' => '/rdana',
         'cdrrmo_admin' => '/cdrrmo',
     ];
 
     public const TITLES = [
         'resident' => 'Resident workspace',
         'bdrrm' => 'BDRRM workspace',
+        'barangay_secretary' => 'BDRRM workspace',
+        'barangay_captain' => 'BDRRM workspace',
         'rdana' => 'RDANA workspace',
+        'rdana_admin_officer' => 'RDANA workspace',
+        'rdana_city_assessor' => 'RDANA workspace',
         'cdrrmo_admin' => 'CDRRMO workspace',
     ];
 

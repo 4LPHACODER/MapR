@@ -9,9 +9,11 @@ const props = defineProps({
     areaName: { type: String, default: 'Current selected area' },
     selection: { type: Object, required: true },
     showImpact: { type: Boolean, default: true },
+    residentReports: { type: Boolean, default: false },
+    singleClear: { type: Boolean, default: false },
 });
 
-defineEmits([
+const emit = defineEmits([
     'preview-report',
     'view-records',
     'view-households',
@@ -21,6 +23,7 @@ defineEmits([
     'locate',
     'open-residents',
     'set-tab',
+    'choose-report',
 ]);
 
 const household = computed(() => props.selection.household);
@@ -38,18 +41,24 @@ const view = computed(() => {
     return 'empty';
 });
 
-const featureTabLabel = computed(() => (props.selection.featureType === 'building' ? 'Selected building' : 'Selected household'));
+const featureTabLabel = computed(() => {
+    if (props.selection.featureType === 'building') return 'Selected building';
+    if (props.selection.featureType === 'resident-report') return 'Selected report';
+    return 'Selected household';
+});
 
 const title = computed(() => {
     if (view.value === 'feature' && props.selection.featureType === 'building') return 'Building details';
-    if (view.value === 'feature') return 'Household details';
+    if (view.value === 'feature' && props.selection.featureType === 'resident-report') return 'Resident report';
+    if (view.value === 'feature' && props.selection.featureType === 'household') return 'Household details';
     if (view.value === 'area') return 'Selected area summary';
     return 'Selection summary';
 });
 
 const headerIcon = computed(() => {
     if (view.value === 'feature' && props.selection.featureType === 'building') return 'building';
-    if (view.value === 'feature') return 'home';
+    if (view.value === 'feature' && props.selection.featureType === 'resident-report') return 'reports';
+    if (view.value === 'feature' && props.selection.featureType === 'household') return 'home';
     if (view.value === 'area') return 'polygon';
     return 'map';
 });
@@ -59,7 +68,10 @@ const subtitle = computed(() => {
     if (view.value === 'feature' && props.selection.featureType === 'building') {
         return building.value?.reference || 'Building';
     }
-    if (view.value === 'feature') {
+    if (view.value === 'feature' && props.selection.featureType === 'resident-report') {
+        return props.selection.report?.reference || 'Resident report';
+    }
+    if (view.value === 'feature' && props.selection.featureType === 'household') {
         return household.value?.household_reference || 'Household';
     }
     if (view.value === 'area') {
@@ -111,6 +123,13 @@ const sourceLabel = computed(() => {
     const value = String(household.value?.record_source || building.value?.location_source || '');
     if (!value || value.includes('/') || value.includes('\\')) return null;
     return value;
+});
+
+const reportChoices = computed(() => props.selection.reportChoices || []);
+const linkedReport = computed(() => props.selection.report);
+const reportHref = computed(() => {
+    if (!props.residentReports || !linkedReport.value?.id) return '';
+    return `/bdrrm/reports?report_type=resident&report_id=${linkedReport.value.id}`;
 });
 
 function relationshipLabel(member) {
@@ -254,6 +273,19 @@ function formatUpdated(value) {
             <template v-else>
                 <p v-if="selection.loading">Loading details…</p>
                 <p v-else-if="selection.error" class="cdrrmo-error">{{ selection.error }}</p>
+                <template v-else-if="selection.featureType === 'resident-report'">
+                    <p v-if="selection.loading">Loading report summary…</p>
+                    <dl v-else-if="linkedReport" class="selection-details">
+                        <div v-if="linkedReport.resident_name"><dt>Resident</dt><dd>{{ linkedReport.resident_name }}</dd></div>
+                        <div><dt>Reference</dt><dd>{{ linkedReport.reference }}</dd></div>
+                        <div><dt>Incident</dt><dd>{{ linkedReport.incident_name || '—' }}<template v-if="linkedReport.incident_type"> · {{ linkedReport.incident_type }}</template></dd></div>
+                        <div><dt>Barangay</dt><dd>{{ linkedReport.barangay_name || '—' }}</dd></div>
+                        <div><dt>Reported location</dt><dd>{{ linkedReport.reported_location || 'Location not written' }}</dd></div>
+                        <div><dt>Submitted</dt><dd>{{ formatUpdated(linkedReport.submitted_at) }}</dd></div>
+                        <div><dt>Status</dt><dd>{{ linkedReport.label || linkedReport.status }}</dd></div>
+                    </dl>
+                    <p class="cdrrmo-muted">Resident-reported location — not field verified.</p>
+                </template>
                 <template v-else-if="selection.featureType === 'building' && building">
                     <p v-if="selection.outsideArea" class="selection-outside">This building is outside the selected area. Area totals are unchanged.</p>
                     <p class="cdrrmo-muted">Source-recorded point shared by the households at this location. It is not a separately verified building.</p>
@@ -281,6 +313,20 @@ function formatUpdated(value) {
                         </button>
                     </div>
                     <p v-else class="cdrrmo-muted">No active households are linked to this building.</p>
+                    <section v-if="residentReports" class="selection-block">
+                        <h4>Resident reports</h4>
+                        <p v-if="!reportChoices.length" class="cdrrmo-muted">No linked resident report</p>
+                        <div v-else-if="reportChoices.length > 1" class="selection-rows">
+                            <button v-for="choice in reportChoices" :key="choice.id" type="button" class="selection-row" :class="{ 'is-active': linkedReport?.id === choice.id }" @click="emit('choose-report', choice.id)">
+                                <MapIcon name="reports" />
+                                <span>{{ choice.reference }}</span>
+                            </button>
+                        </div>
+                        <template v-if="linkedReport">
+                            <p>{{ linkedReport.resident_name || 'Resident' }} · {{ linkedReport.label || linkedReport.status }}</p>
+                            <a v-if="reportHref" class="mapr-button mapr-button-primary" :href="reportHref">View Report</a>
+                        </template>
+                    </section>
                     <details class="selection-source">
                         <summary>Source information</summary>
                         <dl class="selection-details">
@@ -289,7 +335,7 @@ function formatUpdated(value) {
                         </dl>
                     </details>
                 </template>
-                <template v-else-if="household">
+                <template v-else-if="selection.featureType === 'household' && household">
                     <p v-if="selection.outsideArea" class="selection-outside">This household is outside the selected area. Area totals are unchanged.</p>
                     <div class="selection-metrics">
                         <article>
@@ -326,6 +372,20 @@ function formatUpdated(value) {
                         </li>
                     </ul>
                     <p v-else class="cdrrmo-muted">No individual member records are linked for this household.</p>
+                    <section v-if="residentReports" class="selection-block">
+                        <h4>Resident reports</h4>
+                        <p v-if="!reportChoices.length" class="cdrrmo-muted">No linked resident report</p>
+                        <div v-else-if="reportChoices.length > 1" class="selection-rows">
+                            <button v-for="choice in reportChoices" :key="choice.id" type="button" class="selection-row" :class="{ 'is-active': linkedReport?.id === choice.id }" @click="emit('choose-report', choice.id)">
+                                <MapIcon name="reports" />
+                                <span>{{ choice.reference }}</span>
+                            </button>
+                        </div>
+                        <template v-if="linkedReport">
+                            <p>{{ linkedReport.resident_name || 'Resident' }} · {{ linkedReport.label || linkedReport.status }}</p>
+                            <a v-if="reportHref" class="mapr-button mapr-button-primary" :href="reportHref">View Report</a>
+                        </template>
+                    </section>
                     <details class="selection-source">
                         <summary>Source information</summary>
                         <dl class="selection-details">
@@ -351,6 +411,10 @@ function formatUpdated(value) {
                 Preview area report
             </button>
         </footer>
+        <footer v-else-if="view === 'feature' && !selection.loading && selection.featureType === 'resident-report' && reportHref" class="map-summary-footer">
+            <a class="mapr-button mapr-button-primary" :href="reportHref">View Report</a>
+            <button v-if="!singleClear" type="button" class="mapr-button mapr-button-secondary" @click="$emit('clear-feature')">Clear selection</button>
+        </footer>
         <footer v-else-if="view === 'feature' && !selection.loading && (household || building)" class="map-summary-footer">
             <button v-if="selection.featureType === 'household' && household" type="button" class="mapr-button mapr-button-primary" @click="$emit('open-residents')">
                 <MapIcon name="users" /> Open in Residents
@@ -358,7 +422,7 @@ function formatUpdated(value) {
             <button type="button" class="mapr-button mapr-button-secondary" :disabled="!canLocate" @click="$emit('locate')">
                 <MapIcon name="focus" /> Locate on map
             </button>
-            <button type="button" class="mapr-button mapr-button-secondary" @click="$emit('clear-feature')">
+            <button v-if="!singleClear" type="button" class="mapr-button mapr-button-secondary" @click="$emit('clear-feature')">
                 Clear selection
             </button>
         </footer>
