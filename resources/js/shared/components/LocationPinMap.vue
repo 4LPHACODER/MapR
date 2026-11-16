@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import Button from 'primevue/button';
 import MapIcon from './MapIcon.vue';
 
 const props = defineProps({
@@ -122,7 +123,7 @@ function onKeydown(event) {
     wide.value = false;
     nextTick(() => {
         fitMap();
-        expandButton.value?.focus();
+        expandButton.value?.$el?.focus();
     });
 }
 
@@ -166,8 +167,11 @@ onBeforeUnmount(() => {
     <div class="pin-map" :class="{ 'is-wide': wide }">
         <div v-if="hasToken" class="pin-stage">
             <div ref="mapEl" class="pin-canvas" role="application" aria-label="Incident location map"></div>
-            <button
+            <Button
                 ref="expandButton"
+                size="small"
+                severity="secondary"
+                outlined
                 type="button"
                 class="pin-expand"
                 :aria-pressed="wide"
@@ -176,12 +180,12 @@ onBeforeUnmount(() => {
                 @click="toggleWide"
             >
                 <MapIcon name="collapse" :class="{ 'is-restore': wide }" />
-            </button>
+            </Button>
         </div>
         <p v-else class="pin-fallback">The map is unavailable. Use My Location, then confirm the pin.</p>
         <div class="pin-actions">
-            <button type="button" @click="useMyLocation"><MapIcon name="focus" /> Use My Location</button>
-            <button type="button" class="is-primary" @click="confirmPending"><MapIcon name="pin-check" /> Confirm Pin</button>
+            <Button type="button" label="Use my location" size="small" severity="secondary" outlined @click="useMyLocation"><template #icon><MapIcon name="focus" /></template></Button>
+            <Button type="button" label="Confirm pin" size="small" @click="confirmPending"><template #icon><MapIcon name="pin-check" /></template></Button>
         </div>
         <p class="pin-message" role="status">
             <MapIcon v-if="confirmed && !pending" name="circle-check" />

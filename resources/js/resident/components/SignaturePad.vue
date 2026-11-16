@@ -6,7 +6,7 @@ import Message from 'primevue/message';
 const props = defineProps({
     recorded: { type: Boolean, default: false },
     manual: { type: Boolean, default: false },
-    label: { type: String, default: 'Resident Electronic Signature' },
+    label: { type: String, default: 'Your signature' },
     lead: { type: String, default: 'Draw your signature below using your finger, mouse, or stylus.' },
 });
 const emit = defineEmits(['ready', 'busy']);
@@ -194,8 +194,8 @@ onBeforeUnmount(() => {
             @pointercancel="end"
         ></canvas>
         <div class="resident-signature-actions">
-            <Button type="button" label="Clear Signature" severity="secondary" variant="outlined" class="resident-secondary" :disabled="saving" @click="clearPad" />
-            <Button v-if="error" type="button" label="Retry" class="resident-primary" :disabled="saving" @click="save" />
+            <Button size="small" type="button" label="Clear signature" severity="secondary" variant="outlined" class="resident-secondary" :disabled="saving" @click="clearPad" />
+            <Button size="small" v-if="error" type="button" label="Retry" class="resident-primary" :disabled="saving" @click="save" />
         </div>
         <p v-if="saving" class="resident-muted" role="status">Saving signature…</p>
         <Message v-else-if="status" severity="success" :closable="false" role="status">{{ status }}</Message>
