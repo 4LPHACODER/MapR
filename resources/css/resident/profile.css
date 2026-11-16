@@ -1,0 +1,97 @@
+/* Profile density and focus treatment stay inside this workflow and its overlays. */
+.resident-profile,
+.resident-profile-photo-menu,
+.resident-photo-dialog {
+    --p-button-focus-ring-width: 0;
+    --p-button-focus-ring-shadow: none;
+    --p-inputtext-placeholder-color: var(--p-slate-600);
+    --p-inputtext-focus-ring-width: 0;
+    --p-inputtext-focus-ring-shadow: none;
+    --p-message-success-color: var(--p-green-700);
+    --p-message-error-color: var(--p-red-700);
+    --p-message-warn-color: var(--p-amber-700);
+    --p-menu-item-focus-background: var(--resident-wash);
+    --profile-motion-duration: 220ms;
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+}
+.resident-profile { display: grid; gap: 1rem; width: 100%; max-width: 60rem; min-width: 0; }
+.resident-profile .resident-card { padding: 1.25rem; box-shadow: none; }
+.resident-profile-summary { display: flex; align-items: center; }
+.resident-profile-identity { display: flex; align-items: center; gap: 1rem; min-width: 0; }
+.resident-profile-identity-copy { min-width: 0; }
+.resident-profile-identity h2 { margin: 0 0 0.25rem; color: var(--resident-ink); font-size: 1.125rem; line-height: 1.5rem; font-weight: 600; text-wrap: balance; overflow-wrap: anywhere; }
+.resident-profile-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.75rem; }
+.resident-profile-role { color: var(--p-slate-600); font-size: 0.75rem; }
+.resident-profile-place { padding-left: 0.75rem; border-left: 1px solid var(--resident-line); color: var(--p-slate-600); font-size: 0.75rem; overflow-wrap: anywhere; }
+.resident-profile .cdrrmo-icon { width: 1rem; height: 1rem; flex-shrink: 0; }
+.resident-profile-photo { position: relative; width: 3.5rem; height: 3.5rem; flex-shrink: 0; }
+.resident-profile-photo .resident-avatar { width: 3.5rem; height: 3.5rem; font-size: 1rem; }
+.resident-profile .p-button.resident-profile-photo-edit { position: absolute; right: -0.25rem; bottom: -0.25rem; width: 1.75rem; min-height: 1.75rem; height: 1.75rem; padding: 0; border: 2px solid var(--resident-card); border-radius: 50%; }
+.resident-profile .resident-profile-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
+.resident-profile-grid > section { min-width: 0; }
+.resident-profile-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem; }
+.resident-profile-panel-heading h3 { margin: 0; font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; }
+.resident-profile-readonly { color: var(--p-slate-600); font-size: 0.75rem; white-space: nowrap; }
+.resident-profile-rows { margin: 0; }
+.resident-profile-rows > div { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 1rem; padding: 0.625rem 0; border-bottom: 1px solid var(--resident-line); }
+.resident-profile-rows > div:first-child { padding-top: 0; }
+.resident-profile-rows dt { color: var(--p-slate-600); }
+.resident-profile-rows dd { margin: 0; font-weight: 500; overflow-wrap: anywhere; }
+.resident-profile-rows > div:last-child dd { font-variant-numeric: tabular-nums; }
+.resident-profile-account-help { margin: 1rem 0 0; color: var(--p-slate-600); font-size: 0.75rem; line-height: 1.125rem; }
+.resident-profile-contact label { display: block; margin-bottom: 0.375rem; font-weight: 500; }
+.resident-profile-contact label span { color: var(--p-slate-600); font-weight: 400; }
+.resident-profile-contact .p-inputtext { width: 100%; height: 2rem; min-height: 2rem; box-shadow: none; transition: border-color 140ms ease; padding: 0.3125rem 0.625rem; border-radius: var(--resident-control); font-size: 0.8125rem; line-height: 1.25rem; font-variant-numeric: tabular-nums; caret-color: var(--resident-blue); }
+.resident-profile-help { margin: 0.375rem 0 0; color: var(--p-slate-600); font-size: 0.75rem; line-height: 1.125rem; }
+.resident-profile-feedback { display: flex; align-items: center; min-height: 2rem; padding: 0.375rem 0; font-size: 0.75rem; color: var(--p-slate-600); }
+.resident-profile .p-message { margin: 0; font-size: 0.8125rem; }
+.resident-profile .p-message-text { font-size: inherit; }
+.resident-profile-contact-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; padding-top: 0.75rem; border-top: 1px solid var(--resident-line); }
+.resident-profile .p-button,
+.resident-photo-dialog .p-button { min-height: 2rem; padding: 0.375rem 0.75rem; border-radius: var(--resident-control); font-size: 0.8125rem; gap: 0.375rem; }
+.resident-profile .resident-profile-save { min-width: 8.25rem; }
+.resident-profile-footer { display: flex; justify-content: flex-end; }
+.resident-profile-footer form { margin: 0; flex-shrink: 0; }
+.resident-profile ::selection { background: var(--resident-wash); color: var(--resident-navy); }
+.resident-profile-file { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.resident-profile-loading { display: grid; place-items: center; min-height: 24rem; border: 1px solid var(--resident-line); border-radius: var(--resident-radius); background: var(--resident-card); color: var(--p-slate-600); }
+.resident-profile-error { display: grid; gap: 0.75rem; justify-items: start; }
+.resident-profile :is(button, input):focus-visible,
+.resident-profile-photo-menu :focus-visible,
+.resident-photo-dialog :focus-visible { outline: none; box-shadow: none; }
+.resident-profile .p-inputtext:enabled:focus { border-color: var(--resident-blue); box-shadow: none; }
+.resident-profile .p-inputtext.p-invalid { border-color: var(--p-red-600); }
+.resident-profile .p-button:focus-visible,
+.resident-photo-dialog .p-button:focus-visible { border-color: var(--resident-blue-hover); background: var(--resident-wash); color: var(--resident-blue-hover); }
+.resident-profile .p-button:not(:disabled):active { filter: brightness(0.94); }
+.resident-profile-photo-menu { min-width: 10rem; border-radius: var(--resident-radius); }
+.resident-profile-photo-menu .p-menu-item-link { padding: 0.5rem 0.625rem; font-size: 0.8125rem; }
+.resident-profile-photo-menu .p-menu-item-content { border-radius: var(--resident-control); }
+.resident-photo-dialog { width: min(24rem, calc(100vw - 2rem)); border-radius: var(--resident-radius); }
+.resident-photo-dialog .p-dialog-content { display: grid; justify-items: start; gap: 1rem; padding: 1.25rem; }
+.resident-photo-dialog h2 { margin: 0; font-size: 1rem; font-weight: 600; }
+.resident-photo-dialog img { width: 7rem; height: 7rem; object-fit: cover; border-radius: 50%; border: 1px solid var(--resident-line); }
+.resident-photo-dialog .resident-modal-actions { margin: 0; width: 100%; justify-content: flex-end; }
+.resident-photo-dialog .resident-profile-note { margin: 0; }
+/* Occasional photo preview: state indication. The library owns modal lifecycle. */
+.resident-photo-motion.resident-photo-enter-active,
+.resident-photo-motion.resident-photo-leave-active { transition: opacity var(--profile-motion-duration) var(--resident-sidebar-ease), transform var(--profile-motion-duration) var(--resident-sidebar-ease); }
+.resident-photo-motion.resident-photo-enter-from,
+.resident-photo-motion.resident-photo-leave-to { opacity: 0; transform: scale(0.96); }
+@media (max-width: 767px) {
+    .resident-profile .resident-card { padding: 1rem; }
+    .resident-profile .resident-profile-grid { grid-template-columns: minmax(0, 1fr); }
+    .resident-profile-rows > div { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 0.75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .resident-photo-motion.resident-photo-enter-active,
+    .resident-photo-motion.resident-photo-leave-active { transition-property: opacity; transition-duration: 100ms; }
+    .resident-photo-motion.resident-photo-enter-from,
+    .resident-photo-motion.resident-photo-leave-to { transform: none; }
+    .resident-profile .p-button,
+    .resident-profile .p-inputtext { transition: none; }
+}
+
+.resident-profile-confirm-button { --p-button-focus-ring-width: 0; --p-button-focus-ring-shadow: none; font-size: 0.8125rem; min-height: 2rem; }
+.resident-profile-confirm-button:focus-visible { outline: none; box-shadow: none; border-color: var(--resident-blue); }

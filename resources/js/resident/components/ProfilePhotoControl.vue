@@ -1,22 +1,22 @@
 <script setup>
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, inject, nextTick, onBeforeUnmount, ref } from 'vue';
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
 import Message from 'primevue/message';
+import Menu from 'primevue/menu';
 import MapIcon from '../../shared/components/MapIcon.vue';
 import ResidentAvatar from './ResidentAvatar.vue';
 import { applyResidentAccount, residentAccount } from '../accountState';
 
-const props = defineProps({
+defineProps({
     name: { type: String, default: '' },
 });
 
-const emit = defineEmits(['menu-open']);
 const apiBase = inject('apiBase');
 const menuOpen = ref(false);
 const menuTrigger = ref(null);
-const menuEl = ref(null);
-const menuPosition = ref({ top: 0, left: 0 });
+const photoMenu = ref(null);
+const pointerMotion = ref(false);
 const fileInput = ref(null);
 const cancelButton = ref(null);
 const dialogVisible = ref(false);
@@ -29,72 +29,20 @@ const removing = ref(false);
 
 const hasPhoto = computed(() => Boolean(residentAccount.photoUrl));
 
-function placeMenu(fallbackHeight = 0, fallbackWidth = 0) {
-    const button = menuTrigger.value;
-    if (!button) return;
-    const rect = button.getBoundingClientRect();
-    const menuHeight = menuEl.value?.offsetHeight || fallbackHeight;
-    const menuWidth = menuEl.value?.offsetWidth || fallbackWidth;
-    const nav = document.querySelector('.resident-bottom-nav');
-    const navVisible = nav && getComputedStyle(nav).display !== 'none';
-    const limit = navVisible ? nav.getBoundingClientRect().top : window.innerHeight;
-    let top = rect.bottom + 8;
-    if (top + menuHeight > limit - 8) top = rect.top - menuHeight - 8;
-    top = Math.max(72, Math.min(top, window.innerHeight - menuHeight - 8));
-    let left = rect.left;
-    left = Math.max(8, Math.min(left, window.innerWidth - menuWidth - 8));
-    menuPosition.value = { top, left };
-}
+const menuItems = computed(() => [
+    { label: 'Upload photo', command: chooseFile },
+    ...(hasPhoto.value ? [{ label: 'Remove photo', disabled: removing.value, command: removePhoto }] : []),
+]);
 
-async function toggleMenu(event) {
-    if (menuOpen.value) {
-        closeMenu(true);
-        return;
-    }
-    emit('menu-open');
+function toggleMenu(event) {
+    pointerMotion.value = event.detail > 0;
     menuTrigger.value = event.currentTarget;
-    placeMenu(120, 180);
-    menuOpen.value = true;
-    await nextTick();
-    placeMenu();
-    menuEl.value?.querySelector('[role="menuitem"]')?.focus();
+    photoMenu.value?.toggle(event);
 }
 
-function closeMenu(restoreFocus) {
-    const trigger = menuTrigger.value;
-    menuOpen.value = false;
-    if (restoreFocus) trigger?.focus();
-}
-
-function onMenuKeydown(event) {
-    const items = [...(menuEl.value?.querySelectorAll('[role="menuitem"]') || [])];
-    const index = items.indexOf(document.activeElement);
-    if (event.key === 'Escape') {
-        event.preventDefault();
-        closeMenu(true);
-        return;
-    }
-    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-    event.preventDefault();
-    if (!items.length) return;
-    if (event.key === 'Home') items[0].focus();
-    else if (event.key === 'End') items[items.length - 1].focus();
-    else if (event.key === 'ArrowDown') items[(index + 1) % items.length].focus();
-    else items[(index <= 0 ? items.length : index) - 1].focus();
-}
-
-function onPointerDown(event) {
-    if (!menuOpen.value) return;
-    if (menuEl.value?.contains(event.target) || menuTrigger.value?.contains(event.target)) return;
-    closeMenu(false);
-}
-
-function onViewport() {
-    if (menuOpen.value) placeMenu();
-}
-
-function chooseFile() {
-    closeMenu(false);
+function chooseFile(event) {
+    pointerMotion.value = event.originalEvent.detail > 0;
+    photoMenu.value?.hide();
     fileInput.value?.click();
 }
 
@@ -107,7 +55,6 @@ function clearPreview() {
 
 function cancelPreview() {
     if (saving.value) return;
-    clearPreview();
     photoError.value = '';
     dialogVisible.value = false;
     menuTrigger.value?.focus();
@@ -194,7 +141,6 @@ async function savePhoto() {
         applyResidentAccount(response.data.data);
         residentAccount.photoNotice = 'Profile photo updated.';
         residentAccount.photoNoticeError = false;
-        clearPreview();
         dialogVisible.value = false;
         menuTrigger.value?.focus();
     } catch (exception) {
@@ -208,7 +154,7 @@ async function savePhoto() {
 
 async function removePhoto() {
     if (!hasPhoto.value || removing.value) return;
-    closeMenu(false);
+    photoMenu.value?.hide();
     removing.value = true;
     photoError.value = '';
     residentAccount.photoNotice = '';
@@ -219,26 +165,14 @@ async function removePhoto() {
         residentAccount.photoNoticeError = false;
         menuTrigger.value?.focus();
     } catch (exception) {
-        photoError.value = exception.response?.data?.message || 'The profile photo could not be removed.';
+        residentAccount.photoNotice = exception.response?.data?.message || 'The profile photo could not be removed.';
+        residentAccount.photoNoticeError = true;
     } finally {
         removing.value = false;
     }
 }
 
-onMounted(() => {
-    window.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('resize', onViewport);
-    window.addEventListener('scroll', onViewport, true);
-});
-
-onBeforeUnmount(() => {
-    clearPreview();
-    window.removeEventListener('pointerdown', onPointerDown);
-    window.removeEventListener('resize', onViewport);
-    window.removeEventListener('scroll', onViewport, true);
-});
-
-defineExpose({ close: () => closeMenu(false) });
+onBeforeUnmount(clearPreview);
 </script>
 
 <template>
@@ -246,61 +180,64 @@ defineExpose({ close: () => closeMenu(false) });
         <ResidentAvatar :name="name" :src="residentAccount.photoUrl || ''" />
         <Button
             type="button"
+            size="small"
+            :disabled="saving || removing"
             class="resident-profile-photo-edit"
             aria-label="Change profile photo"
             aria-haspopup="menu"
+            aria-controls="resident-photo-menu"
             :aria-expanded="menuOpen"
             @click="toggleMenu"
         >
             <template #icon><MapIcon name="camera" /></template>
         </Button>
+        <Menu
+            id="resident-photo-menu"
+            ref="photoMenu"
+            :model="menuItems"
+            popup
+            append-to=".resident-app"
+            class="resident-profile-photo-menu"
+            :pt="{ transition: { css: false } }"
+            @show="menuOpen = true"
+            @hide="menuOpen = false"
+        />
         <!-- native-ok: hidden input backs the custom profile photo picker -->
         <input
             ref="fileInput"
             class="resident-profile-file"
             type="file"
+            hidden
+            aria-label="Choose profile photo"
             accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
             @change="onFile"
         >
     </div>
-    <Teleport to="body">
-        <div
-            v-if="menuOpen"
-            ref="menuEl"
-            class="resident-profile-menu resident-profile-photo-menu"
-            role="menu"
-            :style="{ top: `${menuPosition.top}px`, left: `${menuPosition.left}px` }"
-            @keydown="onMenuKeydown"
-        >
-            <Button type="button" text role="menuitem" @click="chooseFile">
-                <MapIcon name="camera" /> Upload photo
-            </Button>
-            <Button v-if="hasPhoto" type="button" text role="menuitem" :disabled="removing" @click="removePhoto">
-                <MapIcon name="eraser" /> {{ removing ? 'Removing…' : 'Remove photo' }}
+    <Dialog
+        :visible="dialogVisible"
+        modal
+        :closable="false"
+        :close-on-escape="!saving"
+        :draggable="false"
+        :show-header="false"
+        append-to=".resident-app"
+        class="resident-photo-dialog"
+        :class="{ 'resident-photo-motion': pointerMotion }"
+        :pt="{ transition: { name: 'resident-photo', css: pointerMotion } }"
+        aria-labelledby="resident-photo-title"
+        @update:visible="onDialogVisibilityChange"
+        @show="focusCancelButton"
+        @after-hide="clearPreview"
+    >
+        <h2 id="resident-photo-title">Save profile photo</h2>
+        <img v-if="previewUrl" :src="previewUrl" alt="Selected profile photo preview">
+        <p v-if="saving" class="resident-profile-note">Uploading {{ progress }}%</p>
+        <Message v-if="photoError" severity="error" :closable="false" class="resident-error">{{ photoError }}</Message>
+        <div class="resident-modal-actions">
+            <Button size="small" ref="cancelButton" type="button" severity="secondary" variant="outlined" class="resident-secondary" :disabled="saving" autofocus @click="cancelPreview">Cancel</Button>
+            <Button size="small" type="button" class="resident-primary" :disabled="saving || !pendingFile" @click="savePhoto">
+                <MapIcon name="save" /> {{ saving ? 'Saving…' : 'Save photo' }}
             </Button>
         </div>
-        <Dialog
-            :visible="dialogVisible"
-            modal
-            :closable="false"
-            :close-on-escape="!saving"
-            :draggable="false"
-            :show-header="false"
-            class="resident-photo-dialog"
-            aria-labelledby="resident-photo-title"
-            @update:visible="onDialogVisibilityChange"
-            @show="focusCancelButton"
-        >
-            <h2 id="resident-photo-title">Save profile photo</h2>
-            <img v-if="previewUrl" :src="previewUrl" alt="Selected profile photo preview">
-            <p v-if="saving" class="resident-profile-note">Uploading {{ progress }}%</p>
-            <Message v-if="photoError" severity="error" :closable="false" class="resident-error">{{ photoError }}</Message>
-            <div class="resident-modal-actions">
-                <Button ref="cancelButton" type="button" severity="secondary" variant="outlined" class="resident-secondary" :disabled="saving" autofocus @click="cancelPreview">Cancel</Button>
-                <Button type="button" class="resident-primary" :disabled="saving || !pendingFile" @click="savePhoto">
-                    <MapIcon name="save" /> {{ saving ? 'Saving…' : 'Save Photo' }}
-                </Button>
-            </div>
-        </Dialog>
-    </Teleport>
+    </Dialog>
 </template>
