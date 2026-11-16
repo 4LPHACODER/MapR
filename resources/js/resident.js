@@ -16,6 +16,7 @@ import '../css/resident/reports.css';
 import '../css/resident/dashboard.css';
 import '../css/resident/map.css';
 import '../css/resident/report.css';
+import '../css/resident/profile.css';
 
 const root = document.getElementById('resident-app');
 
