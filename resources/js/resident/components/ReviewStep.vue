@@ -19,12 +19,12 @@ defineEmits(['edit', 'signature-ready', 'signature-busy']);
 
 <template>
     <section class="resident-review">
-        <h2 class="resident-step-heading" tabindex="-1">Review your report</h2>
-        <p class="resident-lead">Your report will be checked by BDRRM, assessed by the Assessor, and reviewed by CDRRMO.</p>
+        <header class="report-step-intro"><h3 class="resident-step-heading" tabindex="-1">Review and submit</h3>
+        <p>Check the details below, then sign to send your report to BDRRM.</p></header>
         <article>
             <header>
                 <h3>Incident information</h3>
-                <Button type="button" label="Edit Details" severity="secondary" variant="outlined" class="resident-secondary" @click="$emit('edit', 1)">
+                <Button size="small" type="button" label="Edit details" severity="secondary" text @click="$emit('edit', 1)">
                     <template #icon><MapIcon name="pencil" /></template>
                 </Button>
             </header>
@@ -36,7 +36,7 @@ defineEmits(['edit', 'signature-ready', 'signature-busy']);
         <article>
             <header>
                 <h3>Location</h3>
-                <Button type="button" label="Edit Details" severity="secondary" variant="outlined" class="resident-secondary" @click="$emit('edit', 1)">
+                <Button size="small" type="button" label="Edit details" severity="secondary" text @click="$emit('edit', 1)">
                     <template #icon><MapIcon name="pencil" /></template>
                 </Button>
             </header>
@@ -48,7 +48,7 @@ defineEmits(['edit', 'signature-ready', 'signature-busy']);
         <article>
             <header>
                 <h3>What happened</h3>
-                <Button type="button" label="Edit Details" severity="secondary" variant="outlined" class="resident-secondary" @click="$emit('edit', 1)">
+                <Button size="small" type="button" label="Edit details" severity="secondary" text @click="$emit('edit', 1)">
                     <template #icon><MapIcon name="pencil" /></template>
                 </Button>
             </header>
@@ -57,7 +57,7 @@ defineEmits(['edit', 'signature-ready', 'signature-busy']);
         <article>
             <header>
                 <h3>Attached photos</h3>
-                <Button type="button" label="Edit Photos" severity="secondary" variant="outlined" class="resident-secondary" @click="$emit('edit', 2)">
+                <Button size="small" type="button" label="Edit photos" severity="secondary" text @click="$emit('edit', 2)">
                     <template #icon><MapIcon name="pencil" /></template>
                 </Button>
             </header>
@@ -69,8 +69,8 @@ defineEmits(['edit', 'signature-ready', 'signature-busy']);
                 </li>
             </ul>
         </article>
-        <label class="resident-check">
-            <Checkbox inputId="resident-confirm-report" v-model="form.confirmed" binary /> The location, description, and photographs are accurate.
+        <label class="resident-check" for="resident-confirm-report">
+            <Checkbox size="small" inputId="resident-confirm-report" v-model="form.confirmed" binary /> The location, description, and photographs are accurate.
         </label>
         <SignaturePad :recorded="recorded" @ready="$emit('signature-ready', $event)" @busy="$emit('signature-busy', $event)" />
     </section>
