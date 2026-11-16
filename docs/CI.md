@@ -23,7 +23,7 @@ Every commit subject and every pull request title uses:
 <type>/<description>
 ```
 
-- Types: `feature`, `fix`, `hotfix`, `refactor`, `docs`, `test`, `chore`, `ci`, `style`, `perf`, `build`, `revert`.
+- Types: `feature`, `fix`, `hotfix`, `refactor`, `redesign`, `docs`, `test`, `chore`, `ci`, `style`, `perf`, `build`, `revert`.
 - Description starts lowercase (or a digit), no trailing period, whole subject at most 72 characters.
 - Only the first line is checked; write any detail in the body.
 
@@ -37,7 +37,7 @@ Enable the local hook once per clone so bad messages are rejected before they re
 composer hooks
 ```
 
-Branch names use the same types: `feature/resident-export`, `fix/login-redirect`.
+Branch names use the same types: `feature/resident-export`, `fix/login-redirect`, `redesign/resident-report-primevue`.
 
 ## Everyday workflow
 
