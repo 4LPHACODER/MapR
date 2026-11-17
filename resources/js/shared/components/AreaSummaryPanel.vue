@@ -1,8 +1,10 @@
 <script setup>
 import { computed } from 'vue';
+import Button from 'primevue/button';
 import MapIcon from './MapIcon.vue';
 
 const props = defineProps({
+    compact: { type: Boolean, default: false },
     summary: { type: Object, default: null },
     summaryLoading: { type: Boolean, default: false },
     hasPolygon: { type: Boolean, default: false },
@@ -163,32 +165,32 @@ function formatUpdated(value) {
                     <p>{{ subtitle }}</p>
                 </div>
             </div>
-            <button
+            <Button :size="compact ? 'small' : undefined" severity="secondary" outlined
                 v-if="showBack"
                 type="button"
-                class="mapr-button mapr-button-secondary map-summary-header-btn"
+                class="map-summary-header-btn"
                 @click="$emit('back-to-building')"
             >
                 Back to building
-            </button>
-            <button
+            </Button>
+            <Button :size="compact ? 'small' : undefined" severity="secondary" outlined
                 v-else-if="selection.featureType"
                 type="button"
-                class="mapr-button mapr-button-secondary map-summary-header-btn"
+                class="map-summary-header-btn"
                 aria-label="Clear selection"
                 @click="$emit('clear-feature')"
             >
                 Clear selection
-            </button>
+            </Button>
         </header>
 
         <div v-if="showTabs" class="selection-tabs" role="tablist">
-            <button type="button" role="tab" :aria-selected="selection.tab === 'summary'" :class="{ 'is-active': selection.tab === 'summary' }" @click="$emit('set-tab', 'summary')">
+            <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" role="tab" :aria-selected="selection.tab === 'summary'" :class="{ 'is-active': selection.tab === 'summary' }" @click="$emit('set-tab', 'summary')">
                 Area summary
-            </button>
-            <button type="button" role="tab" :aria-selected="selection.tab === 'feature'" :class="{ 'is-active': selection.tab === 'feature' }" @click="$emit('set-tab', 'feature')">
+            </Button>
+            <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" role="tab" :aria-selected="selection.tab === 'feature'" :class="{ 'is-active': selection.tab === 'feature' }" @click="$emit('set-tab', 'feature')">
                 {{ featureTabLabel }}
-            </button>
+            </Button>
         </div>
 
         <div class="map-summary-body">
@@ -307,24 +309,24 @@ function formatUpdated(value) {
                     </dl>
                     <h4>Households at this building</h4>
                     <div v-if="selection.buildingHouseholds.length" class="selection-rows">
-                        <button v-for="row in selection.buildingHouseholds" :key="row.id" type="button" class="selection-row" @click="$emit('select-household', row.id)">
+                        <Button :size="compact ? 'small' : undefined" severity="secondary" outlined v-for="row in selection.buildingHouseholds" :key="row.id" type="button" class="selection-row" @click="$emit('select-household', row.id)">
                             <MapIcon name="home" />
                             <span>{{ row.household_reference || 'Household record' }}</span>
-                        </button>
+                        </Button>
                     </div>
                     <p v-else class="cdrrmo-muted">No active households are linked to this building.</p>
                     <section v-if="residentReports" class="selection-block">
                         <h4>Resident reports</h4>
                         <p v-if="!reportChoices.length" class="cdrrmo-muted">No linked resident report</p>
                         <div v-else-if="reportChoices.length > 1" class="selection-rows">
-                            <button v-for="choice in reportChoices" :key="choice.id" type="button" class="selection-row" :class="{ 'is-active': linkedReport?.id === choice.id }" @click="emit('choose-report', choice.id)">
+                            <Button :size="compact ? 'small' : undefined" severity="secondary" outlined v-for="choice in reportChoices" :key="choice.id" type="button" class="selection-row" :class="{ 'is-active': linkedReport?.id === choice.id }" @click="emit('choose-report', choice.id)">
                                 <MapIcon name="reports" />
                                 <span>{{ choice.reference }}</span>
-                            </button>
+                            </Button>
                         </div>
                         <template v-if="linkedReport">
                             <p>{{ linkedReport.resident_name || 'Resident' }} · {{ linkedReport.label || linkedReport.status }}</p>
-                            <a v-if="reportHref" class="mapr-button mapr-button-primary" :href="reportHref">View Report</a>
+                            <Button v-if="reportHref" as="a" :href="reportHref" :size="compact ? 'small' : undefined">View Report</Button>
                         </template>
                     </section>
                     <details class="selection-source">
@@ -376,14 +378,14 @@ function formatUpdated(value) {
                         <h4>Resident reports</h4>
                         <p v-if="!reportChoices.length" class="cdrrmo-muted">No linked resident report</p>
                         <div v-else-if="reportChoices.length > 1" class="selection-rows">
-                            <button v-for="choice in reportChoices" :key="choice.id" type="button" class="selection-row" :class="{ 'is-active': linkedReport?.id === choice.id }" @click="emit('choose-report', choice.id)">
+                            <Button :size="compact ? 'small' : undefined" severity="secondary" outlined v-for="choice in reportChoices" :key="choice.id" type="button" class="selection-row" :class="{ 'is-active': linkedReport?.id === choice.id }" @click="emit('choose-report', choice.id)">
                                 <MapIcon name="reports" />
                                 <span>{{ choice.reference }}</span>
-                            </button>
+                            </Button>
                         </div>
                         <template v-if="linkedReport">
                             <p>{{ linkedReport.resident_name || 'Resident' }} · {{ linkedReport.label || linkedReport.status }}</p>
-                            <a v-if="reportHref" class="mapr-button mapr-button-primary" :href="reportHref">View Report</a>
+                            <Button v-if="reportHref" as="a" :href="reportHref" :size="compact ? 'small' : undefined">View Report</Button>
                         </template>
                     </section>
                     <details class="selection-source">
@@ -398,33 +400,32 @@ function formatUpdated(value) {
         </div>
 
         <footer v-if="view === 'area' && summary" class="map-summary-footer">
-            <button type="button" class="mapr-button mapr-button-secondary" @click="$emit('view-records')">View linked residents</button>
-            <button type="button" class="mapr-button mapr-button-secondary" @click="$emit('view-households')">View households</button>
-            <button
+            <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" @click="$emit('view-records')">View linked residents</Button>
+            <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" @click="$emit('view-households')">View households</Button>
+            <Button :size="compact ? 'small' : undefined"
                 v-if="showImpact"
                 type="button"
-                class="mapr-button mapr-button-primary"
                 :disabled="!summary.can_snapshot"
                 :title="summary.can_snapshot ? '' : 'An active incident is required before a report preview can be saved.'"
                 @click="$emit('preview-report')"
             >
                 Preview area report
-            </button>
+            </Button>
         </footer>
         <footer v-else-if="view === 'feature' && !selection.loading && selection.featureType === 'resident-report' && reportHref" class="map-summary-footer">
-            <a class="mapr-button mapr-button-primary" :href="reportHref">View Report</a>
-            <button v-if="!singleClear" type="button" class="mapr-button mapr-button-secondary" @click="$emit('clear-feature')">Clear selection</button>
+            <Button as="a" :href="reportHref" :size="compact ? 'small' : undefined">View Report</Button>
+            <Button :size="compact ? 'small' : undefined" severity="secondary" outlined v-if="!singleClear" type="button" @click="$emit('clear-feature')">Clear selection</Button>
         </footer>
         <footer v-else-if="view === 'feature' && !selection.loading && (household || building)" class="map-summary-footer">
-            <button v-if="selection.featureType === 'household' && household" type="button" class="mapr-button mapr-button-primary" @click="$emit('open-residents')">
+            <Button :size="compact ? 'small' : undefined" v-if="selection.featureType === 'household' && household" type="button" @click="$emit('open-residents')">
                 <MapIcon name="users" /> Open in Residents
-            </button>
-            <button type="button" class="mapr-button mapr-button-secondary" :disabled="!canLocate" @click="$emit('locate')">
+            </Button>
+            <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" :disabled="!canLocate" @click="$emit('locate')">
                 <MapIcon name="focus" /> Locate on map
-            </button>
-            <button v-if="!singleClear" type="button" class="mapr-button mapr-button-secondary" @click="$emit('clear-feature')">
+            </Button>
+            <Button :size="compact ? 'small' : undefined" severity="secondary" outlined v-if="!singleClear" type="button" @click="$emit('clear-feature')">
                 Clear selection
-            </button>
+            </Button>
         </footer>
     </aside>
 </template>
