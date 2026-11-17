@@ -30,3 +30,18 @@ Scope: `/resident/profile`. `Resident/ProfileController.php` and `Resident/Profi
 | Focus and density | resources/css/resident/profile.css | No outer focus rings on profile controls or photo overlays; blue field/button border, button fill, and tonal menu focus remain visible; natural document scrolling | Browser computed styles and phone overflow |
 
 Photo preview motion marks an occasional state change: pointer selection uses 220ms opacity and scale with the resident easing token; keyboard selection is instant. Reduced motion retains only a 100ms fade. Account values and form data remain static. Backend policy is unchanged.
+
+
+## Resident dashboard
+
+Scope: `/resident/`. Dashboard summaries remain owned by DashboardController and ResidentReportWorkflow. Recent reports fetch the existing complete, account-scoped `/resident/api/reports?status=all_submitted` array, rather than filtering the dashboard summary's five-row sample. Drafts remain in Your next steps and report history.
+
+| Capability | Canonical owner | Contract | Verification |
+| --- | --- | --- | --- |
+| Table | PrimeVue DataTable / Column, DashboardReportsTable.vue | Semantic sortable reference, incident, status, and updated columns; latest updated first; five rows by default, with 10/20 choices; library owns keyboard sorting and paginator | Production build; component interaction checks |
+| Filters | PrimeVue InputText / Select and Vue Router | Local search matches reference, incident, and location; suppress during IME composition; clear immediately and restore input focus. Status uses server summary buckets. Updated-period choices use rolling 30/90/365-day windows. Search, filters, sort, page, and page size persist in URL; filtering and sorting reset page. No remote search debounce is needed because all filtering uses the loaded array. | Component interaction checks |
+| Async states | DashboardReportsTable.vue and PrimeVue Message | Reserved loading, empty/no-result guidance, inline fetch failure with retry; stale/unmounted responses ignored | Component loading, failure, retry checks |
+| Focus | resources/css/resident/dashboard.css | Dashboard controls, incident dialog, and dashboard Select overlays omit outer focus rings; field borders, tonal table/pagination/summary fills, button fill changes, and link underlines identify keyboard focus | Scoped CSS review |
+| Responsive layout | resources/css/resident/dashboard.css | Full-width bounded table with horizontal overflow; labels remain visible; phone controls wrap; coarse pointers use 44px filter controls and 16px search text. Supporting next steps and incident panels stack below on narrow screens. | Responsive CSS review; live browser when available |
+
+No report lifecycle, permission, or mutation behavior changes. Existing report detail, draft continuation, corrections, and incident details destinations remain authoritative.
