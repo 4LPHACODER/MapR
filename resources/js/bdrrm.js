@@ -1,5 +1,6 @@
 import './bootstrap';
 import { createApp } from 'vue';
+import { installPrimeVue } from './shared/ui/installPrimeVue';
 import { createRouter, createWebHistory } from 'vue-router';
 import FieldApp from './bdrrm/App.vue';
 import DashboardPage from './bdrrm/pages/DashboardPage.vue';
@@ -59,14 +60,14 @@ if (root) {
         return true;
     });
 
-    createApp(FieldApp, {
+    installPrimeVue(createApp(FieldApp, {
         userName: root.dataset.userName || '',
         userEmail: root.dataset.userEmail || '',
         jobTitle: root.dataset.jobTitle || '',
         logoutUrl: root.dataset.logoutUrl || '/logout',
         homeUrl: root.dataset.homeUrl || '/',
         csrfToken: token || '',
-    })
+    }))
         .use(router)
         .provide('apiBase', '/bdrrm/api')
         .provide('roleCode', roleCode)

@@ -45,3 +45,15 @@ Scope: `/resident/`. Dashboard summaries remain owned by DashboardController and
 | Responsive layout | resources/css/resident/dashboard.css | Full-width bounded table with horizontal overflow; labels remain visible; phone controls wrap; coarse pointers use 44px filter controls and 16px search text. Supporting next steps and incident panels stack below on narrow screens. | Responsive CSS review; live browser when available |
 
 No report lifecycle, permission, or mutation behavior changes. Existing report detail, draft continuation, corrections, and incident details destinations remain authoritative.
+
+
+## Shared authenticated navigation
+
+Scope: Resident, BDRRM (including secretary/captain), Assessor, and CDRRMO Vue workspaces. Existing route guards and backend policies remain authoritative for access. `resources/js/shared/layouts/WorkspaceLayout.vue` owns the resident-based shell, and `resources/js/shared/navigation.js` owns role-specific links and optional badge endpoints.
+
+- Desktop preserves the resident sidebar, header, collapse behavior, palette, and motion. Staff page components keep their existing styles and report-context providers.
+- On phones, residents retain the existing report action and navigation. Staff get four primary destinations and Menu; PrimeVue Drawer owns modal focus, Escape, outside dismissal, and focus restoration. All staff destinations and CSRF-protected sign out remain available in the drawer.
+- Shared WorkspaceHeader receives optional notification data and action slots. Only the resident wrapper loads resident notification/account data and supplies ResidentReportButton. Staff never call resident-only APIs through the shell.
+- BDRRM resident records remain visible only to secretary/captain roles. Badge data retains the existing role endpoints, refresh event, and server-defined meaning. Failed badge requests leave links usable; stale responses are ignored.
+- Each entry point uses the existing installPrimeVue provider and shared feedback host. Route changes close disclosures, refresh badges, and update the document title. Wizard keyboard handling remains resident-scoped.
+- Navigation verification: `node --test tests/js/workspace-navigation.test.mjs`; production build verifies every workspace entry point.

@@ -5,7 +5,7 @@ import Dialog from 'primevue/dialog';
 import Message from 'primevue/message';
 import Menu from 'primevue/menu';
 import MapIcon from '../../shared/components/MapIcon.vue';
-import ResidentAvatar from './ResidentAvatar.vue';
+import UserAvatar from '../../shared/components/UserAvatar.vue';
 import { applyResidentAccount, residentAccount } from '../accountState';
 
 defineProps({
@@ -177,7 +177,7 @@ onBeforeUnmount(clearPreview);
 
 <template>
     <div class="resident-profile-photo">
-        <ResidentAvatar :name="name" :src="residentAccount.photoUrl || ''" />
+        <UserAvatar :name="name" :src="residentAccount.photoUrl || ''" />
         <Button
             type="button"
             size="small"
