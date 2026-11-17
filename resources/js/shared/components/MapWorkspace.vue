@@ -1,5 +1,5 @@
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, useId, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Button from 'primevue/button';
 import Checkbox from 'primevue/checkbox';
@@ -29,6 +29,7 @@ const props = defineProps({
 });
 
 const route = useRoute();
+const controlId = useId();
 const router = useRouter();
 const emit = defineEmits(['select-report']);
 const mapboxToken = inject('mapboxToken');
@@ -88,6 +89,11 @@ const selection = reactive({
 });
 
 const mapMissing = computed(() => !mapboxToken);
+const isCdrrmoMap = computed(() => route.path === '/map'
+    && props.apiBase === '/cdrrmo/api'
+    && !props.compact
+    && !props.embedded
+    && !props.preview);
 const barangayEmptyLabel = computed(() => {
     if (!props.scopeBarangays) return 'All four barangays';
     return barangays.value.length ? 'All assigned barangays' : 'No assigned barangay';
@@ -1101,45 +1107,62 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="map-workspace" :class="{ 'is-compact': compact, 'is-embedded': embedded, 'is-preview': preview, 'community-open': communityOpen }">
+    <div class="map-workspace" :class="{ 'is-compact': compact, 'is-embedded': embedded, 'is-preview': preview, 'is-cdrrmo-map': isCdrrmoMap, 'community-open': communityOpen }">
         <div v-if="preview" class="map-preview-tools">
             <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" @click="resetPreview"><MapIcon name="reset" /> Reset view</Button>
         </div>
         <div v-else class="map-toolbar">
-            <div class="map-toolbar-group">
-                <span class="map-toolbar-label">{{ compact ? 'Map view' : 'Filters' }}</span>
-                <div class="map-mode-toggle" role="group" aria-label="Basemap">
-                    <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" :aria-pressed="mapStyleMode === 'satellite'" :class="{ 'is-active': mapStyleMode === 'satellite' }" @click="switchMapStyle('satellite')">Satellite</Button>
-                    <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" :aria-pressed="mapStyleMode === 'streets'" :class="{ 'is-active': mapStyleMode === 'streets' }" @click="switchMapStyle('streets')">Map</Button>
+            <div class="map-toolbar-group is-filters" role="group" aria-label="Map filters">
+                <div v-if="isCdrrmoMap" class="map-filter-heading">
+                    <span class="map-toolbar-label">Map filters</span>
+                    <Button size="small" severity="secondary" text type="button" class="map-filter-reset" @click="clearFilters"><MapIcon name="filter-reset" /> Clear filters</Button>
                 </div>
-                <Select v-if="!compact" v-model="selectedIncident" :options="[{ label: 'Registry view (all incidents)', value: '' }, ...incidents.map((row) => ({ label: row.incident_name, value: String(row.id) }))]" option-label="label" option-value="value" aria-label="Incident or registry view" placeholder="Registry view" :size="compact ? 'small' : undefined" :pt="compact ? { transition: { css: false } } : undefined" :panel-class="compact ? 'cdrrmo-dashboard-overlay' : undefined" />
-                <Select v-if="!compact" v-model="selectedBarangay" :options="[{ label: barangayEmptyLabel, value: '' }, ...barangays.map((row) => ({ label: row.name, value: String(row.id) }))]" option-label="label" option-value="value" aria-label="Barangay" :placeholder="barangayEmptyLabel" :size="compact ? 'small' : undefined" :pt="compact ? { transition: { css: false } } : undefined" :panel-class="compact ? 'cdrrmo-dashboard-overlay' : undefined" />
-                <div class="map-search">
-                    <InputText :size="compact ? 'small' : undefined"
-                        ref="searchInput"
-                        v-model="searchRef"
-                        type="search"
-                        placeholder="Household or building reference"
-                        aria-label="Search household or building reference"
-                        @focus="searchOpen = !!searchRef.trim() && householdFeatures.length > 1"
-                    />
-                    <Button v-if="searchRef" :size="compact ? 'small' : undefined" severity="secondary" text type="button" class="map-search-clear" aria-label="Clear map search" @click="clearMapSearch"><MapIcon name="x" /></Button>
-                    <ul v-if="searchOpen && searchRef.trim() && searchMatches.length" class="map-search-results" @mousedown.prevent>
-                        <li v-for="feature in searchMatches" :key="feature.properties.household_id">
-                            <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" @click="chooseSearchFeature(feature)">
-                                {{ feature.properties.household_reference }}
-                                <span v-if="feature.properties.building_reference"> · {{ feature.properties.building_reference }}</span>
-                            </Button>
-                        </li>
-                        <li v-if="householdFeatures.length > searchMatches.length" class="cdrrmo-muted">Showing {{ searchMatches.length }} of {{ householdFeatures.length }} matches.</li>
-                    </ul>
+                <span v-else class="map-toolbar-label">{{ compact ? 'Map view' : 'Filters' }}</span>
+                <div class="map-control-field map-basemap-field">
+                    <span v-if="isCdrrmoMap" class="map-control-field-label">Basemap</span>
+                    <div class="map-mode-toggle" role="group" aria-label="Basemap">
+                        <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" :aria-pressed="mapStyleMode === 'satellite'" :class="{ 'is-active': mapStyleMode === 'satellite' }" @click="switchMapStyle('satellite')">Satellite</Button>
+                        <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" :aria-pressed="mapStyleMode === 'streets'" :class="{ 'is-active': mapStyleMode === 'streets' }" @click="switchMapStyle('streets')">Map</Button>
+                    </div>
                 </div>
-                <label class="map-inline-check" :class="{ 'is-disabled': !selectedIncident }">
+                <div v-if="!compact" class="map-control-field">
+                    <label v-if="isCdrrmoMap" class="map-control-field-label" :for="`${controlId}-incident-filter`">Incident</label>
+                    <Select :input-id="`${controlId}-incident-filter`" v-model="selectedIncident" :options="[{ label: 'Registry view (all incidents)', value: '' }, ...incidents.map((row) => ({ label: row.incident_name, value: String(row.id) }))]" option-label="label" option-value="value" aria-label="Incident or registry view" placeholder="Registry view" :size="compact ? 'small' : undefined" :pt="compact ? { transition: { css: false } } : undefined" :panel-class="compact ? 'cdrrmo-dashboard-overlay' : isCdrrmoMap ? 'cdrrmo-map-overlay' : undefined" />
+                </div>
+                <div v-if="!compact" class="map-control-field">
+                    <label v-if="isCdrrmoMap" class="map-control-field-label" :for="`${controlId}-barangay-filter`">Barangay</label>
+                    <Select :input-id="`${controlId}-barangay-filter`" v-model="selectedBarangay" :options="[{ label: barangayEmptyLabel, value: '' }, ...barangays.map((row) => ({ label: row.name, value: String(row.id) }))]" option-label="label" option-value="value" aria-label="Barangay" :placeholder="barangayEmptyLabel" :size="compact ? 'small' : undefined" :pt="compact ? { transition: { css: false } } : undefined" :panel-class="compact ? 'cdrrmo-dashboard-overlay' : isCdrrmoMap ? 'cdrrmo-map-overlay' : undefined" />
+                </div>
+                <div class="map-control-field map-search-field">
+                    <label v-if="isCdrrmoMap" class="map-control-field-label" :for="`${controlId}-household-search`">Search records</label>
+                    <div class="map-search">
+                        <InputText :size="compact ? 'small' : undefined"
+                            ref="searchInput"
+                            :id="`${controlId}-household-search`"
+                            v-model="searchRef"
+                            type="search"
+                            placeholder="Household or building reference"
+                            aria-label="Search household or building reference"
+                            @focus="searchOpen = !!searchRef.trim() && householdFeatures.length > 1"
+                        />
+                        <Button v-if="searchRef" :size="compact ? 'small' : undefined" severity="secondary" text type="button" class="map-search-clear" aria-label="Clear map search" @click="clearMapSearch"><MapIcon name="x" /></Button>
+                        <ul v-if="searchOpen && searchRef.trim() && searchMatches.length" class="map-search-results" @mousedown.prevent>
+                            <li v-for="feature in searchMatches" :key="feature.properties.household_id">
+                                <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" @click="chooseSearchFeature(feature)">
+                                    {{ feature.properties.household_reference }}
+                                    <span v-if="feature.properties.building_reference"> · {{ feature.properties.building_reference }}</span>
+                                </Button>
+                            </li>
+                            <li v-if="householdFeatures.length > searchMatches.length" class="cdrrmo-muted">Showing {{ searchMatches.length }} of {{ householdFeatures.length }} matches.</li>
+                        </ul>
+                    </div>
+                </div>
+                <label v-if="!isCdrrmoMap || selectedIncident" class="map-inline-check" :class="{ 'is-disabled': !selectedIncident }">
                     <Checkbox v-model="incidentLinkedOnly" binary :size="compact ? 'small' : undefined" :disabled="!selectedIncident" />
-                    Incident-linked records only
+                    {{ isCdrrmoMap ? 'Only show households linked to this incident' : 'Incident-linked records only' }}
                 </label>
             </div>
-            <div v-if="actionMenu" class="map-toolbar-group is-actions">
+            <div v-if="actionMenu" class="map-toolbar-group is-actions" role="group" aria-label="Map actions">
                 <MapActionsMenu
                     v-model:open="actionsOpen"
                     :has-polygon="hasPolygon"
@@ -1149,16 +1172,16 @@ onBeforeUnmount(() => {
                     @command="runMapAction"
                 />
             </div>
-            <div v-else class="map-toolbar-group">
+            <div v-else class="map-toolbar-group is-actions" role="group" aria-label="Map actions">
                 <span class="map-toolbar-label">Map actions</span>
                 <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" @click="startDraw"><MapIcon name="polygon" /> Draw area</Button>
                 <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" :disabled="!hasPolygon" @click="editDraw"><MapIcon name="pencil" /> Edit area</Button>
                 <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" :disabled="!hasPolygon" @click="clearPolygon"><MapIcon name="eraser" /> Clear area</Button>
                 <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" :disabled="!hasPolygon" @click="fitToSelection"><MapIcon name="focus" /> Fit to area</Button>
-                <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" :aria-expanded="layersOpen" :aria-controls="compact ? 'cdrrmo-dashboard-map-layers' : undefined" @click="toggleLayers"><MapIcon name="layers" /> Layers</Button>
+                <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" :aria-expanded="layersOpen" :aria-controls="`${controlId}-layers`" @click="toggleLayers"><MapIcon name="layers" /> Layers</Button>
                 <Button :size="compact ? 'small' : undefined" severity="secondary" outlined v-if="community" type="button" class="map-tool-btn" :aria-expanded="communityOpen" @click="communityOpen = !communityOpen"><MapIcon name="layers" /> Hazard map</Button>
                 <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" @click="resetStudyArea"><MapIcon name="reset" /> Reset view</Button>
-                <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" @click="clearFilters"><MapIcon name="filter-reset" /> Clear filters</Button>
+                <Button v-if="!isCdrrmoMap" :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" @click="clearFilters"><MapIcon name="filter-reset" /> Clear filters</Button>
             </div>
         </div>
         <Transition
@@ -1173,7 +1196,7 @@ onBeforeUnmount(() => {
             <div
                 v-if="!preview"
                 v-show="layersOpen"
-                :id="compact ? 'cdrrmo-dashboard-map-layers' : undefined"
+                :id="`${controlId}-layers`"
                 class="map-layer-disclosure"
                 :inert="!layersOpen"
                 :aria-hidden="!layersOpen"
