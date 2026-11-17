@@ -254,6 +254,7 @@
     min-width: 0;
     max-width: 100%;
 }
+.map-control-field { display: contents; }
 .map-search {
     position: relative;
     flex: 1 1 12rem;
