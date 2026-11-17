@@ -1,0 +1,220 @@
+/* Incident workspace: resident shell tokens and shared PrimeVue semantic colors. */
+.cdrrmo-incidents,
+.cdrrmo-incidents-overlay {
+    --p-focus-ring-width: 0;
+    --p-focus-ring-shadow: none;
+    --p-form-field-focus-ring-width: 0;
+    --p-form-field-focus-ring-shadow: none;
+    --p-select-focus-ring-width: 0;
+    --p-select-focus-ring-shadow: none;
+    --p-inputtext-focus-ring-width: 0;
+    --p-inputtext-focus-ring-shadow: none;
+    --p-textarea-focus-ring-width: 0;
+    --p-textarea-focus-ring-shadow: none;
+    --p-checkbox-focus-ring-width: 0;
+    --p-checkbox-focus-ring-shadow: none;
+    --p-button-focus-ring-width: 0;
+    --p-button-focus-ring-shadow: none;
+    color: var(--p-text-color);
+    font: 400 13px/20px Roboto, Arial, sans-serif;
+}
+.cdrrmo-incidents { display: grid; gap: 20px; min-width: 0; container-type: inline-size; }
+.cdrrmo-incidents :is(h2, h3, h4, p, dl), .cdrrmo-incidents-overlay :is(h3, h4, p, dl) { margin: 0; }
+.cdrrmo-incidents .cdrrmo-icon, .cdrrmo-incidents-overlay .cdrrmo-icon { width: 16px; height: 16px; flex-shrink: 0; }
+.incident-page-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.incident-page-heading h2 { font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -0.4px; }
+.incident-page-heading p { margin-top: 4px; color: var(--p-surface-600); }
+.incident-page-heading > .p-button { flex-shrink: 0; }
+.incident-overview, .incident-filter-panel, .incident-ledger { min-width: 0; border: 1px solid var(--resident-line); border-radius: var(--resident-radius); background: var(--resident-card); }
+.incident-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.incident-metric { min-width: 0; padding: 20px; }
+.incident-metric + .incident-metric { border-left: 1px solid var(--resident-line); }
+.incident-metric dt { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 500; color: var(--p-surface-600); }
+.incident-metric-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--resident-control); background: var(--resident-canvas); color: var(--resident-navy); }
+.incident-metric.is-active .incident-metric-icon { color: var(--resident-blue); background: var(--resident-wash); }
+.incident-metric dd { margin: 8px 0 4px; font-size: 28px; line-height: 32px; letter-spacing: -0.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.incident-metric p { color: var(--p-surface-600); font-size: 12px; }
+.incident-summary-scope { border-top: 1px solid var(--resident-line); padding: 10px 20px; color: var(--p-surface-600); font-size: 12px; }
+.incident-summary-scope > p { display: flex; align-items: flex-start; gap: 8px; }
+.incident-summary-scope .cdrrmo-icon { margin-top: 2px; width: 14px; height: 14px; }
+.incident-filter-panel { padding: 12px 20px 20px; }
+.incident-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.incident-panel-heading h3 { display: flex; align-items: center; gap: 8px; font-size: 15px; line-height: 22px; font-weight: 600; }
+.incident-filter-fields { display: grid; grid-template-columns: minmax(220px, 1.8fr) minmax(140px, 1fr) minmax(120px, 0.8fr) minmax(140px, 1fr); gap: 12px; margin-top: 8px; }
+.incident-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.incident-field > label { color: var(--p-surface-600); font-size: 12px; font-weight: 500; }
+.incident-field > :is(.p-inputtext, .p-select, .p-datepicker, .p-textarea) { width: 100%; min-width: 0; }
+.incident-field .p-datepicker-input { width: 100%; min-width: 0; }
+.incident-search { position: relative; display: flex; align-items: center; min-width: 0; }
+.incident-search > .cdrrmo-icon { position: absolute; left: 10px; color: var(--p-surface-500); pointer-events: none; }
+.incident-search > .p-inputtext { width: 100%; padding-left: 34px; padding-right: 36px; }
+.incident-search > .p-button { position: absolute; right: 3px; width: 26px; min-height: 26px; padding: 4px; }
+.incident-ledger { overflow: hidden; }
+.incident-ledger-heading { padding: 16px 20px; border-bottom: 1px solid var(--resident-line); }
+.incident-ledger-heading p { margin-top: 3px; font-size: 12px; color: var(--p-surface-600); }
+.incident-data-table { font-size: 13px; }
+.incident-data-table .p-datatable-table { min-width: 820px; table-layout: fixed; }
+.incident-data-table .p-datatable-table-container { overflow-x: auto; }
+.incident-data-table .p-datatable-header-cell { padding: 10px 20px; color: var(--p-surface-600); font-size: 12px; font-weight: 500; background: var(--resident-canvas); border-color: var(--resident-line); }
+.incident-data-table .p-datatable-column-title { font-weight: 500; }
+.incident-data-table .p-datatable-tbody > tr > td { padding: 16px 20px; border-color: var(--resident-line); vertical-align: middle; }
+.incident-data-table .p-datatable-tbody > tr:last-child > td { border-bottom: 0; }
+.incident-data-table .p-datatable-tbody > tr:hover { background: var(--p-surface-50); }
+.incident-data-table .incident-name-column { width: 30%; }
+.incident-data-table .incident-barangays-column { width: 23%; }
+.incident-data-table .incident-actions-column { width: 132px; }
+.incident-name-cell { display: grid; justify-items: start; gap: 4px; }
+.incident-reference { font-size: 12px; color: var(--p-surface-600); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.cdrrmo-incidents .incident-name-link.p-button { justify-content: flex-start; min-height: 0; max-width: 100%; padding: 0; border: 0; border-radius: 0; color: var(--resident-navy); font-weight: 600; text-align: left; }
+.incident-name-link .p-button-label { white-space: normal; overflow-wrap: anywhere; line-height: 20px; }
+.cdrrmo-incidents .incident-name-link.p-button:hover { background: transparent; color: var(--resident-blue); text-decoration: underline; text-underline-offset: 3px; }
+.incident-type-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--p-surface-600); }
+.incident-barangay-names { display: block; overflow-wrap: anywhere; }
+.incident-occurrence { display: block; font-size: 12px; font-variant-numeric: tabular-nums; }
+.incident-status-tag { white-space: nowrap; }
+.incident-row-actions { display: flex; align-items: center; gap: 2px; }
+.cdrrmo-incidents .incident-row-actions .p-button { padding: 7px; width: 32px; }
+.incident-ledger-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; min-height: 60px; padding: 10px 20px; border-top: 1px solid var(--resident-line); color: var(--p-surface-600); font-size: 12px; font-variant-numeric: tabular-nums; }
+.incident-ledger-footer .p-paginator { padding: 0; gap: 4px; font: inherit; }
+.incident-ledger-footer .p-paginator-current { min-width: 64px; text-align: center; }
+.incident-ledger-footer .p-paginator :is(.p-paginator-prev, .p-paginator-next) { width: 32px; height: 32px; border-radius: var(--resident-control); }
+.incident-ledger-footer .p-paginator .p-select { min-width: 66px; }
+.incident-ledger-footer .p-paginator.is-loading { opacity: 0.5; pointer-events: none; }
+.incident-table-state { display: grid; place-content: center; justify-items: center; gap: 10px; min-height: 280px; padding: 32px 20px; text-align: center; }
+.incident-table-state h4 { font-size: 15px; font-weight: 600; }
+.incident-table-state p { color: var(--p-surface-600); max-width: 44ch; }
+.incident-table-state .p-button { margin-top: 6px; }
+.incident-empty-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--resident-radius); background: var(--resident-canvas); color: var(--resident-muted); }
+.incident-empty-icon .cdrrmo-icon { width: 22px; height: 22px; }
+.incident-table-state .p-progressspinner, .incident-drawer-loading .p-progressspinner { width: 28px; height: 28px; }
+
+/* Same control recipe as the CDRRMO dashboard. Portals carry their own scope. */
+:is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) .p-button { min-height: 32px; padding: 5px 12px; border-radius: 8px; font: 500 13px/20px Roboto, Arial, sans-serif; white-space: nowrap; cursor: pointer; }
+:is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) :is(.p-inputtext, .p-select, .p-textarea) { min-height: 32px; border-radius: 8px; font: 400 13px/20px Roboto, Arial, sans-serif; box-shadow: none; }
+:is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) .p-inputtext { padding: 5px 10px; }
+.incident-search > .p-inputtext { padding-left: 34px; padding-right: 36px; }
+:is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) .p-select-label { padding: 5px 10px; font-size: 13px; line-height: 20px; }
+:is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) .p-select-dropdown { width: 30px; }
+:is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) .p-tag { padding: 2px 7px; font-size: 11px; line-height: 16px; font-weight: 500; }
+:is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) .p-tag .cdrrmo-icon { width: 12px; height: 12px; }
+:is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) :is(button, .p-select):not(:disabled):not(.p-disabled) { cursor: pointer; }
+:is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) .p-button:disabled { cursor: default; }
+:is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) :focus { outline: none !important; box-shadow: none !important; }
+:is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) :is(.p-inputtext:focus, .p-textarea:focus, .p-select.p-focus) { border-color: var(--p-primary-600); }
+:is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) :is(.p-select, .p-checkbox-box, .p-datepicker, .p-button) { outline: none !important; box-shadow: none !important; }
+:is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) .p-button:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+:is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) .p-button:is(.p-button-text, .p-button-outlined):focus-visible { background: var(--p-primary-50); color: var(--p-primary-700); }
+:is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) .p-button:not(.p-button-text):not(.p-button-outlined):focus-visible { background: var(--p-primary-700); }
+:is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) .p-checkbox:has(:focus-visible) .p-checkbox-box { border-color: var(--p-primary-700); background: var(--p-primary-50); }
+:is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) .p-checkbox.p-checkbox-checked:has(:focus-visible) .p-checkbox-box { background: var(--p-primary-700); }
+.cdrrmo-incidents .p-paginator button:focus-visible { background: var(--p-primary-100); color: var(--p-primary-900); }
+.cdrrmo-incidents-overlay.p-select-overlay { width: 0; max-width: calc(100vw - 32px); border-radius: 8px; }
+.cdrrmo-incidents-overlay .p-select-option { padding: 7px 10px; font-size: 13px; }
+.cdrrmo-incidents-overlay .p-select-option-label { white-space: normal; overflow-wrap: anywhere; }
+.cdrrmo-incidents-overlay .p-select-option.p-focus, .cdrrmo-incidents-overlay .p-menu-item.p-focus > .p-menu-item-content { background: var(--p-primary-50); color: var(--p-primary-900); }
+.incident-actions-menu.p-menu { min-width: 168px; border-radius: 8px; }
+.incident-actions-menu .p-menu-item-link { padding: 8px 10px; }
+.incident-actions-menu .p-menu-item-content { border-radius: 8px; }
+
+/* PrimeVue owns trapping, Escape, scroll locking and portal stacking. */
+.incident-form-dialog.p-dialog { width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); border-radius: 8px; }
+.incident-status-dialog.p-dialog { width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); border-radius: 8px; }
+.cdrrmo-incidents-overlay .p-dialog-header { padding: 20px; gap: 12px; }
+.cdrrmo-incidents-overlay .p-dialog-title { font-size: 18px; line-height: 26px; font-weight: 600; }
+.cdrrmo-incidents-overlay .p-dialog-header-actions { flex-shrink: 0; }
+.cdrrmo-incidents-overlay .p-dialog-content { padding: 0 20px 20px; }
+.cdrrmo-incidents-overlay .p-dialog-footer { padding: 16px 20px; border-top: 1px solid var(--p-content-border-color); flex-wrap: wrap; gap: 8px; }
+.cdrrmo-incidents-overlay :is(.p-dialog-close-button, .p-drawer-close-button) { width: 32px; height: 32px; }
+.incident-form-intro { color: var(--p-surface-600); margin-bottom: 20px !important; }
+.incident-form-dialog .p-message { margin-bottom: 16px; }
+.incident-edit-fields { display: grid; gap: 24px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.incident-form-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.incident-full-field { grid-column: 1 / -1; }
+.incident-form-fields .p-textarea { min-height: 84px; resize: none; padding: 8px 10px; }
+.incident-form-fields input[readonly] { background: var(--p-surface-50); color: var(--p-surface-600); }
+.incident-help { font-size: 12px; line-height: 18px; color: var(--p-surface-600); }
+.incident-field-error { font-size: 12px; line-height: 18px; color: var(--p-red-700); }
+.incident-barangay-picker { display: grid; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.incident-barangay-picker legend { padding: 0; margin-bottom: 8px; font-size: 14px; font-weight: 600; }
+.incident-barangay-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--p-surface-600); }
+.incident-barangay-toolbar > div { display: flex; gap: 4px; }
+.incident-barangay-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.incident-barangay-option { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 10px; border: 1px solid var(--p-content-border-color); border-radius: 8px; cursor: pointer; }
+.incident-barangay-option > span { overflow-wrap: anywhere; }
+.incident-barangay-option:hover { background: var(--p-surface-50); }
+.incident-barangay-option.is-selected { background: var(--p-primary-50); border-color: var(--p-primary-300); }
+.incident-barangay-option:has(:focus-visible) { border-color: var(--p-primary-600); }
+.incident-calendar.p-datepicker-panel { width: 288px; min-width: 0 !important; border-radius: 8px; padding: 10px; }
+.incident-calendar .p-datepicker-day { width: 28px; height: 28px; font-size: 12px; }
+.incident-calendar .p-datepicker-header { padding: 0 0 8px; }
+.incident-calendar :is(.p-datepicker-select-month, .p-datepicker-select-year) { font-size: 13px; }
+.incident-calendar .p-datepicker-time-picker { padding: 8px 0 0; gap: 8px; font-size: 13px; }
+.incident-calendar .p-datepicker-time-picker > div { gap: 4px; }
+.incident-calendar .p-datepicker-time-picker .p-button { width: 24px; min-height: 24px; height: 24px; padding: 4px; }
+.incident-calendar :is(button, .p-datepicker-day):focus-visible { background: var(--p-primary-100); color: var(--p-primary-900); }
+.incident-detail-drawer.p-drawer { width: min(460px, 100vw); }
+.incident-detail-drawer .p-drawer-header { padding: 20px; border-bottom: 1px solid var(--p-content-border-color); }
+.incident-detail-drawer .p-drawer-title { font-size: 16px; line-height: 24px; font-weight: 600; }
+.incident-detail-drawer .p-drawer-content { padding: 24px 20px; }
+.incident-detail-drawer .p-drawer-footer { padding: 16px 20px; border-top: 1px solid var(--p-content-border-color); }
+.incident-detail-intro { display: grid; gap: 8px; margin-bottom: 24px; }
+.incident-detail-intro h3 { font-size: 20px; line-height: 28px; font-weight: 600; overflow-wrap: anywhere; }
+.incident-detail-facts { display: grid; gap: 16px; padding: 20px 0; border-block: 1px solid var(--p-content-border-color); }
+.incident-detail-facts > div { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 12px; }
+.incident-detail-facts dt { color: var(--p-surface-600); font-size: 12px; }
+.incident-detail-facts dd { margin: 0; overflow-wrap: anywhere; }
+.incident-detail-section { display: grid; gap: 12px; margin-top: 24px; }
+.incident-detail-section h4 { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+.incident-description { white-space: pre-wrap; overflow-wrap: anywhere; }
+.incident-report-count { font-size: 12px; font-weight: 400; color: var(--p-surface-600); }
+.incident-related-reports { list-style: none; padding: 0; margin: 0; }
+.incident-related-reports li { display: flex; align-items: flex-start; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--p-content-border-color); }
+.incident-related-reports li > .cdrrmo-icon { margin-top: 2px; color: var(--p-surface-500); }
+.incident-related-reports li > div { display: grid; justify-items: start; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.incident-related-reports li span { color: var(--p-surface-600); font-size: 12px; }
+.incident-drawer-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.incident-drawer-loading { display: grid; justify-items: center; align-content: center; gap: 12px; min-height: 240px; color: var(--p-surface-600); }
+.incident-confirm-name { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; margin-bottom: 4px !important; }
+.incident-confirm-copy { margin: 16px 0 !important; }
+.incident-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@container (max-width: 900px) {
+    .incident-filter-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .incident-search-field { grid-column: 1 / -1; }
+}
+@container (max-width: 560px) {
+    .incident-page-heading { flex-wrap: wrap; }
+    .incident-metric { padding: 16px 12px; }
+    .incident-metric dt { display: grid; gap: 8px; align-content: start; }
+    .incident-metric p { display: none; }
+    .incident-metric dd { font-size: 24px; line-height: 30px; }
+    .incident-filter-panel { padding: 12px 16px 16px; }
+    .incident-filter-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .incident-field:last-child { grid-column: 1 / -1; }
+    .incident-summary-scope, .incident-ledger-heading, .incident-ledger-footer { padding-left: 16px; padding-right: 16px; }
+    .incident-ledger-footer .p-paginator { margin-left: auto; }
+}
+@media (max-width: 560px) {
+    .incident-form-fields { grid-template-columns: 1fr; }
+    .incident-barangay-options { grid-template-columns: 1fr; }
+    .incident-detail-facts > div { grid-template-columns: 1fr; gap: 4px; }
+    .cdrrmo-incidents-overlay .p-dialog-header, .cdrrmo-incidents-overlay .p-dialog-footer { padding: 16px; }
+    .cdrrmo-incidents-overlay .p-dialog-content { padding: 0 16px 16px; }
+}
+@media (pointer: coarse) {
+    :is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) :is(.p-button, .p-select, .p-inputtext) { min-height: 44px; }
+    :is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) :is(.p-inputtext, .p-textarea) { font-size: 16px; }
+    .cdrrmo-incidents .incident-name-link.p-button { min-height: 44px; }
+    .cdrrmo-incidents .incident-row-actions .p-button { width: 44px; }
+    .incident-data-table .incident-actions-column { width: 168px; }
+    .incident-search > .p-button { width: 40px; min-height: 40px; right: 2px; }
+    .incident-search > .p-inputtext { padding-right: 46px; }
+    .incident-barangay-option { min-height: 44px; }
+    .incident-calendar .p-datepicker-day { width: 36px; height: 36px; }
+    .incident-calendar .p-datepicker-time-picker .p-button { min-height: 36px; width: 36px; height: 36px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .cdrrmo-incidents *, .cdrrmo-incidents-overlay, .cdrrmo-incidents-overlay * { transition: none !important; }
+}
+@media (forced-colors: active) {
+    :is(.cdrrmo-incidents, .cdrrmo-incidents-overlay) :focus-visible { outline: 2px solid Highlight !important; outline-offset: -2px; }
+}

@@ -76,3 +76,19 @@ Scope: `/cdrrmo/`. WorkspaceDashboardController and existing CDRRMO authorizatio
 | CRUD | Existing mapReportContext and CDRRMO report endpoints | Preserve area context before opening existing report preview; keep active-incident and polygon prerequisites; no lifecycle changes | CdrrmoWorkspaceTest and existing report tests |
 
 The existing period and assessment-status query controls are preserved. WorkspaceDashboardController currently uses incident and barangay for its summary/review queries; broader server filtering is outside this visual change. Registry-wide verification and consolidated totals retain their existing scope and now show scope captions.
+
+## CDRRMO incident registry
+
+Scope: `/cdrrmo/incidents`. `app/Http/Controllers/Cdrrmo/IncidentController.php`, resident report eligibility rules in `docs/resident-report-flow.md`, and `tests/Feature/IncidentApiTest.php` own lifecycle, association, permission, and Philippine-time behavior. This redesign does not change those rules.
+
+| Capability | Canonical owner | Contract | Verification |
+| --- | --- | --- | --- |
+| Select/Listbox and menus | PrimeVue Select and Menu | Authored overlays with library keyboard, Escape, outside dismissal, and option highlighting; associated labels; scoped ring-free focus borders/fills | Headless popup width, keyboard, menu, and focus checks |
+| Date | PrimeVue DatePicker and shared/ui/dates.js | Calendar and 24-hour time controls; select through picker rather than the installed library's broken 24-hour text parser; preserve Philippine wall-clock values in API payloads | Headless calendar and form payload checks; IncidentApiTest |
+| Form | PrimeVue InputText, Select, Textarea, Checkbox, and Dialog | Preserve field order; required-field and server errors stay associated with controls; first invalid field receives focus; values survive failures; duplicate saves blocked; unsaved changes use an app-owned discard dialog | Headless validation, retry, create/edit, and discard checks |
+| Table and list state | IncidentTable, useIncidentRegistry, Vue Router | Server pagination at 10/25/50 rows; latest occurrence first; committed search, filters, page, and page size in URL; clamp out-of-range pages; retain loaded geometry during refresh; ignore/cancel superseded fetches | Headless pagination, query, stale, empty, failure, and recovery checks |
+| Search | IncidentFilters | Debounce 300ms; IME composition suppresses requests; Enter and clear commit immediately; clear restores input focus | Headless search and clear checks |
+| CRUD and status | IncidentController, IncidentFormDialog, IncidentStatusDialog | Save returns to current list and refreshes its scope. Close/reopen requires explicit confirmation. Preserve server errors and confirm_close payload. Closing never approves/completes reports. | IncidentApiTest; headless mocked mutation checks |
+| Overlays and feedback | PrimeVue Dialog/Drawer, shared MaprFeedbackHost | Library modal focus trap, Escape, scroll lock; restore trigger focus; details include retry; success uses shared Toast; persistent errors remain inline | Headless details, confirmation, focus, and error checks |
+| Scrollbar and layout | Shared workspace baseline; incidents.css geometry | Document scroll, bounded table horizontal overflow, modal body scroll with visible footer; compact desktop and stacked phone filters | Headless narrow viewport and modal checks |
+| Focus | incidents.css | No outer focus rings on incident fields, selects, buttons, or overlays. Preserve blue borders, tonal backgrounds, underlined actions, and checked state. Forced-colors keeps system focus. | Computed-style and keyboard checks |
