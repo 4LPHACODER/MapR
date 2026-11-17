@@ -1,7 +1,7 @@
 ---
 version: alpha
 name: MapR
-description: Resident navigation for Tandag City's disaster reporting workspace
+description: Shared workspace navigation for Tandag City's disaster reporting workspace
 colors:
   primary: '#2563eb'
   navy: '#123b70'
@@ -38,7 +38,7 @@ A quiet civic mapping workspace: legible blue navigation, precise alignment, and
 
 MapR supports disaster reporting and assessment in Tandag City, Philippines. The Resident workspace helps residents submit photos, track reports, and consult hazard maps (README.md and docs/resident-report-flow.md). This is product UI, with English labels matching existing routes. Desktop uses a sidebar, tablets an icon rail, and phones bottom navigation. Preserve the established Roboto typography and blue identity; avoid promotional decoration inside working screens.
 
-Runtime CSS remains canonical. This document mirrors existing resident tokens and the sidebar and header overlay decisions. Token mapping: resources/css/resident/app.css `.resident-app` variables → desktop media rules → ResidentSidebar.vue, ResidentHeader.vue, and ResidentLayout.vue. The resident header uses the maintained PrimeVue Popover for anchored geometry and dismissal; its resident-specific view and class tokens live beside the resident shell styles. Shared workspace CSS owns the separate staff shells; their dimensions are not redefined here.
+Runtime CSS remains canonical. This document mirrors existing resident tokens and the sidebar and header overlay decisions. Token mapping: resources/css/shared/layout.css `.resident-app` variables → desktop media rules → shared WorkspaceSidebar.vue, WorkspaceHeader.vue, and WorkspaceLayout.vue. Resident page styles in resources/css/resident/app.css consume those shell variables. The resident header uses the maintained PrimeVue Popover for anchored geometry and dismissal; its resident-specific view and class tokens live beside the resident shell styles. All authenticated Vue workspaces use this resident-based shell. resources/js/shared/navigation.js owns role-specific destinations, while each App retains its existing domain providers. Shared workspace CSS continues to own staff page components.
 
 ## Colors
 
@@ -137,4 +137,5 @@ Keep established route labels and plain action verbs. The sidebar adds no charts
 - Keep navigation compact and preserve icon coordinates across both states.
 - Reuse resident color and motion variables rather than duplicating timing values.
 - Do not unmount labels or the account footer during collapse.
-- Do not change staff navigation or mobile reporting workflows as part of this resident redesign.
+- Keep role-specific destinations, badges, and reporting permissions in the shared navigation configuration; preserve the resident mobile reporting action.
+- Staff mobile navigation opens a PrimeVue Drawer with library-owned focus trapping, Escape, outside dismissal, and focus restoration.

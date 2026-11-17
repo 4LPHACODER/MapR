@@ -1,29 +1,30 @@
 <script setup>
-import { inject, onMounted, ref, watch } from 'vue';
+import { ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import Button from 'primevue/button';
 import Popover from 'primevue/popover';
-import MapIcon from '../../shared/components/MapIcon.vue';
-import ResidentAvatar from './ResidentAvatar.vue';
-import ResidentReportButton from './ResidentReportButton.vue';
-import { residentAccount } from '../accountState';
+import MapIcon from './MapIcon.vue';
+import UserAvatar from './UserAvatar.vue';
 
 defineProps({
+    label: { type: String, default: 'Resident' },
+    photoUrl: { type: String, default: '' },
+    attention: { type: Array, default: null },
+    showMobileMenu: { type: Boolean, default: false },
+    mobileOpen: { type: Boolean, default: false },
     title: { type: String, default: '' },
     collapsed: { type: Boolean, default: false },
     userName: { type: String, default: '' },
     userEmail: { type: String, default: '' },
 });
 
-defineEmits(['toggle-collapse']);
+defineEmits(['toggle-collapse', 'open-menu']);
 
-const apiBase = inject('apiBase');
 const route = useRoute();
 const notesOpen = ref(false);
 const accountOpen = ref(false);
 const notificationsPopover = ref(null);
 const accountPopover = ref(null);
-const attention = ref([]);
 
 function togglePopover(popover, event) {
     popover?.toggle(event);
@@ -44,19 +45,9 @@ function popoverPassThrough(id, labelledBy) {
     };
 }
 
-async function load() {
-    try {
-        attention.value = (await window.axios.get(`${apiBase}/dashboard`)).data.attention || [];
-    } catch {
-        attention.value = [];
-    }
-}
-
-onMounted(load);
 watch(() => route.fullPath, () => {
     closePopover(notificationsPopover.value);
     closePopover(accountPopover.value);
-    load();
 });
 </script>
 
@@ -70,17 +61,21 @@ watch(() => route.fullPath, () => {
                 text
                 :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
                 :aria-expanded="!collapsed"
-                aria-controls="resident-sidebar"
+                aria-controls="workspace-sidebar"
                 :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
                 @click="$emit('toggle-collapse')"
             >
                 <template #icon="{ class: iconClass }"><MapIcon name="panel" :class="iconClass" /></template>
             </Button>
+            <Button v-if="showMobileMenu" class="workspace-menu-trigger" type="button" severity="secondary" text
+                aria-label="Open navigation menu" aria-controls="workspace-mobile-sidebar" :aria-expanded="mobileOpen" @click="$emit('open-menu')">
+                <template #icon="{ class: iconClass }"><MapIcon name="panel" :class="iconClass" /></template>
+            </Button>
             <h1>{{ title }}</h1>
         </div>
         <div class="resident-header-tools">
-            <ResidentReportButton />
-            <div class="resident-notify">
+            <slot name="actions" />
+            <div v-if="attention" class="resident-notify">
                 <Button
                     type="button"
                     class="resident-notify-trigger p-0"
@@ -144,12 +139,12 @@ watch(() => route.fullPath, () => {
                     severity="secondary"
                     variant="outlined"
                     rounded
-                    :aria-label="`Account menu for ${userName || 'resident'}`"
+                    :aria-label="`Account menu for ${userName || label}`"
                     aria-controls="resident-account-popover"
                     :aria-expanded="accountOpen"
                     @click="togglePopover(accountPopover, $event)"
                 >
-                    <ResidentAvatar :name="userName" :src="residentAccount.photoUrl || ''" />
+                    <UserAvatar :name="userName" :src="photoUrl" />
                 </Button>
                 <Popover
                     ref="accountPopover"
@@ -160,10 +155,10 @@ watch(() => route.fullPath, () => {
                 >
                     <section class="resident-header-popover-view" aria-labelledby="resident-account-heading">
                         <header class="resident-account-summary">
-                            <ResidentAvatar :name="userName" :src="residentAccount.photoUrl || ''" />
+                            <UserAvatar :name="userName" :src="photoUrl" />
                             <div class="resident-account-summary-copy">
-                                <h2 id="resident-account-heading">{{ userName || 'Resident' }}</h2>
-                                <span>{{ userEmail || 'MapR resident' }}</span>
+                                <h2 id="resident-account-heading">{{ userName || label }}</h2>
+                                <span>{{ userEmail || `MapR ${label}` }}</span>
                             </div>
                         </header>
                         <router-link class="resident-header-profile-link" to="/profile" @click="closePopover(accountPopover)">
