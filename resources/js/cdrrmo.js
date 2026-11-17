@@ -16,6 +16,7 @@ import '../css/shared/workspace.css';
 import '../css/cdrrmo/dashboard.css';
 import '../css/cdrrmo/map.css';
 import '../css/cdrrmo/incidents.css';
+import '../css/cdrrmo/residents.css';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 
