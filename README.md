@@ -256,6 +256,20 @@ The alias does not install dependencies or run migrations. Without the source da
 php artisan mapr:bootstrap-local-data --skip-import
 ```
 
+To add Resident Report samples for `resident.demo@mapr.test`, covering all five stored statuses and all six tracking labels (including assessor review, CDRRMO review, and finalized), run after `db:seed`:
+
+```bash
+php artisan db:seed --class=ResidentReportSeeder
+```
+
+For the Docker setup, run it inside the app container:
+
+```bash
+docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml exec app php artisan db:seed --class=ResidentReportSeeder
+```
+
+This seeder runs only in local or testing environments. It creates eight reports and their tracking links, preserves existing samples on reruns, and does not create photos or signatures. If the standard demo account does not exist, it uses `resident@mapr.test`. Reports appear only in the owning resident's Dashboard and My Reports.
+
 ### 5. Start development servers
 
 ```bash

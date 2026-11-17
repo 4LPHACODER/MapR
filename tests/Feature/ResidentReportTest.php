@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\Auth\User;
 use App\Services\ResidentReportDocument;
 use App\Services\ResidentReportWorkflow;
+use Database\Seeders\ResidentDemoSeeder;
+use Database\Seeders\ResidentReportSeeder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\UploadedFile;
@@ -23,6 +25,97 @@ class ResidentReportTest extends TestCase
         parent::setUp();
         $this->createMaprAuthSchema();
         $this->createReportTables();
+    }
+
+    public function test_resident_report_seeder_covers_every_status_and_tracking_label_without_resetting_reports(): void
+    {
+        Schema::table('disaster_incidents', function (Blueprint $table) {
+            $table->unsignedBigInteger('created_by');
+        });
+        Schema::table('disaster_barangays', function (Blueprint $table) {
+            $table->timestamps();
+            $table->unique(['disaster_incident_id', 'barangay_id']);
+        });
+        Schema::table('field_assessments', function (Blueprint $table) {
+            $table->dateTime('submitted_at')->nullable();
+        });
+        Schema::create('consolidated_reports', function (Blueprint $table) {
+            $table->id();
+            $table->string('report_reference')->unique();
+            $table->text('report_summary')->nullable();
+            $table->string('report_status');
+            $table->dateTime('finalized_at')->nullable();
+            $table->unsignedBigInteger('disaster_incident_id');
+            $table->unsignedBigInteger('prepared_by');
+            $table->timestamps();
+        });
+        Schema::create('consolidated_report_assessments', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('consolidated_report_id');
+            $table->unsignedBigInteger('field_assessment_id');
+            $table->timestamps();
+            $table->unique(['consolidated_report_id', 'field_assessment_id']);
+        });
+        // Match the MySQL history guard: finalized reports cannot gain assessment links.
+        DB::unprepared(<<<'SQL'
+CREATE TRIGGER guard_consolidated_assessment_insert
+BEFORE INSERT ON consolidated_report_assessments
+WHEN EXISTS (SELECT 1 FROM consolidated_reports WHERE id = NEW.consolidated_report_id AND report_status IN ('signed', 'finalized'))
+BEGIN
+    SELECT RAISE(ABORT, 'Signed report items are immutable');
+END;
+SQL);
+        $home = $this->barangay('Mabua');
+        $this->user('bdrrm', 'Demo Reviewer', $home);
+        $this->user('rdana', 'Demo Assessor', $home);
+        $this->user('cdrrmo_admin', 'Demo Admin', null);
+
+        $this->seed(ResidentReportSeeder::class);
+
+        $this->assertEqualsCanonicalizing(
+            ['draft', 'submitted', 'under_review', 'reviewed', 'returned'],
+            DB::table('resident_incident_reports')->distinct()->pluck('report_status')->all(),
+        );
+        $resident = User::query()->where('email', ResidentDemoSeeder::EMAIL)->firstOrFail();
+        $reports = collect($this->actingAs($resident)->getJson('/resident/api/reports')->assertOk()->json('data'))->keyBy('reference');
+        foreach ([
+            'DRAFT' => 'Draft',
+            'SUBMITTED' => 'Pending BDRRM Review',
+            'UNDER_REVIEW' => 'Pending BDRRM Review',
+            'RETURNED' => 'Needs Correction',
+            'REVIEWED' => 'Pending BDRRM Review',
+            'ASSESSOR' => 'Pending Assessor Review',
+            'CDRRMO' => 'Pending CDRRMO Review',
+            'FINALIZED' => 'Finalized',
+        ] as $scenario => $label) {
+            $this->assertSame($label, $reports['RR-DEMO-'.$scenario]['label']);
+            $this->assertTrue($reports['RR-DEMO-'.$scenario]['has_point']);
+        }
+        $this->assertNotEmpty($reports['RR-DEMO-RETURNED']['return_reason']);
+        DB::table('resident_incident_reports')->where('report_reference', 'RR-DEMO-DRAFT')->update(['incident_description' => 'Edited sample']);
+        $this->seed(ResidentReportSeeder::class);
+        $this->assertDatabaseHas('resident_incident_reports', ['report_reference' => 'RR-DEMO-DRAFT', 'incident_description' => 'Edited sample']);
+        $this->assertDatabaseCount('resident_incident_reports', 8);
+        $this->assertDatabaseCount('barangay_reports', 4);
+        $this->assertDatabaseCount('field_assessments', 3);
+        $this->assertDatabaseCount('consolidated_reports', 1);
+        $this->assertDatabaseCount('consolidated_report_assessments', 1);
+        $this->assertDatabaseCount('disaster_incidents', 1);
+        $this->assertDatabaseCount('disaster_barangays', 1);
+
+        $standardDemo = $this->user('resident', 'Standard Demo', $home);
+        $standardDemo->forceFill(['email' => 'resident.demo@mapr.test'])->save();
+        $this->seed(ResidentReportSeeder::class);
+        $this->seed(ResidentReportSeeder::class);
+
+        $demoReports = $this->actingAs($standardDemo)->getJson('/resident/api/reports')->assertOk()->json('data');
+        $this->assertCount(8, $demoReports);
+        $this->assertEqualsCanonicalizing(
+            ['Draft', 'Pending BDRRM Review', 'Needs Correction', 'Pending Assessor Review', 'Pending CDRRMO Review', 'Finalized'],
+            collect($demoReports)->pluck('label')->unique()->values()->all(),
+        );
+        $this->assertDatabaseCount('resident_incident_reports', 16);
+        $this->assertSame(8, DB::table('resident_incident_reports')->where('resident_user_id', $resident->id)->count());
     }
 
     public function test_residents_manage_only_their_own_reports_and_cannot_set_official_fields(): void
