@@ -57,3 +57,22 @@ Scope: Resident, BDRRM (including secretary/captain), Assessor, and CDRRMO Vue w
 - BDRRM resident records remain visible only to secretary/captain roles. Badge data retains the existing role endpoints, refresh event, and server-defined meaning. Failed badge requests leave links usable; stale responses are ignored.
 - Each entry point uses the existing installPrimeVue provider and shared feedback host. Route changes close disclosures, refresh badges, and update the document title. Wizard keyboard handling remains resident-scoped.
 - Navigation verification: `node --test tests/js/workspace-navigation.test.mjs`; production build verifies every workspace entry point.
+
+
+## CDRRMO dashboard
+
+Scope: `/cdrrmo/`. WorkspaceDashboardController and existing CDRRMO authorization remain authoritative for available incidents, submitted assessments, totals, registry caveats, and report-preparation eligibility. This redesign does not change lifecycle or server filtering rules.
+
+| Capability | Canonical owner | Contract | Verification |
+| --- | --- | --- | --- |
+| Select/Listbox | PrimeVue Select | Small authored incident, barangay, and status controls; library keyboard/Escape/selection; dashboard-scoped overlays | Browser popup, keyboard, mobile checks |
+| Date | PrimeVue DatePicker and shared/ui/dates.js | Small date-only fields; local date conversion; explicit start/end labels; bounded authored calendar | Browser calendar and narrow viewport |
+| Form and filter state | DashboardFilters, DashboardPage, Vue Router | Existing filter parameters persist in URL; route restoration loads current scope; cancel superseded dashboard requests; preserve previous data and map during refresh failures; Retry remains available | Browser filter URL and refresh failure/retry |
+| Map | Shared MapWorkspace and AreaSummaryPanel, compact variant | Dashboard incident and barangay own map scope; retain draw/edit/clear, layer toggles, summary, source caveats, and report actions; PrimeVue owns map controls; pointer layer disclosure uses interruptible 200/150ms motion, keyboard is instant, reduced motion is a 100ms fade, closing content becomes inert immediately | Browser map/layers/search clear, existing map tests |
+| Review ledger | PrimeVue DataTable and Column | Server supplies at most twenty oldest submitted assessments; display five per local page, preserve server order, link to existing field-report reference filter, show empty state and full-list destination | Browser pagination/empty/navigation |
+| Activity | DashboardActivity | Preserve server ordering and bounded preview, expose actor/action/Manila time; scroll within panel and link to activity log | Browser long/empty content |
+| Feedback | PrimeVue Message and ProgressSpinner | Reserved initial loading region; inline request/preparation failures; duplicate preparation blocked; map area preserved after preparation failure | Browser loading/failure/retry |
+| Scrollbar and focus | Shared workspace.css and dashboard.css | Shared global scrollbar baseline; dashboard density and focus exception documented in DESIGN.md; no outer rings on focused inputs, Select wrappers, Checkbox boxes, or popup controls; border/fill/underline/tonal focus feedback; natural document scrolling | Browser computed wrapper/input style and overflow |
+| CRUD | Existing mapReportContext and CDRRMO report endpoints | Preserve area context before opening existing report preview; keep active-incident and polygon prerequisites; no lifecycle changes | CdrrmoWorkspaceTest and existing report tests |
+
+The existing period and assessment-status query controls are preserved. WorkspaceDashboardController currently uses incident and barangay for its summary/review queries; broader server filtering is outside this visual change. Registry-wide verification and consolidated totals retain their existing scope and now show scope captions.

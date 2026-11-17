@@ -1,6 +1,10 @@
 <script setup>
 import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import Button from 'primevue/button';
+import Checkbox from 'primevue/checkbox';
+import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
 import mapboxgl from 'mapbox-gl';
 import MapboxDraw from '@mapbox/mapbox-gl-draw';
 import AreaSummaryPanel from './AreaSummaryPanel.vue';
@@ -10,6 +14,7 @@ import MapActionsMenu from '../../bdrrm/components/MapActionsMenu.vue';
 import { createCommunityLayers } from '../../bdrrm/communityLayers.js';
 
 const props = defineProps({
+    compact: { type: Boolean, default: false },
     embedded: { type: Boolean, default: false },
     apiBase: { type: String, default: '/cdrrmo/api' },
     allowImpact: { type: Boolean, default: true },
@@ -39,6 +44,12 @@ const incidents = ref([]);
 const selectedBarangay = ref(props.preview ? String(props.barangayId || '') : (route.query.barangay_id || ''));
 const selectedIncident = ref(route.query.incident_id || '');
 const searchRef = ref(route.query.search || '');
+const searchInput = ref(null);
+function clearMapSearch() {
+    searchRef.value = '';
+    searchOpen.value = false;
+    searchInput.value?.$el?.focus();
+}
 const searchOpen = ref(false);
 const layersOpen = ref(false);
 const layers = ref({
@@ -907,6 +918,57 @@ function runMapAction(command) {
     else if (command === 'filters') clearFilters();
 }
 
+// Layer disclosure is the compact map's occasional state transition.
+// Filters, keyboard toggles, and default-density map instances stay instant.
+let animateLayers = false;
+let layerAnimation;
+
+function toggleLayers(event) {
+    animateLayers = props.compact && event.detail > 0;
+    layersOpen.value = !layersOpen.value;
+}
+
+function prepareLayerMotion(element) {
+    const height = element.getBoundingClientRect().height;
+    const opacity = height ? getComputedStyle(element).opacity : '0';
+    if (layerAnimation) {
+        layerAnimation.onfinish = null;
+        layerAnimation.cancel();
+        layerAnimation = null;
+    }
+    element.style.height = `${height}px`;
+    element.style.opacity = opacity;
+}
+
+function transitionLayers(element, done, opening) {
+    if (!animateLayers || !element.animate) {
+        element.style.height = '';
+        element.style.opacity = '';
+        done();
+        return;
+    }
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const styles = getComputedStyle(element);
+    const content = element.firstElementChild;
+    const targetHeight = content.getBoundingClientRect().height + parseFloat(getComputedStyle(content).marginBottom);
+    if (reduced) element.style.height = '';
+    const frames = reduced
+        ? [{ opacity: element.style.opacity }, { opacity: opening ? 1 : 0 }]
+        : [{ height: element.style.height, opacity: element.style.opacity }, { height: `${opening ? targetHeight : 0}px`, opacity: opening ? 1 : 0 }];
+    const durationToken = reduced ? '--cdrrmo-dash-motion-reduced' : opening ? '--cdrrmo-dash-motion-expand' : '--cdrrmo-dash-motion-collapse';
+    const animation = element.animate(frames, {
+        duration: parseFloat(styles.getPropertyValue(durationToken)),
+        easing: styles.getPropertyValue('--resident-sidebar-ease').trim(),
+    });
+    layerAnimation = animation;
+    animation.onfinish = () => {
+        layerAnimation = null;
+        element.style.height = '';
+        element.style.opacity = '';
+        done();
+    };
+}
+
 function onKeydown(event) {
     if (event.key !== 'Escape') return;
     if (actionsOpen.value) return;
@@ -915,6 +977,7 @@ function onKeydown(event) {
         return;
     }
     if (layersOpen.value) {
+        animateLayers = false;
         layersOpen.value = false;
         return;
     }
@@ -982,6 +1045,11 @@ watch(() => props.barangayId, (value) => {
     previewShouldFit = true;
     selectedBarangay.value = value ? String(value) : '';
 });
+watch(() => [route.query.incident_id, route.query.barangay_id], ([incidentId, barangayId]) => {
+    if (!props.compact) return;
+    selectedIncident.value = typeof incidentId === 'string' ? incidentId : '';
+    selectedBarangay.value = typeof barangayId === 'string' ? barangayId : '';
+});
 watch(selectedBarangay, async () => {
     const ticket = ++barangayTicket;
     if (props.preview) previewShouldFit = true;
@@ -1023,6 +1091,7 @@ watch(() => route.query.building_id, (buildingId) => {
 watch(() => reportContext.state.coordinates, () => refreshOutsideFlag());
 
 onBeforeUnmount(() => {
+    layerAnimation?.cancel();
     clearTimeout(searchTimer);
     resizeObserver?.disconnect();
     window.removeEventListener('keydown', onKeydown);
@@ -1032,45 +1101,41 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="map-workspace" :class="{ 'is-embedded': embedded, 'is-preview': preview, 'community-open': communityOpen }">
+    <div class="map-workspace" :class="{ 'is-compact': compact, 'is-embedded': embedded, 'is-preview': preview, 'community-open': communityOpen }">
         <div v-if="preview" class="map-preview-tools">
-            <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" @click="resetPreview"><MapIcon name="reset" /> Reset view</button>
+            <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" @click="resetPreview"><MapIcon name="reset" /> Reset view</Button>
         </div>
         <div v-else class="map-toolbar">
             <div class="map-toolbar-group">
-                <span class="map-toolbar-label">Filters</span>
+                <span class="map-toolbar-label">{{ compact ? 'Map view' : 'Filters' }}</span>
                 <div class="map-mode-toggle" role="group" aria-label="Basemap">
-                    <button type="button" :class="{ 'is-active': mapStyleMode === 'satellite' }" @click="switchMapStyle('satellite')">Satellite</button>
-                    <button type="button" :class="{ 'is-active': mapStyleMode === 'streets' }" @click="switchMapStyle('streets')">Map</button>
+                    <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" :aria-pressed="mapStyleMode === 'satellite'" :class="{ 'is-active': mapStyleMode === 'satellite' }" @click="switchMapStyle('satellite')">Satellite</Button>
+                    <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" :aria-pressed="mapStyleMode === 'streets'" :class="{ 'is-active': mapStyleMode === 'streets' }" @click="switchMapStyle('streets')">Map</Button>
                 </div>
-                <select v-model="selectedIncident" aria-label="Incident or registry view">
-                    <option value="">Registry view</option>
-                    <option v-for="inc in incidents" :key="inc.id" :value="String(inc.id)">{{ inc.incident_name }}</option>
-                </select>
-                <select v-model="selectedBarangay" aria-label="Barangay">
-                    <option value="">{{ barangayEmptyLabel }}</option>
-                    <option v-for="b in barangays" :key="b.id" :value="String(b.id)">{{ b.name }}</option>
-                </select>
+                <Select v-if="!compact" v-model="selectedIncident" :options="[{ label: 'Registry view (all incidents)', value: '' }, ...incidents.map((row) => ({ label: row.incident_name, value: String(row.id) }))]" option-label="label" option-value="value" aria-label="Incident or registry view" placeholder="Registry view" :size="compact ? 'small' : undefined" :pt="compact ? { transition: { css: false } } : undefined" :panel-class="compact ? 'cdrrmo-dashboard-overlay' : undefined" />
+                <Select v-if="!compact" v-model="selectedBarangay" :options="[{ label: barangayEmptyLabel, value: '' }, ...barangays.map((row) => ({ label: row.name, value: String(row.id) }))]" option-label="label" option-value="value" aria-label="Barangay" :placeholder="barangayEmptyLabel" :size="compact ? 'small' : undefined" :pt="compact ? { transition: { css: false } } : undefined" :panel-class="compact ? 'cdrrmo-dashboard-overlay' : undefined" />
                 <div class="map-search">
-                    <input
+                    <InputText :size="compact ? 'small' : undefined"
+                        ref="searchInput"
                         v-model="searchRef"
                         type="search"
                         placeholder="Household or building reference"
                         aria-label="Search household or building reference"
                         @focus="searchOpen = !!searchRef.trim() && householdFeatures.length > 1"
-                    >
+                    />
+                    <Button v-if="searchRef" :size="compact ? 'small' : undefined" severity="secondary" text type="button" class="map-search-clear" aria-label="Clear map search" @click="clearMapSearch"><MapIcon name="x" /></Button>
                     <ul v-if="searchOpen && searchRef.trim() && searchMatches.length" class="map-search-results" @mousedown.prevent>
                         <li v-for="feature in searchMatches" :key="feature.properties.household_id">
-                            <button type="button" @click="chooseSearchFeature(feature)">
+                            <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" @click="chooseSearchFeature(feature)">
                                 {{ feature.properties.household_reference }}
                                 <span v-if="feature.properties.building_reference"> · {{ feature.properties.building_reference }}</span>
-                            </button>
+                            </Button>
                         </li>
                         <li v-if="householdFeatures.length > searchMatches.length" class="cdrrmo-muted">Showing {{ searchMatches.length }} of {{ householdFeatures.length }} matches.</li>
                     </ul>
                 </div>
                 <label class="map-inline-check" :class="{ 'is-disabled': !selectedIncident }">
-                    <input v-model="incidentLinkedOnly" type="checkbox" :disabled="!selectedIncident">
+                    <Checkbox v-model="incidentLinkedOnly" binary :size="compact ? 'small' : undefined" :disabled="!selectedIncident" />
                     Incident-linked records only
                 </label>
             </div>
@@ -1086,28 +1151,47 @@ onBeforeUnmount(() => {
             </div>
             <div v-else class="map-toolbar-group">
                 <span class="map-toolbar-label">Map actions</span>
-                <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" @click="startDraw"><MapIcon name="polygon" /> Draw area</button>
-                <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" :disabled="!hasPolygon" @click="editDraw"><MapIcon name="pencil" /> Edit area</button>
-                <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" :disabled="!hasPolygon" @click="clearPolygon"><MapIcon name="eraser" /> Clear area</button>
-                <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" :disabled="!hasPolygon" @click="fitToSelection"><MapIcon name="focus" /> Fit to area</button>
-                <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" :aria-expanded="layersOpen" @click="layersOpen = !layersOpen"><MapIcon name="layers" /> Layers</button>
-                <button v-if="community" type="button" class="mapr-button mapr-button-secondary map-tool-btn" :aria-expanded="communityOpen" @click="communityOpen = !communityOpen"><MapIcon name="layers" /> Hazard map</button>
-                <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" @click="resetStudyArea"><MapIcon name="reset" /> Reset view</button>
-                <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" @click="clearFilters"><MapIcon name="filter-reset" /> Clear filters</button>
+                <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" @click="startDraw"><MapIcon name="polygon" /> Draw area</Button>
+                <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" :disabled="!hasPolygon" @click="editDraw"><MapIcon name="pencil" /> Edit area</Button>
+                <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" :disabled="!hasPolygon" @click="clearPolygon"><MapIcon name="eraser" /> Clear area</Button>
+                <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" :disabled="!hasPolygon" @click="fitToSelection"><MapIcon name="focus" /> Fit to area</Button>
+                <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" :aria-expanded="layersOpen" :aria-controls="compact ? 'cdrrmo-dashboard-map-layers' : undefined" @click="toggleLayers"><MapIcon name="layers" /> Layers</Button>
+                <Button :size="compact ? 'small' : undefined" severity="secondary" outlined v-if="community" type="button" class="map-tool-btn" :aria-expanded="communityOpen" @click="communityOpen = !communityOpen"><MapIcon name="layers" /> Hazard map</Button>
+                <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" @click="resetStudyArea"><MapIcon name="reset" /> Reset view</Button>
+                <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" class="map-tool-btn" @click="clearFilters"><MapIcon name="filter-reset" /> Clear filters</Button>
             </div>
         </div>
-        <div v-if="!preview && layersOpen" class="cdrrmo-filters layer-panel">
-            <label><input v-model="layers.boundaries" type="checkbox"> Barangay boundaries</label>
-            <label><input v-model="layers.households" type="checkbox"> Source-recorded households</label>
-            <label><input v-model="layers.flood" type="checkbox"> Flood hazard (historical)</label>
-            <label><input v-model="layers.fieldDamage" type="checkbox"> Field-verified damage</label>
-            <label><input v-model="layers.aiPredictions" type="checkbox"> Preliminary AI classification</label>
-            <label v-if="residentSubmissions"><input v-model="layers.residentSubmissions" type="checkbox"> Resident-reported points (not field verified)</label>
-        </div>
+        <Transition
+            :css="false"
+            @before-enter="prepareLayerMotion"
+            @enter="(element, done) => transitionLayers(element, done, true)"
+            @enter-cancelled="prepareLayerMotion"
+            @before-leave="prepareLayerMotion"
+            @leave="(element, done) => transitionLayers(element, done, false)"
+            @leave-cancelled="prepareLayerMotion"
+        >
+            <div
+                v-if="!preview"
+                v-show="layersOpen"
+                :id="compact ? 'cdrrmo-dashboard-map-layers' : undefined"
+                class="map-layer-disclosure"
+                :inert="!layersOpen"
+                :aria-hidden="!layersOpen"
+            >
+                <div class="cdrrmo-filters layer-panel">
+                    <label><Checkbox v-model="layers.boundaries" binary :size="compact ? 'small' : undefined" /> Barangay boundaries</label>
+                    <label><Checkbox v-model="layers.households" binary :size="compact ? 'small' : undefined" /> Source-recorded households</label>
+                    <label><Checkbox v-model="layers.flood" binary :size="compact ? 'small' : undefined" /> Flood hazard (historical)</label>
+                    <label><Checkbox v-model="layers.fieldDamage" binary :size="compact ? 'small' : undefined" /> Field-verified damage</label>
+                    <label><Checkbox v-model="layers.aiPredictions" binary :size="compact ? 'small' : undefined" /> Preliminary AI classification</label>
+                    <label v-if="residentSubmissions"><Checkbox v-model="layers.residentSubmissions" binary :size="compact ? 'small' : undefined" /> Resident-reported points (not field verified)</label>
+                </div>
+            </div>
+        </Transition>
         <p v-if="loading">Loading map layers…</p>
         <p v-if="error" class="cdrrmo-error">
             {{ error }}
-            <button v-if="preview" type="button" class="mapr-button mapr-button-secondary map-tool-btn" @click="refreshLayers">Retry</button>
+            <Button :size="compact ? 'small' : undefined" severity="secondary" outlined v-if="preview" type="button" class="map-tool-btn" @click="refreshLayers">Retry</Button>
         </p>
         <div class="map-layout">
             <div class="map-canvas-wrap">
@@ -1119,6 +1203,7 @@ onBeforeUnmount(() => {
             </div>
             <AreaSummaryPanel
                 v-if="!preview || selection.featureType === 'resident-report'"
+                :compact="compact"
                 :resident-reports="residentSubmissions"
                 :summary="summary"
                 :summary-loading="summaryLoading"

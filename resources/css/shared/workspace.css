@@ -424,6 +424,7 @@
 .picker-row { display: block; width: 100%; margin-bottom: 0.5rem; }
 .map-legend { margin-top: 0.5rem; font-size: 0.8125rem; }
 .layer-panel { margin-bottom: 0.75rem; }
+.map-layer-disclosure { overflow: hidden; }
 .cdrrmo-area-banner {
     display: flex;
     flex-wrap: wrap;
@@ -1079,3 +1080,9 @@ dl.resident-fields > div { display: grid; grid-template-columns: 9.5rem minmax(0
     .report-document-page, .report-document-layout, .report-viewer, .report-viewer-host { display: block; overflow: visible; height: auto; background: #fff; border: 0; }
     .report-sheet { box-shadow: none; break-after: page; }
 }
+
+/* PrimeVue owns map controls; preserve the map toolbar's established geometry. */
+.map-toolbar-group > .p-select { min-width: 10rem; max-width: 100%; }
+.map-search-clear { position: absolute; top: 2px; right: 2px; }
+.map-search:has(.map-search-clear) .p-inputtext { padding-right: 3rem; }
+.map-inline-check .p-checkbox, .layer-panel .p-checkbox { flex: 0 0 auto; }
