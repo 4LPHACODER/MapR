@@ -297,12 +297,15 @@
     }
     .resident-sidebar nav {
         display: flex;
-        flex: none;
+        flex: 1 1 auto;
         flex-direction: column;
         gap: 0.25rem;
+        min-height: 0;
+        overflow: hidden auto;
         padding: 1rem 0.75rem;
     }
     .resident-nav-heading {
+        flex: none;
         height: 1rem;
         margin: 0 0 0.5rem;
         padding-left: 0.875rem;

@@ -650,7 +650,7 @@ onBeforeUnmount(() => {
         </div>
         <p v-else-if="error" class="cdrrmo-error" role="alert">{{ error }} <button type="button" class="resident-action resident-action-secondary" @click="reloadAll">Retry</button></p>
         <p v-else-if="!pageRows.length && page?.meta?.total === 0 && !page?.meta?.registry_loaded">
-            Registry not loaded. Run <code>php artisan mapr:bootstrap-local-data</code> after migrate and seed.
+            Registry not loaded. Run <code>php artisan mapr:import-geospatial</code> after migrate and seed.
         </p>
         <p v-else-if="!pageRows.length">No authorized resident records match these filters.</p>
 

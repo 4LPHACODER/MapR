@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\Auth\Role;
 use App\Models\Auth\User;
-use Database\Seeders\RoleSeeder;
 use Illuminate\Support\Facades\Hash;
 use Tests\Support\CreatesMaprAuthSchema;
 use Tests\TestCase;
@@ -16,7 +16,7 @@ class ProvisionAdminCommandTest extends TestCase
     {
         parent::setUp();
         $this->createMaprAuthSchema();
-        $this->seed(RoleSeeder::class);
+        Role::query()->create(['code' => 'cdrrmo_admin', 'name' => 'CDRRMO Administrator']);
     }
 
     public function test_provisioned_admin_can_login_and_access_cdrrmo(): void

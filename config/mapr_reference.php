@@ -101,34 +101,4 @@ return [
         ],
     ],
 
-    'barangay_captains' => [
-        '166819002' => 'Hon. Luis F. Maquiling',
-        '166819022' => 'Hon. Melanie Joy Momo Guno',
-        '166819008' => 'Hon. Rocky Roger M. Pimentel',
-        '166819005' => 'Hon. Charisse Valentine P. Pineda',
-    ],
-
-    'assessor_verifier' => [
-        'name' => 'Mark L. Merillo',
-        'title' => 'Administrative Officer III',
-    ],
-
-    'assessor_approver' => [
-        'name' => 'Engr. Lovy R. Dedicatoria',
-        'title' => 'LAOO II Acting City Assessor',
-    ],
-
-    'signatories' => [
-        'noted_by' => [
-            'name' => 'Lester Lito C. Talan, LPT, MST Sci (CAR)',
-            'title' => 'LDRRMO II',
-            'office' => 'Head, Research & Planning Div.',
-        ],
-        'approved_by' => [
-            'name' => 'Reyveen John B. Geli, RN, DPA',
-            'title' => 'Head, City Disaster Risk Reduction and Management Office (CDRRMO)',
-            'office' => '',
-        ],
-    ],
-
 ];

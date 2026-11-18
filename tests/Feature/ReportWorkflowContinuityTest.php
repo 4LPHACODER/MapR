@@ -5,12 +5,9 @@ namespace Tests\Feature;
 use App\Models\Auth\User;
 use App\Services\ReportAssignmentService;
 use App\Services\ReportWorkflow;
-use Database\Seeders\MapRWorkflowPersonnelSeeder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
-use RuntimeException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\Support\CreatesMaprAuthSchema;
 use Tests\TestCase;
@@ -140,9 +137,9 @@ class ReportWorkflowContinuityTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        $secretary = $this->member('barangay_secretary', 'Leonida Lagunda', $barangay);
+        $secretary = $this->member('barangay_secretary', 'Test Secretary', $barangay);
         $outsider = $this->member('barangay_secretary', 'Other Secretary', $other);
-        $officer = $this->member('bdrrm', 'Jesnard Plaza', $barangay);
+        $officer = $this->member('bdrrm', 'Test Officer', $barangay);
         $replacement = $this->member('bdrrm', 'Peter Salomon', $barangay);
         $submission = DB::table('resident_incident_reports')->insertGetId([
             'report_reference' => 'RIR-ASSIGN',
@@ -190,8 +187,8 @@ class ReportWorkflowContinuityTest extends TestCase
             $this->assertSame(422, $exception->getStatusCode());
         }
 
-        $secretary = $this->member('barangay_secretary', 'Leonida Lagunda', $barangay);
-        $captain = $this->member('barangay_captain', 'Rocky Pimentel', $barangay);
+        $secretary = $this->member('barangay_secretary', 'Test Secretary', $barangay);
+        $captain = $this->member('barangay_captain', 'Test Captain', $barangay);
         $this->signOffice($secretary, '/bdrrm/api/reports/'.$report.'/captain-approve')->assertForbidden();
         $this->signOffice($secretary, '/bdrrm/api/reports/'.$report.'/endorse')->assertOk();
         $this->signOffice($captain, '/bdrrm/api/reports/'.$report.'/captain-approve')->assertOk();
@@ -199,7 +196,7 @@ class ReportWorkflowContinuityTest extends TestCase
         $this->assertSame('handed_to_rdana', DB::table('barangay_reports')->where('id', $report)->value('workflow_stage'));
         $this->assertSame(0, DB::table('field_assessments')->where('barangay_report_id', $report)->count());
 
-        $officer = $this->member('rdana_admin_officer', 'Mark Merillo', $barangay);
+        $officer = $this->member('rdana_admin_officer', 'Test Assessor', $barangay);
         $this->actingAs($officer)->postJson('/rdana/api/barangay-reports/'.$report.'/assign', [
             'assignee_user_id' => $assessor->id,
         ])->assertOk();
@@ -212,7 +209,7 @@ class ReportWorkflowContinuityTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        $cityEarly = $this->member('rdana_city_assessor', 'Lovy Dedicatoria', $barangay);
+        $cityEarly = $this->member('rdana_city_assessor', 'Test City Assessor', $barangay);
         $this->actingAs($cityEarly)->postJson('/rdana/api/assessments/'.$assessmentId.'/forward')->assertStatus(422);
         $this->actingAs($assessor)->postJson('/rdana/api/assessments/'.$assessmentId.'/submit-assessed')->assertOk();
         $this->assertSame(1, DB::table('field_assessments')->count());
@@ -286,8 +283,8 @@ class ReportWorkflowContinuityTest extends TestCase
     public function test_secretary_cannot_endorse_before_the_bdrrm_signature(): void
     {
         [$barangay, $assessor] = $this->office();
-        $secretary = $this->member('barangay_secretary', 'Leonida Lagunda', $barangay);
-        $captain = $this->member('barangay_captain', 'Rocky Pimentel', $barangay);
+        $secretary = $this->member('barangay_secretary', 'Test Secretary', $barangay);
+        $captain = $this->member('barangay_captain', 'Test Captain', $barangay);
         $report = DB::table('barangay_reports')->insertGetId([
             'report_reference' => 'BR-SIGN-ORDER',
             'report_description' => 'Waiting for the reviewer signature.',
@@ -328,17 +325,21 @@ class ReportWorkflowContinuityTest extends TestCase
 
         $this->signOffice($secretary, '/bdrrm/api/reports/'.$report.'/endorse')->assertOk();
         $this->assertSame('pending_captain', DB::table('barangay_reports')->where('id', $report)->value('workflow_stage'));
+        $this->actingAs($captain)->postJson('/bdrrm/api/reports/'.$report.'/sign', [
+            'confirmed' => true,
+            'password' => 'secret-pass',
+        ])->assertForbidden();
         $this->signOffice($captain, '/bdrrm/api/reports/'.$report.'/captain-approve')->assertOk();
     }
 
     public function test_all_prior_signatures_remain_after_captain_endorsement(): void
     {
         [$barangay, $assessor] = $this->office();
-        $admin = $this->member('rdana_admin_officer', 'Mark Merillo', $barangay);
-        $officer = $this->member('bdrrm', 'Jesnard Plaza', $barangay);
-        $secretary = $this->member('barangay_secretary', 'Leonida Lagunda', $barangay);
-        $captain = $this->member('barangay_captain', 'Rocky Pimentel', $barangay);
-        $resident = $this->user('resident', 'Maricar Irizari', $barangay);
+        $admin = $this->member('rdana_admin_officer', 'Test Assessor', $barangay);
+        $officer = $this->member('bdrrm', 'Test Officer', $barangay);
+        $secretary = $this->member('barangay_secretary', 'Test Secretary', $barangay);
+        $captain = $this->member('barangay_captain', 'Test Captain', $barangay);
+        $resident = $this->user('resident', 'Case Rivera', $barangay);
 
         $report = DB::table('barangay_reports')->insertGetId([
             'report_reference' => 'BR-2026-RLNJ8P',
@@ -412,14 +413,14 @@ class ReportWorkflowContinuityTest extends TestCase
         $this->assertNull($assessed['name']);
         $this->assertNull($assessed['image'] ?? null);
         $this->assertSame('Pending endorsement', $assessed['caption']);
-        $this->assertSame('Mark L. Merillo', $verified['name']);
+        $this->assertSame('RDANA Administrative Officer III', $verified['name']);
         $this->assertFalse($verified['signed']);
         $this->assertNull($verified['image'] ?? null);
-        $this->assertSame('Engr. Lovy R. Dedicatoria', $cityNoted['name']);
+        $this->assertSame('City Assessor', $cityNoted['name']);
         $this->assertFalse($cityNoted['signed']);
-        $this->assertSame('Lester Lito C. Talan, LPT, MST Sci (CAR)', $cdrrmoNoted['name']);
+        $this->assertSame('Assigned officer', $cdrrmoNoted['name']);
         $this->assertFalse($cdrrmoNoted['signed']);
-        $this->assertSame('Reyveen John B. Geli, RN, DPA', $cdrrmoApproved['name']);
+        $this->assertSame('Assigned officer', $cdrrmoApproved['name']);
         $this->assertFalse($cdrrmoApproved['signed']);
         $this->assertNull($cdrrmoApproved['image'] ?? null);
 
@@ -440,13 +441,13 @@ class ReportWorkflowContinuityTest extends TestCase
         $this->assertStringContainsString('Assessed by', $preview);
         $this->assertStringContainsString('Verified by', $preview);
         $this->assertStringContainsString('Approved by', $preview);
-        $this->assertStringContainsString('Maricar Irizari', $preview);
-        $this->assertStringContainsString('Leonida Lagunda', $preview);
-        $this->assertStringContainsString('Rocky Pimentel', $preview);
-        $this->assertStringContainsString('Mark L. Merillo', $preview);
-        $this->assertStringContainsString('Engr. Lovy R. Dedicatoria', $preview);
-        $this->assertStringContainsString('Lester Lito C. Talan', $preview);
-        $this->assertStringContainsString('Reyveen John B. Geli', $preview);
+        $this->assertStringContainsString('Case Rivera', $preview);
+        $this->assertStringContainsString('Test Secretary', $preview);
+        $this->assertStringContainsString('Test Captain', $preview);
+        $this->assertStringContainsString('RDANA Administrative Officer III', $preview);
+        $this->assertStringContainsString('City Assessor', $preview);
+        $this->assertStringContainsString('CDRRMO Reviewing Officer', $preview);
+        $this->assertStringContainsString('Head, CDRRMO', $preview);
         $this->assertStringContainsString('Pending endorsement', $preview);
         $this->assertStringNotContainsString('Assigned RDANA assessor', $preview);
 
@@ -472,9 +473,9 @@ class ReportWorkflowContinuityTest extends TestCase
     public function test_bdrrm_personnel_cannot_open_building_records(): void
     {
         [$barangay] = $this->office();
-        $officer = $this->member('bdrrm', 'Jesnard Plaza', $barangay);
-        $secretary = $this->member('barangay_secretary', 'Leonida Lagunda', $barangay);
-        $captain = $this->member('barangay_captain', 'Rocky Pimentel', $barangay);
+        $officer = $this->member('bdrrm', 'Test Officer', $barangay);
+        $secretary = $this->member('barangay_secretary', 'Test Secretary', $barangay);
+        $captain = $this->member('barangay_captain', 'Test Captain', $barangay);
         DB::table('buildings')->insert([
             'building_reference' => 'BLD-DIR',
             'barangay_id' => $barangay,
@@ -488,28 +489,6 @@ class ReportWorkflowContinuityTest extends TestCase
             ->assertJsonMissingPath('data.0.household_count');
         $this->actingAs($secretary)->getJson('/bdrrm/api/buildings')->assertOk();
         $this->actingAs($captain)->getJson('/bdrrm/api/buildings')->assertOk();
-    }
-
-    public function test_personnel_seeder_is_idempotent_and_refuses_production(): void
-    {
-        config(['mapr.demo_password' => 'configured-workflow-password']);
-        DB::table('barangays')->insert([
-            'barangay_code' => '166819008',
-            'barangay_name' => 'Mabua',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-        $this->seed(MapRWorkflowPersonnelSeeder::class);
-        $hash = User::query()->where('email', 'jesnard.plaza@mapr.test')->value('password');
-        $count = User::query()->count();
-        $this->seed(MapRWorkflowPersonnelSeeder::class);
-        $this->assertSame($count, User::query()->count());
-        $this->assertSame($hash, User::query()->where('email', 'jesnard.plaza@mapr.test')->value('password'));
-        $this->assertTrue(Hash::check('configured-workflow-password', $hash));
-
-        $this->app['env'] = 'production';
-        $this->expectException(RuntimeException::class);
-        app(MapRWorkflowPersonnelSeeder::class)->run();
     }
 
     private function office(string $role = 'rdana'): array

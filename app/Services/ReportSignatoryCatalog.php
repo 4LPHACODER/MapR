@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Auth\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -12,10 +13,8 @@ class ReportSignatoryCatalog
     /**
      * @return list<array{role: string, title: string, name: string, position: string, column: ?string}>
      */
-    public function barangaySlots(?string $barangayCode = null): array
+    public function barangaySlots(): array
     {
-        $captain = is_string($barangayCode) ? config('mapr_reference.barangay_captains.'.$barangayCode) : null;
-
         return [
             [
                 'role' => 'barangay_secretary',
@@ -27,7 +26,7 @@ class ReportSignatoryCatalog
             [
                 'role' => 'barangay_signer',
                 'title' => 'Endorsed by',
-                'name' => is_string($captain) && $captain !== '' ? $captain : 'Assigned barangay captain',
+                'name' => 'Assigned barangay captain',
                 'position' => 'Barangay Captain',
                 'column' => 'barangay_report_id',
             ],
@@ -39,9 +38,6 @@ class ReportSignatoryCatalog
      */
     public function fieldSlots(?string $assessorName = null): array
     {
-        $verifier = config('mapr_reference.assessor_verifier');
-        $approver = config('mapr_reference.assessor_approver');
-
         return [
             [
                 'role' => 'assessed_by',
@@ -53,15 +49,15 @@ class ReportSignatoryCatalog
             [
                 'role' => 'verified_by',
                 'title' => 'Verified by',
-                'name' => (string) ($verifier['name'] ?? 'Administrative Officer III'),
-                'position' => (string) ($verifier['title'] ?? 'RDANA Administrative Officer III'),
+                'name' => 'RDANA Administrative Officer III',
+                'position' => 'RDANA Administrative Officer III',
                 'column' => 'field_assessment_id',
             ],
             [
                 'role' => 'approved_by',
                 'title' => 'Noted by',
-                'name' => (string) ($approver['name'] ?? 'City Assessor'),
-                'position' => (string) ($approver['title'] ?? 'LAOO II Acting City Assessor'),
+                'name' => 'City Assessor',
+                'position' => 'City Assessor',
                 'column' => 'field_assessment_id',
             ],
         ];
@@ -72,25 +68,28 @@ class ReportSignatoryCatalog
      */
     public function consolidatedSlots(): array
     {
-        $noted = config('mapr_reference.signatories.noted_by');
-        $approved = config('mapr_reference.signatories.approved_by');
+        $slots = [];
+        foreach ([
+            'noted_by' => ['Noted by', 'CDRRMO Reviewing Officer'],
+            'approved_by' => ['Approved by', 'Head, CDRRMO'],
+        ] as $role => [$title, $position]) {
+            $email = config('mapr.consolidated_signer_emails.'.$role);
+            $officer = $email && Schema::hasTable('users') && Schema::hasTable('roles')
+                ? User::query()->whereRaw('LOWER(email) = ?', [strtolower($email)])
+                    ->where('account_status', 'active')
+                    ->whereHas('role', fn ($query) => $query->where('code', 'cdrrmo_admin'))
+                    ->first()
+                : null;
+            $slots[] = [
+                'role' => $role,
+                'title' => $title,
+                'name' => $officer?->display_name ?? 'Assigned officer',
+                'position' => $officer?->job_title ?: $position,
+                'column' => 'consolidated_report_id',
+            ];
+        }
 
-        return [
-            [
-                'role' => 'noted_by',
-                'title' => 'Noted by',
-                'name' => (string) ($noted['name'] ?? 'Assigned officer'),
-                'position' => trim((string) (($noted['title'] ?? '').' '.($noted['office'] ?? ''))),
-                'column' => 'consolidated_report_id',
-            ],
-            [
-                'role' => 'approved_by',
-                'title' => 'Approved by',
-                'name' => (string) ($approved['name'] ?? 'Assigned officer'),
-                'position' => (string) ($approved['title'] ?? 'Head, CDRRMO'),
-                'column' => 'consolidated_report_id',
-            ],
-        ];
+        return $slots;
     }
 
     /**
@@ -98,7 +97,7 @@ class ReportSignatoryCatalog
      *
      * @return list<array<string, mixed>>
      */
-    public function residentOfficeEndorsements(object $row, ?string $barangayCode = null): array
+    public function residentOfficeEndorsements(object $row): array
     {
         $barangayReport = null;
         if (! empty($row->barangay_report_id) && Schema::hasTable('barangay_reports')) {
@@ -122,7 +121,7 @@ class ReportSignatoryCatalog
         $slots = [
             $this->bdrrmSlot($row),
         ];
-        foreach ($this->barangaySlots($barangayCode) as $slot) {
+        foreach ($this->barangaySlots() as $slot) {
             $slots[] = $this->resolveSlot(
                 $slot,
                 $barangayReport ? (int) $barangayReport->id : null,
@@ -163,11 +162,6 @@ class ReportSignatoryCatalog
     {
         $lineage ??= app(ReportLineage::class);
         $resolved = $lineage->forBarangayReport((int) $barangayReport->id);
-        $barangayCode = null;
-        if (Schema::hasTable('barangays')) {
-            $barangayCode = DB::table('barangays')->where('id', $barangayReport->barangay_id)->value('barangay_code');
-        }
-
         $slots = [];
         if (! empty($resolved['resident_report_id'])) {
             $residentId = (int) $resolved['resident_report_id'];
@@ -190,7 +184,7 @@ class ReportSignatoryCatalog
             $slots[] = $this->pendingSlot('bdrrm_reviewer', 'BDRRM Review', 'BDRRM Personnel');
         }
 
-        foreach ($this->barangaySlots(is_string($barangayCode) ? $barangayCode : null) as $slot) {
+        foreach ($this->barangaySlots() as $slot) {
             $slots[] = $this->resolveSlot($slot, (int) $barangayReport->id, null, null);
         }
 

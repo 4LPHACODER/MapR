@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Cdrrmo;
 
 use App\Http\Controllers\Controller;
 use App\Services\ImpactEstimator;
+use App\Services\ReportSignatoryCatalog;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -40,7 +41,7 @@ class ReportController extends Controller
                 'generated_at' => now(),
                 'estimate' => $sessionContext['estimate'],
                 'error' => null,
-                'signatories' => config('mapr_reference.signatories'),
+                'signatories' => app(ReportSignatoryCatalog::class)->consolidatedSlots(),
                 'sources' => $this->sources(),
             ];
         }
@@ -70,7 +71,7 @@ class ReportController extends Controller
             'generated_at' => now(),
             'estimate' => $estimate,
             'error' => $error,
-            'signatories' => config('mapr_reference.signatories'),
+            'signatories' => app(ReportSignatoryCatalog::class)->consolidatedSlots(),
             'sources' => $this->sources(),
         ];
     }

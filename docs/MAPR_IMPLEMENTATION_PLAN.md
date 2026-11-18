@@ -71,7 +71,7 @@ Relationships encoded in foreign keys:
 - `report_signatures` point at exactly one of a barangay report, field assessment, or consolidated report.
 - `activity_logs` optionally record `user_id`.
 
-`DatabaseSeeder` calls only `RoleSeeder`. `BarangaySeeder`, `DamageClassSeeder`, `DisasterTypeSeeder`, and `VulnerabilityCategorySeeder` read `config/mapr_reference.php`, which does not exist. Running them would throw.
+`DatabaseSeeder` creates roles and loads lookup data from `config/mapr_reference.php`.
 
 Eloquent models, factories aligned to this schema, and policies are **Missing**.
 
@@ -79,7 +79,7 @@ Eloquent models, factories aligned to this schema, and policies are **Missing**.
 
 ### Multi-signatory reports
 
-**Partial, with a confirmed gap.** `report_signatories.md` is the name-and-title source. It lists four barangay captains, two RDANA signatories (“Verified by” and “Approved by”), and two CDRRMO signatories (“Noted by” and “Approved by”).
+**Partial, with a confirmed gap.** The signature slots cover barangay, RDANA, and CDRRMO signers.
 
 `report_signatures` has:
 
@@ -93,7 +93,7 @@ Eloquent models, factories aligned to this schema, and policies are **Missing**.
 
 MySQL allows many NULL values in those unique columns, so different documents can each have a signature. One document cannot have two signatures.
 
-| Document | Names in `report_signatories.md` | Schema capacity | Fit |
+| Document | Signature slots | Schema capacity | Fit |
 |---|---|---|---|
 | Barangay report | One captain per barangay | One signature, plus `prepared_by` | One captain signature can fit. A separate preparer signature cannot. |
 | Field assessment | Verified by and Approved by | One signature, plus `assigned_assessor_id` | Does not fit both signatories. |
@@ -195,7 +195,7 @@ BDRRM personnel see resident reports only for barangays with an active `user_bar
 
 Report status moves `draft` to `review` to `signed` to `submitted`. After `signed`, triggers allow only the transition toward `submitted` and reject other edits and deletes. Child building rows and photos used by a signed report are immutable.
 
-The single current signature slot can record one authenticated signature, which is the practical place for the barangay captain once that person has an account. `prepared_by` stores the BDRRM drafter. Do not treat the captain’s name in `report_signatories.md` as a user id.
+The single current signature slot can record one authenticated signature, which is the practical place for the barangay captain once that person has an account. `prepared_by` stores the BDRRM drafter.
 
 ## 8. EfficientNetB0 inference
 
@@ -222,7 +222,7 @@ The verified damage class is authoritative for the field report. The prediction 
 
 Because verification rows can still be updated before signature, add `building_verification_corrections` in a later migration: previous class, new class, note, `corrected_by`, and `corrected_at`, append-only. Write that row in the same transaction as any change to `building_verifications`. Do not add the table until this phase. Signing freezes verifications through the existing triggers.
 
-Field reports need two signature roles after the signature migration: `verified_by` and `approved_by`. Those roles match the headings in `report_signatories.md`. The named officers still need real accounts before either role can be stored.
+Field reports need two signature roles after the signature migration: `verified_by` and `approved_by`. Officers must have accounts before either signature can be stored.
 
 ## 10. Geospatial import, CRS, and polygon rules
 
@@ -303,7 +303,7 @@ Do not copy resident names or photo bytes into the log description.
 **Missing** except password hashing on the unused `User` model and the private disk root.
 
 - Replace the stock `name` assumption with the real user columns before any registration screen.
-- Seed the four roles through the existing `RoleSeeder`.
+- Seed the roles through `DatabaseSeeder`.
 - Authorize with policies from section 4 on every read and write.
 - Keep evidence on the private disk. Exports of reports should be generated for an authorized user and should not include raw CBMS tables.
 - A browser may receive a Mapbox token only after it is a public, URL-restricted token served from a deliberate endpoint. Until then, no token is sent to the client. The landing page does not use Mapbox.

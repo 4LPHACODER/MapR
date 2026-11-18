@@ -355,7 +355,7 @@ class ReportWorkflow
     public function approveAndForward(User $user, object $assessment): void
     {
         $user->loadMissing('role');
-        if ($user->role?->code !== 'rdana_city_assessor' && ! $this->matchesApprover($user)) {
+        if (! $this->matchesApprover($user)) {
             abort(403, 'Only the city assessor can approve this assessment.');
         }
         if (! $this->hasSignature('field_assessment_id', (int) $assessment->id, 'verified_by')) {
@@ -423,11 +423,17 @@ class ReportWorkflow
         );
     }
 
+    public function canSignBarangay(User $user, object $report): bool
+    {
+        return ($report->workflow_stage ?? null) === null
+            && $user->role?->code === 'barangay_captain'
+            && in_array((int) $report->barangay_id, app(AssignmentScope::class)->activeBarangayIds($user->id), true);
+    }
+
     public function signBarangay(User $user, object $report): void
     {
         $this->assertNoOpenFlags('barangay_report', (int) $report->id);
-        $captain = config('mapr_reference.barangay_captains.'.$this->barangayCode((int) $report->barangay_id));
-        if (! is_string($captain) || strcasecmp(trim($user->display_name), trim($captain)) !== 0) {
+        if (! $this->canSignBarangay($user, $report)) {
             abort(403, 'Only the authorized barangay signer can sign this report.');
         }
         $this->storeSignature($user, 'barangay_report_id', (int) $report->id, 'barangay_signer', $report);
@@ -580,10 +586,8 @@ class ReportWorkflow
     {
         $this->assertNoOpenFlags('field_assessment', (int) $assessment->id);
         $verifierEmail = (string) config('mapr.assessor_verifier_email');
-        $verifierName = (string) config('mapr_reference.assessor_verifier.name');
-        $matches = ($verifierEmail !== '' && strcasecmp($user->email, $verifierEmail) === 0)
-            || ($verifierName !== '' && strcasecmp(trim($user->display_name), trim($verifierName)) === 0);
-        if (! $matches || (int) $assessment->assigned_assessor_id !== (int) $user->id) {
+        $matches = $user->role?->code === 'rdana' && $verifierEmail !== '' && strcasecmp($user->email, $verifierEmail) === 0;
+        if (($assessment->workflow_stage ?? null) !== null || ! $matches || (int) $assessment->assigned_assessor_id !== (int) $user->id) {
             abort(403, 'Only the assigned verifying officer can verify this assessment.');
         }
         if (trim((string) $assessment->findings) === '') {
@@ -625,7 +629,7 @@ class ReportWorkflow
     public function approveAssessment(User $user, object $assessment): void
     {
         $this->assertNoOpenFlags('field_assessment', (int) $assessment->id);
-        if (! $this->matchesApprover($user) || (int) $assessment->assigned_assessor_id === (int) $user->id) {
+        if (($assessment->workflow_stage ?? null) !== null || ! $this->matchesApprover($user) || (int) $assessment->assigned_assessor_id === (int) $user->id) {
             abort(403, 'Only the Acting City Assessor can approve this assessment.');
         }
         if (! in_array($assessment->assessment_status, ['draft', 'review', 'signed'], true)) {
@@ -639,7 +643,7 @@ class ReportWorkflow
     public function noteConsolidated(User $user, object $report): void
     {
         $this->assertNoOpenFlags('consolidated_report', (int) $report->id);
-        if (! in_array(strtolower($user->email), ['lestertalan@mapr_admin.com', 'lestertalan@mapr.com'], true)) {
+        if ($this->consolidatedCapacity($user) !== 'noted_by') {
             abort(403, 'Only the noted-by officer can sign in that capacity.');
         }
         $this->storeSignature($user, 'consolidated_report_id', (int) $report->id, 'noted_by', $report);
@@ -649,7 +653,7 @@ class ReportWorkflow
     public function approveConsolidated(User $user, object $report): void
     {
         $this->assertNoOpenFlags('consolidated_report', (int) $report->id);
-        if (strcasecmp($user->email, 'reyveen.geli@mapr.test') !== 0) {
+        if ($this->consolidatedCapacity($user) !== 'approved_by') {
             abort(403, 'Only the CDRRMO approving officer can sign in that capacity.');
         }
         $this->storeSignature($user, 'consolidated_report_id', (int) $report->id, 'approved_by', $report);
@@ -689,11 +693,24 @@ class ReportWorkflow
     private function matchesApprover(User $user): bool
     {
         $email = (string) config('mapr.assessor_approver_email');
-        $name = (string) config('mapr_reference.assessor_approver.name');
 
-        return strcasecmp($user->email, 'lovy.dedicatoria@mapr.test') === 0
-            || ($email !== '' && strcasecmp($user->email, $email) === 0)
-            || ($name !== '' && strcasecmp(trim($user->display_name), trim($name)) === 0);
+        return $user->role?->code === 'rdana_city_assessor'
+            || ($user->role?->code === 'rdana' && $email !== '' && strcasecmp($user->email, $email) === 0);
+    }
+
+    public function consolidatedCapacity(?User $user): ?string
+    {
+        if ($user?->role?->code !== 'cdrrmo_admin') {
+            return null;
+        }
+
+        foreach (config('mapr.consolidated_signer_emails') as $capacity => $email) {
+            if (is_string($email) && $email !== '' && strcasecmp($user->email, $email) === 0) {
+                return $capacity;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -857,10 +874,5 @@ class ReportWorkflow
         if (! in_array($barangayId, $ids, true)) {
             abort(403, 'That barangay is outside your assignment.');
         }
-    }
-
-    private function barangayCode(int $barangayId): string
-    {
-        return (string) DB::table('barangays')->where('id', $barangayId)->value('barangay_code');
     }
 }

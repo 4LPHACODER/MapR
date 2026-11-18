@@ -73,7 +73,7 @@ class PreviewController extends Controller
                 $this->signatories->resolveParentSlots(
                     'barangay_report_id',
                     (int) $row->id,
-                    $this->signatories->barangaySlots($barangay->barangay_code ?? null),
+                    $this->signatories->barangaySlots(),
                 ),
                 $this->signatories->barangayForwardEndorsementSlots($row),
             ),
@@ -161,7 +161,7 @@ class PreviewController extends Controller
                 $report ? $this->signatories->resolveParentSlots(
                     'barangay_report_id',
                     (int) $report->id,
-                    $this->signatories->barangaySlots($barangay->barangay_code ?? null),
+                    $this->signatories->barangaySlots(),
                 ) : [],
                 $report ? $this->signatories->barangayForwardEndorsementSlots($report) : [],
             ),

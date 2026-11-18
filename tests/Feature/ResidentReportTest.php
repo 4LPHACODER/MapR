@@ -5,8 +5,6 @@ namespace Tests\Feature;
 use App\Models\Auth\User;
 use App\Services\ResidentReportDocument;
 use App\Services\ResidentReportWorkflow;
-use Database\Seeders\ResidentDemoSeeder;
-use Database\Seeders\ResidentReportSeeder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\UploadedFile;
@@ -25,97 +23,6 @@ class ResidentReportTest extends TestCase
         parent::setUp();
         $this->createMaprAuthSchema();
         $this->createReportTables();
-    }
-
-    public function test_resident_report_seeder_covers_every_status_and_tracking_label_without_resetting_reports(): void
-    {
-        Schema::table('disaster_incidents', function (Blueprint $table) {
-            $table->unsignedBigInteger('created_by');
-        });
-        Schema::table('disaster_barangays', function (Blueprint $table) {
-            $table->timestamps();
-            $table->unique(['disaster_incident_id', 'barangay_id']);
-        });
-        Schema::table('field_assessments', function (Blueprint $table) {
-            $table->dateTime('submitted_at')->nullable();
-        });
-        Schema::create('consolidated_reports', function (Blueprint $table) {
-            $table->id();
-            $table->string('report_reference')->unique();
-            $table->text('report_summary')->nullable();
-            $table->string('report_status');
-            $table->dateTime('finalized_at')->nullable();
-            $table->unsignedBigInteger('disaster_incident_id');
-            $table->unsignedBigInteger('prepared_by');
-            $table->timestamps();
-        });
-        Schema::create('consolidated_report_assessments', function (Blueprint $table) {
-            $table->id();
-            $table->unsignedBigInteger('consolidated_report_id');
-            $table->unsignedBigInteger('field_assessment_id');
-            $table->timestamps();
-            $table->unique(['consolidated_report_id', 'field_assessment_id']);
-        });
-        // Match the MySQL history guard: finalized reports cannot gain assessment links.
-        DB::unprepared(<<<'SQL'
-CREATE TRIGGER guard_consolidated_assessment_insert
-BEFORE INSERT ON consolidated_report_assessments
-WHEN EXISTS (SELECT 1 FROM consolidated_reports WHERE id = NEW.consolidated_report_id AND report_status IN ('signed', 'finalized'))
-BEGIN
-    SELECT RAISE(ABORT, 'Signed report items are immutable');
-END;
-SQL);
-        $home = $this->barangay('Mabua');
-        $this->user('bdrrm', 'Demo Reviewer', $home);
-        $this->user('rdana', 'Demo Assessor', $home);
-        $this->user('cdrrmo_admin', 'Demo Admin', null);
-
-        $this->seed(ResidentReportSeeder::class);
-
-        $this->assertEqualsCanonicalizing(
-            ['draft', 'submitted', 'under_review', 'reviewed', 'returned'],
-            DB::table('resident_incident_reports')->distinct()->pluck('report_status')->all(),
-        );
-        $resident = User::query()->where('email', ResidentDemoSeeder::EMAIL)->firstOrFail();
-        $reports = collect($this->actingAs($resident)->getJson('/resident/api/reports')->assertOk()->json('data'))->keyBy('reference');
-        foreach ([
-            'DRAFT' => 'Draft',
-            'SUBMITTED' => 'Pending BDRRM Review',
-            'UNDER_REVIEW' => 'Pending BDRRM Review',
-            'RETURNED' => 'Needs Correction',
-            'REVIEWED' => 'Pending BDRRM Review',
-            'ASSESSOR' => 'Pending Assessor Review',
-            'CDRRMO' => 'Pending CDRRMO Review',
-            'FINALIZED' => 'Finalized',
-        ] as $scenario => $label) {
-            $this->assertSame($label, $reports['RR-DEMO-'.$scenario]['label']);
-            $this->assertTrue($reports['RR-DEMO-'.$scenario]['has_point']);
-        }
-        $this->assertNotEmpty($reports['RR-DEMO-RETURNED']['return_reason']);
-        DB::table('resident_incident_reports')->where('report_reference', 'RR-DEMO-DRAFT')->update(['incident_description' => 'Edited sample']);
-        $this->seed(ResidentReportSeeder::class);
-        $this->assertDatabaseHas('resident_incident_reports', ['report_reference' => 'RR-DEMO-DRAFT', 'incident_description' => 'Edited sample']);
-        $this->assertDatabaseCount('resident_incident_reports', 8);
-        $this->assertDatabaseCount('barangay_reports', 4);
-        $this->assertDatabaseCount('field_assessments', 3);
-        $this->assertDatabaseCount('consolidated_reports', 1);
-        $this->assertDatabaseCount('consolidated_report_assessments', 1);
-        $this->assertDatabaseCount('disaster_incidents', 1);
-        $this->assertDatabaseCount('disaster_barangays', 1);
-
-        $standardDemo = $this->user('resident', 'Standard Demo', $home);
-        $standardDemo->forceFill(['email' => 'resident.demo@mapr.test'])->save();
-        $this->seed(ResidentReportSeeder::class);
-        $this->seed(ResidentReportSeeder::class);
-
-        $demoReports = $this->actingAs($standardDemo)->getJson('/resident/api/reports')->assertOk()->json('data');
-        $this->assertCount(8, $demoReports);
-        $this->assertEqualsCanonicalizing(
-            ['Draft', 'Pending BDRRM Review', 'Needs Correction', 'Pending Assessor Review', 'Pending CDRRMO Review', 'Finalized'],
-            collect($demoReports)->pluck('label')->unique()->values()->all(),
-        );
-        $this->assertDatabaseCount('resident_incident_reports', 16);
-        $this->assertSame(8, DB::table('resident_incident_reports')->where('resident_user_id', $resident->id)->count());
     }
 
     public function test_residents_manage_only_their_own_reports_and_cannot_set_official_fields(): void
@@ -340,7 +247,7 @@ SQL);
         $home = $this->barangay('Home');
         $incident = $this->incident($home);
         $owner = $this->user('resident', 'Ana Cruz', $home);
-        $assessor = $this->user('rdana', 'Mark Merillo', null);
+        $assessor = $this->user('rdana', 'Test Assessor', null);
         $other = $this->user('rdana', 'Other Assessor', null);
         DB::table('user_barangay_assignments')->insert([
             'assigned_at' => now(),
@@ -625,7 +532,7 @@ SQL);
         $home = $this->barangay('Mabua');
         DB::table('barangays')->where('id', $home)->update(['barangay_code' => '166819008']);
         $incident = $this->incident($home);
-        $owner = $this->user('resident', 'Maricar Irizari', $home);
+        $owner = $this->user('resident', 'Case Rivera', $home);
         $neighbor = $this->user('resident', 'Other Resident', $home);
         $created = $this->actingAs($owner)->postJson('/resident/api/reports', [
             'disaster_incident_id' => $incident,
@@ -782,7 +689,7 @@ SQL);
             'disaster_incident_id' => $incident,
             'barangay_id' => $second,
         ]);
-        $resident = $this->user('resident', 'Maricar Irizari', $mabua);
+        $resident = $this->user('resident', 'Case Rivera', $mabua);
         $officer = $this->officer($mabua);
         DB::table('user_barangay_assignments')->insert([
             'assigned_at' => now(),
@@ -845,7 +752,7 @@ SQL);
         $listed = collect($list->json('data'))->firstWhere('reference', 'RIR-QUEUE-POINT');
         $this->assertSame('Pending BDRRM Review', $listed['label']);
         $this->assertSame('submitted', $listed['status']);
-        $this->assertSame('Maricar Irizari', $listed['resident_name']);
+        $this->assertSame('Case Rivera', $listed['resident_name']);
         $this->assertTrue($listed['has_point']);
         $this->assertArrayNotHasKey('email', $listed);
         $this->assertSame('submitted', DB::table('resident_incident_reports')->where('id', $point)->value('report_status'));
@@ -868,7 +775,7 @@ SQL);
         $this->assertSame('Pending BDRRM Review', $opened->json('data.label'));
         $this->assertTrue($opened->json('data.reviewable'));
         $this->assertTrue($opened->json('data.has_point'));
-        $this->assertSame('Maricar Irizari', $opened->json('data.resident_name'));
+        $this->assertSame('Case Rivera', $opened->json('data.resident_name'));
         $this->assertNull($opened->json('data.barangay_report_id'));
         $this->assertSame(0, DB::table('activity_events')->count());
         DB::table('resident_incident_reports')->where('id', $point)->update(['updated_at' => '2000-01-01 00:00:00']);
@@ -1192,7 +1099,7 @@ SQL);
         $other = $this->barangay('Other Link');
         $incident = $this->incident($home);
         $officer = $this->officer($home);
-        $resident = $this->user('resident', 'Maricar Irizari', $home);
+        $resident = $this->user('resident', 'Case Rivera', $home);
         $resident->contact_number = '09170001111';
         $resident->save();
         $stranger = $this->user('resident', 'Stranger Nearby', $home);
@@ -1243,7 +1150,7 @@ SQL);
         $byBuilding = $insert('RIR-BY-BUILDING', $stranger->id, $home, 'submitted', '125.000 8.000', $buildingId);
 
         $summary = $this->actingAs($officer)->getJson('/bdrrm/api/submissions/'.$linked.'/summary')->assertOk();
-        $summary->assertJsonPath('data.resident_name', 'Maricar Irizari');
+        $summary->assertJsonPath('data.resident_name', 'Case Rivera');
         $summary->assertJsonPath('data.reference', 'RIR-LINKED');
         $summary->assertJsonPath('data.incident_name', 'Flooding');
         $summary->assertJsonPath('data.incident_type', 'Flood '.$home);
@@ -1274,7 +1181,7 @@ SQL);
         $this->assertFalse(collect($household->json('data'))->pluck('reference')->contains('RIR-NEARBY'));
 
         $this->actingAs($officer)->getJson('/bdrrm/api/buildings/'.$buildingId.'/resident-reports')->assertForbidden();
-        $secretary = $this->user('barangay_secretary', 'Leonida Lagunda', $home);
+        $secretary = $this->user('barangay_secretary', 'Test Secretary', $home);
         DB::table('user_barangay_assignments')->insert([
             'assigned_at' => now(),
             'user_id' => $secretary->id,
@@ -1308,13 +1215,13 @@ SQL);
         $mabua = $this->barangay('Mabua');
         $other = $this->barangay('Telaje');
         $incident = $this->incident($mabua);
-        $resident = $this->user('resident', 'Maricar Dumpa', $mabua);
-        $jesnard = $this->user('bdrrm', 'Jesnard Plaza', $mabua);
+        $resident = $this->user('resident', 'Case Santos', $mabua);
+        $assignedOfficer = $this->user('bdrrm', 'Test Officer', $mabua);
         $peter = $this->user('bdrrm', 'Peter Salomon', $mabua);
-        $secretary = $this->user('barangay_secretary', 'Leonida Lagunda', $mabua);
-        $captain = $this->user('barangay_captain', 'Rocky Pimentel', $mabua);
+        $secretary = $this->user('barangay_secretary', 'Test Secretary', $mabua);
+        $captain = $this->user('barangay_captain', 'Test Captain', $mabua);
         $outsider = $this->user('barangay_secretary', 'Other Secretary', $other);
-        foreach ([$jesnard, $peter, $secretary, $captain] as $supervisor) {
+        foreach ([$assignedOfficer, $peter, $secretary, $captain] as $supervisor) {
             DB::table('user_barangay_assignments')->insert([
                 'assigned_at' => now(),
                 'user_id' => $supervisor->id,
@@ -1352,7 +1259,7 @@ SQL);
         DB::table('report_assignments')->insert([
             'subject_type' => 'resident_incident_report',
             'subject_id' => $assigned,
-            'assignee_user_id' => $jesnard->id,
+            'assignee_user_id' => $assignedOfficer->id,
             'assigned_by' => $secretary->id,
             'assignment_role' => 'bdrrm',
             'is_active' => true,
@@ -1370,11 +1277,11 @@ SQL);
             'updated_at' => now(),
         ]);
 
-        $mine = $this->actingAs($jesnard)->getJson('/bdrrm/api/submissions')->assertOk();
+        $mine = $this->actingAs($assignedOfficer)->getJson('/bdrrm/api/submissions')->assertOk();
         $this->assertSame(['RIR-MINE'], collect($mine->json('data'))->pluck('reference')->all());
-        $this->actingAs($jesnard)->getJson('/bdrrm/api/submissions/'.$otherReport)->assertForbidden();
-        $this->actingAs($jesnard)->getJson('/bdrrm/api/submissions/'.$open)->assertForbidden();
-        $this->actingAs($jesnard)->post('/bdrrm/api/submissions/'.$open.'/accept', [
+        $this->actingAs($assignedOfficer)->getJson('/bdrrm/api/submissions/'.$otherReport)->assertForbidden();
+        $this->actingAs($assignedOfficer)->getJson('/bdrrm/api/submissions/'.$open)->assertForbidden();
+        $this->actingAs($assignedOfficer)->post('/bdrrm/api/submissions/'.$open.'/accept', [
             'confirmed' => true,
             'content_revision' => str_repeat('a', 64),
             'signature' => UploadedFile::fake()->image('signature.png', 80, 40),
@@ -1396,7 +1303,7 @@ SQL);
         $this->assertSame(['RIR-OPEN'], collect($unassigned->json('data'))->pluck('reference')->all());
         $this->assertSame('not_opened', collect($queue->json('data'))->firstWhere('reference', 'RIR-MINE')['review_state']);
         $this->assertSame('Unassigned', collect($unassigned->json('data'))->first()['assignment_label']);
-        $this->actingAs($jesnard)->getJson('/bdrrm/api/submissions')->assertOk()
+        $this->actingAs($assignedOfficer)->getJson('/bdrrm/api/submissions')->assertOk()
             ->assertJsonPath('counts.pending', 1)
             ->assertJsonPath('counts.reviewed', 0);
         $this->actingAs($captain)->getJson('/bdrrm/api/submissions?queue=unassigned')->assertOk()
@@ -1409,7 +1316,7 @@ SQL);
 
         $this->actingAs($outsider)->postJson('/bdrrm/api/submissions/assign', [
             'submission_ids' => [$open],
-            'assignee_user_id' => $jesnard->id,
+            'assignee_user_id' => $assignedOfficer->id,
         ])->assertForbidden();
         $this->actingAs($secretary)->postJson('/bdrrm/api/submissions/assign', [
             'submission_ids' => [$open, $assigned],
@@ -1433,7 +1340,7 @@ SQL);
         $this->actingAs($peter)->postJson('/bdrrm/api/submissions/'.$open.'/start-review')->assertOk()
             ->assertJsonPath('data.status', 'under_review')
             ->assertJsonPath('data.review_state', 'reviewing');
-        $this->actingAs($jesnard)->postJson('/bdrrm/api/submissions/'.$open.'/start-review')->assertForbidden();
+        $this->actingAs($assignedOfficer)->postJson('/bdrrm/api/submissions/'.$open.'/start-review')->assertForbidden();
 
         $this->acceptSubmission($peter, $open);
         $this->assertSame(1, DB::table('report_signatures')->where('resident_incident_report_id', $open)->where('signature_role', 'bdrrm_reviewer')->count());
@@ -1455,12 +1362,12 @@ SQL);
         $checked = $this->actingAs($captain)->getJson('/bdrrm/api/submissions?queue=checked')->assertOk();
         $this->assertSame(['RIR-OPEN'], collect($checked->json('data'))->pluck('reference')->all());
         $this->assertSame('secretary_checked', collect($checked->json('data'))->first()['review_state']);
-        $this->assertSame('Leonida Lagunda', collect($checked->json('data'))->first()['secretary_name']);
+        $this->assertSame('Test Secretary', collect($checked->json('data'))->first()['secretary_name']);
         $this->actingAs($peter)->getJson('/bdrrm/api/submissions?status=reviewed')->assertOk()
             ->assertJsonPath('counts.reviewed', 1)
             ->assertJsonPath('data.0.reference', 'RIR-OPEN');
 
-        $this->actingAs($jesnard)->getJson('/bdrrm/api/buildings')->assertForbidden();
+        $this->actingAs($assignedOfficer)->getJson('/bdrrm/api/buildings')->assertForbidden();
         $this->actingAs($secretary)->getJson('/bdrrm/api/buildings')->assertOk();
         $this->actingAs($captain)->getJson('/bdrrm/api/buildings')->assertOk();
     }
@@ -1479,8 +1386,8 @@ SQL);
         $mabua = $this->barangay('Mabua');
         $other = $this->barangay('Telaje');
         $incident = $this->incident($mabua);
-        $resident = $this->user('resident', 'Maricar Dumpa', $mabua);
-        $captain = $this->user('barangay_captain', 'Rocky Pimentel', $mabua);
+        $resident = $this->user('resident', 'Case Santos', $mabua);
+        $captain = $this->user('barangay_captain', 'Test Captain', $mabua);
         $outsider = $this->user('barangay_captain', 'Other Captain', $other);
         foreach ([[$captain, $mabua], [$outsider, $other]] as [$person, $barangayId]) {
             DB::table('user_barangay_assignments')->insert([

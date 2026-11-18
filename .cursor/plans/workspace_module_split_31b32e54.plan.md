@@ -33,7 +33,7 @@ Investigation only. No files move until this plan is accepted. The recommendatio
 - Vue **3.5** and Vue Router **5** are real app dependencies in [package.json](package.json). Vite 7, Tailwind 4, and `laravel-vite-plugin` are dev dependencies. There is no Inertia, Pinia, Breeze, Fortify, or Sanctum.
 - Routing is session web routes only. [bootstrap/app.php](bootstrap/app.php) loads [routes/web.php](routes/web.php) and registers `/up`. There is no `routes/api.php`.
 - Auth is the custom [app/Http/Controllers/Auth/LoginController.php](app/Http/Controllers/Auth/LoginController.php): email/password, rate limit, active-account check, then `RoleHome::redirectPath()`. Logout returns to the named `home` route. Guests hitting `auth` routes go to `login`. Signed-in users hitting `guest` routes go to `RoleHome::home()`.
-- Confirmed role contracts in [app/Support/RoleHome.php](app/Support/RoleHome.php) and [database/seeders/RoleSeeder.php](database/seeders/RoleSeeder.php):
+- Confirmed role contracts in [app/Support/RoleHome.php](app/Support/RoleHome.php) and [database/seeders/DatabaseSeeder.php](database/seeders/DatabaseSeeder.php):
 
   - Resident: `resident`, `/resident`
   - BDRRM: `bdrrm`, `/bdrrm`

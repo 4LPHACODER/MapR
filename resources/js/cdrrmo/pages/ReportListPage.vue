@@ -7,7 +7,6 @@ import ReportReviewList from '../components/ReportReviewList.vue';
 const route = useRoute();
 const router = useRouter();
 const userName = inject('cdrrmoUserName', '');
-const userEmail = inject('cdrrmoUserEmail', '');
 const loading = ref(true);
 const error = ref('');
 const notice = ref('');
@@ -18,6 +17,7 @@ const meta = ref({ total: 0, current_page: 1, last_page: 1, per_page: 20 });
 const hasLoaded = ref(false);
 const appliedFilters = ref({});
 const signRow = ref(null);
+const signingCapacity = ref(null);
 const fileMessage = ref('');
 const flagRow = ref(null);
 const flagForm = reactive({ category: 'Review', reason: '' });
@@ -33,8 +33,8 @@ const invalidFlagField = computed(() => {
 });
 const apiPath = computed(() => `/cdrrmo/api/reports/${reportType.value}`);
 const capacity = computed(() => {
-    if (userEmail === 'lestertalan@mapr_admin.com' || userEmail === 'lestertalan@mapr.com') return { role: 'noted_by', position: 'LDRRMO II', path: 'note' };
-    if (userEmail === 'reyveen.geli@mapr.test') return { role: 'approved_by', position: 'Head, CDRRMO', path: 'approve' };
+    if (signingCapacity.value === 'noted_by') return { role: 'noted_by', position: 'CDRRMO Reviewing Officer', path: 'note' };
+    if (signingCapacity.value === 'approved_by') return { role: 'approved_by', position: 'Head, CDRRMO', path: 'approve' };
     return null;
 });
 const filters = reactive({
@@ -83,6 +83,7 @@ async function load() {
         const { data } = await window.axios.get(apiPath.value, { params });
         if (current !== requestId.value) return;
         rows.value = data.data || [];
+        signingCapacity.value = data.signing_capacity || null;
         meta.value = data.meta || meta.value;
         summary.value = data.summary || summary.value;
         filterOptions.value = data.filters || { incidents: [], barangays: [] };

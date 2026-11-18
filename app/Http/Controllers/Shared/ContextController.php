@@ -803,47 +803,13 @@ class ContextController extends Controller
 
     private function signingCapacity($user): ?string
     {
-        $user->loadMissing('role');
-        $role = $user->role?->code;
-        if ($role === 'rdana') {
-            return 'assessed_by';
-        }
-        if ($role === 'rdana_admin_officer') {
-            return 'verified_by';
-        }
-        if ($role === 'rdana_city_assessor') {
-            return 'approved_by';
-        }
-
-        $email = strtolower((string) $user->email);
-        if ($email === 'mark.merillo@mapr.test') {
-            return 'verified_by';
-        }
-        if ($email === 'lovy.dedicatoria@mapr.test') {
-            return 'approved_by';
-        }
-
-        if (Schema::hasTable('barangays') && $user->barangay_id) {
-            $code = (string) DB::table('barangays')->where('id', $user->barangay_id)->value('barangay_code');
-            $captain = config('mapr_reference.barangay_captains.'.$code);
-            if (is_string($captain) && strcasecmp(trim($user->display_name), trim($captain)) === 0) {
-                return 'barangay_signer';
-            }
-        }
-
-        if (Schema::hasTable('user_barangay_assignments') && Schema::hasTable('barangays')) {
-            $assigned = DB::table('user_barangay_assignments')
-                ->join('barangays', 'barangays.id', '=', 'user_barangay_assignments.barangay_id')
-                ->where('user_barangay_assignments.user_id', $user->id)
-                ->whereNull('user_barangay_assignments.revoked_at')
-                ->value('barangays.barangay_code');
-            $captain = config('mapr_reference.barangay_captains.'.$assigned);
-            if (is_string($captain) && strcasecmp(trim($user->display_name), trim($captain)) === 0) {
-                return 'barangay_signer';
-            }
-        }
-
-        return null;
+        return match ($user->role?->code) {
+            'rdana' => 'assessed_by',
+            'rdana_admin_officer' => 'verified_by',
+            'rdana_city_assessor' => 'approved_by',
+            'barangay_captain' => 'barangay_signer',
+            default => null,
+        };
     }
 
     private function currentSignature(int $userId): ?array

@@ -2,9 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\Auth\User;
+use App\Support\RoleHome;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Tests\Support\CreatesMaprAuthSchema;
 use Tests\TestCase;
@@ -65,17 +68,26 @@ class ProductionReferenceSeedTest extends TestCase
         $this->assertDatabaseCount('users', 0);
     }
 
-    public function test_failed_local_seed_rolls_back_reference_and_account_writes(): void
+    public function test_local_seed_creates_one_login_per_role_and_preserves_existing_accounts(): void
     {
-        config(['mapr.demo_password' => null]);
-        try {
-            $this->seed(DatabaseSeeder::class);
-            $this->fail('Expected missing demo password to fail seeding');
-        } catch (\RuntimeException $error) {
-            $this->assertStringContainsString('MAPR_DEMO_PASSWORD', $error->getMessage());
+        $this->seed(DatabaseSeeder::class);
+
+        $users = User::query()->with('role')->get()->keyBy('role.code');
+        $this->assertDatabaseCount('users', count(RoleHome::PREFIXES));
+        foreach (RoleHome::PREFIXES as $code => $path) {
+            $user = $users->get($code);
+            $this->assertNotNull($user, 'Missing user for '.$code);
+            $this->assertSame($user->role->name, $user->display_name);
+            $this->assertTrue(Hash::check('password', $user->password));
+            $this->post('/login', ['email' => $user->email, 'password' => 'password'])->assertRedirect($path);
+            $this->assertAuthenticatedAs($user);
+            $this->post('/logout');
         }
-        foreach (['roles', 'barangays', 'disaster_types', 'damage_classes', 'vulnerability_categories', 'users'] as $table) {
-            $this->assertDatabaseCount($table, 0);
-        }
+
+        $resident = $users->get('resident');
+        $resident->update(['password' => 'changed-password']);
+        $this->seed(DatabaseSeeder::class);
+        $this->assertTrue(Hash::check('changed-password', $resident->fresh()->password));
+        $this->assertDatabaseCount('users', count(RoleHome::PREFIXES));
     }
 }

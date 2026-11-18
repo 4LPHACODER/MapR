@@ -6,7 +6,6 @@ use App\Models\Auth\User;
 use App\Services\AssessorStudyBarangayAssignment;
 use App\Services\PolygonSpatial;
 use App\Support\DamageClassColor;
-use Database\Seeders\AssessorDemoUserSeeder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -24,25 +23,6 @@ class FieldWorkspaceTest extends TestCase
         parent::setUp();
         $this->createMaprAuthSchema();
         $this->createReportTables();
-    }
-
-    public function test_mark_is_seeded_once_and_opens_only_the_assessor_workspace(): void
-    {
-        $this->seed(AssessorDemoUserSeeder::class);
-        $mark = User::query()->where('email', 'mark.merillo@mapr.test')->firstOrFail();
-        $this->assertSame('Administrative Officer III', $mark->job_title);
-        $this->assertSame('rdana', $mark->role->code);
-        $this->assertNull($mark->barangay_id);
-        $this->assertSame(0, DB::table('user_barangay_assignments')->where('user_id', $mark->id)->count());
-
-        $mark->forceFill(['password' => Hash::make('already-set')])->save();
-        $this->seed(AssessorDemoUserSeeder::class);
-        $this->assertTrue(Hash::check('already-set', $mark->fresh()->password));
-        $this->assertSame(1, User::withTrashed()->where('email', 'mark.merillo@mapr.test')->count());
-
-        $this->actingAs($mark)->get('/rdana')->assertOk()->assertSee('mark.merillo@mapr.test');
-        $this->actingAs($mark)->get('/cdrrmo')->assertForbidden();
-        $this->actingAs($mark)->get('/bdrrm')->assertForbidden();
     }
 
     public function test_bdrrm_cannot_open_another_barangay_or_a_resident_draft(): void
@@ -67,7 +47,8 @@ class FieldWorkspaceTest extends TestCase
     public function test_validation_keeps_the_draft_and_a_second_submit_conflicts(): void
     {
         $barangay = $this->barangay('166819002', 'Bag-ong Lungsod');
-        $officer = $this->officer($barangay, 'Hon. Luis', 'F.', 'Maquiling');
+        $officer = $this->officer($barangay);
+        $captain = $this->officer($barangay, 'Assigned', '', 'Captain', 'barangay_captain');
         $incident = $this->incident($barangay);
         $building = $this->building($barangay);
 
@@ -106,38 +87,42 @@ class FieldWorkspaceTest extends TestCase
         $this->actingAs($officer)->postJson('/bdrrm/api/reports/'.$id.'/sign', [
             'confirmed' => true,
             'password' => 'secret-pass',
+        ])->assertForbidden();
+        $this->actingAs($captain)->postJson('/bdrrm/api/reports/'.$id.'/sign', [
+            'confirmed' => true,
+            'password' => 'secret-pass',
         ])->assertOk();
         $this->actingAs($officer)->postJson('/bdrrm/api/reports/'.$id.'/submit')->assertOk();
         $this->actingAs($officer)->postJson('/bdrrm/api/reports/'.$id.'/submit')->assertStatus(409);
         $this->assertSame(1, DB::table('barangay_reports')->count());
     }
 
-    public function test_mark_can_verify_but_cannot_approve_or_open_another_assessment(): void
+    public function test_assigned_verifier_can_verify_but_cannot_approve_or_open_another_assessment(): void
     {
-        $this->seed(AssessorDemoUserSeeder::class);
-        $mark = User::query()->where('email', 'mark.merillo@mapr.test')->firstOrFail();
+        $verifier = $this->user('rdana', 'Test Verifier');
+        config(['mapr.assessor_verifier_email' => $verifier->email]);
         $other = $this->user('rdana', 'Other Assessor');
         $barangay = $this->barangay('166819002', 'Bag-ong Lungsod');
         $report = $this->barangayReport($barangay, 'review');
-        $assessment = $this->assessment($report, $mark->id, 'draft', 'Waterline is above the outlet.');
+        $assessment = $this->assessment($report, $verifier->id, 'draft', 'Waterline is above the outlet.');
         $foreign = $this->assessment($report, $other->id, 'draft', 'Different assignment.');
 
-        $this->actingAs($mark)->getJson('/rdana/api/assessments/'.$foreign)->assertForbidden();
-        $this->actingAs($mark)->postJson('/rdana/api/assessments/'.$assessment.'/verify', [
+        $this->actingAs($verifier)->getJson('/rdana/api/assessments/'.$foreign)->assertForbidden();
+        $this->actingAs($verifier)->postJson('/rdana/api/assessments/'.$assessment.'/verify', [
             'confirmed' => true,
-            'password' => 'testing-only-assessor-password',
+            'password' => 'secret-pass',
         ])->assertOk();
         $this->assertDatabaseHas('report_signatures', [
             'field_assessment_id' => $assessment,
             'signature_role' => 'verified_by',
-            'signer_user_id' => $mark->id,
+            'signer_user_id' => $verifier->id,
         ]);
         $this->assertDatabaseMissing('report_signatures', [
             'field_assessment_id' => $assessment,
             'signature_role' => 'approved_by',
         ]);
 
-        $this->actingAs($mark)->postJson('/rdana/api/assessments/'.$assessment.'/submit')->assertStatus(422);
+        $this->actingAs($verifier)->postJson('/rdana/api/assessments/'.$assessment.'/submit')->assertStatus(422);
         $this->assertSame('signed', DB::table('field_assessments')->where('id', $assessment)->value('assessment_status'));
 
         DB::table('field_assessments')->where('id', $assessment)->update(['assessment_status' => 'submitted']);
@@ -160,21 +145,20 @@ class FieldWorkspaceTest extends TestCase
             $barangays[$code] = $this->barangay($code, $name);
         }
         $outside = $this->barangay('166819099', 'Outside');
-        $this->seed(AssessorDemoUserSeeder::class);
-        $mark = User::query()->where('email', 'mark.merillo@mapr.test')->firstOrFail();
+        $verifier = $this->user('rdana', 'Test Assessor');
         $inactive = $this->user('rdana', 'Inactive Assessor');
         $inactive->forceFill(['account_status' => 'inactive'])->save();
         $assignment = app(AssessorStudyBarangayAssignment::class);
         $assignment->assignActiveAssessors();
         $again = $assignment->assignActiveAssessors();
 
-        $this->assertSame(4, DB::table('user_barangay_assignments')->where('user_id', $mark->id)->whereNull('revoked_at')->count());
+        $this->assertSame(4, DB::table('user_barangay_assignments')->where('user_id', $verifier->id)->whereNull('revoked_at')->count());
         $this->assertSame(0, $again['assigned']);
         $this->assertSame(0, DB::table('user_barangay_assignments')->where('user_id', $inactive->id)->count());
-        $mark->forceFill(['password' => Hash::make('already-set')])->save();
+        $verifier->forceFill(['password' => 'already-set'])->save();
         $assignment->assignActiveAssessors();
-        $this->assertTrue(Hash::check('already-set', $mark->fresh()->password));
-        $this->assertSame(4, DB::table('user_barangay_assignments')->where('user_id', $mark->id)->count());
+        $this->assertTrue(Hash::check('already-set', $verifier->fresh()->password));
+        $this->assertSame(4, DB::table('user_barangay_assignments')->where('user_id', $verifier->id)->count());
 
         $references = [];
         foreach ($barangays as $code => $barangayId) {
@@ -182,7 +166,7 @@ class FieldWorkspaceTest extends TestCase
         }
         $hidden = $this->registryResident($outside, false);
 
-        $listed = $this->actingAs($mark)->getJson('/rdana/api/residents?per_page=50')->assertOk();
+        $listed = $this->actingAs($verifier)->getJson('/rdana/api/residents?per_page=50')->assertOk();
         $found = collect($listed->json('data'))->pluck('registry_reference');
         foreach ($references as $reference) {
             $this->assertTrue($found->contains($reference));
@@ -193,14 +177,14 @@ class FieldWorkspaceTest extends TestCase
         $this->assertNotSame('', (string) $unmapped['map_limitation']);
         $this->assertSame(0, $unmapped['report_count']);
 
-        $this->actingAs($mark)->getJson('/rdana/api/residents/summary')
+        $this->actingAs($verifier)->getJson('/rdana/api/residents/summary')
             ->assertOk()
             ->assertJsonPath('registered_residents', 4)
             ->assertJsonPath('total_household_size', 4)
             ->assertJsonPath('household_size_partial', true)
             ->assertJsonPath('incident_required', true);
-        $this->actingAs($mark)->getJson('/rdana/api/residents/'.$this->residentId($hidden))->assertForbidden();
-        $this->actingAs($mark)->getJson('/rdana/api/dashboard')
+        $this->actingAs($verifier)->getJson('/rdana/api/residents/'.$this->residentId($hidden))->assertForbidden();
+        $this->actingAs($verifier)->getJson('/rdana/api/dashboard')
             ->assertOk()
             ->assertJsonCount(4, 'overview');
 
@@ -214,11 +198,11 @@ class FieldWorkspaceTest extends TestCase
             ->assertJsonPath('barangays.0.name', 'Bag-ong Lungsod');
 
         $report = $this->barangayReport($home, 'review');
-        $assessment = $this->assessment($report, $mark->id, 'draft', 'Field note.');
+        $assessment = $this->assessment($report, $verifier->id, 'draft', 'Field note.');
         $before = DB::table('field_assessments')->count();
         $assignment->assignActiveAssessors();
         $this->assertSame($before, DB::table('field_assessments')->count());
-        $this->actingAs($mark)->postJson('/rdana/api/assessments/'.$assessment.'/approve', [
+        $this->actingAs($verifier)->postJson('/rdana/api/assessments/'.$assessment.'/approve', [
             'confirmed' => true,
             'password' => 'already-set',
         ])->assertForbidden();
@@ -243,29 +227,29 @@ class FieldWorkspaceTest extends TestCase
             $table->text('resolution')->nullable();
             $table->timestamps();
         });
-        $this->seed(AssessorDemoUserSeeder::class);
-        $mark = User::query()->where('email', 'mark.merillo@mapr.test')->firstOrFail();
+        $verifier = $this->user('rdana', 'Test Verifier');
+        config(['mapr.assessor_verifier_email' => $verifier->email]);
         $barangay = $this->barangay('166819002', 'Bag-ong Lungsod');
         $report = $this->barangayReport($barangay, 'review');
-        $assessment = $this->assessment($report, $mark->id, 'draft', 'Waterline is above the outlet.');
+        $assessment = $this->assessment($report, $verifier->id, 'draft', 'Waterline is above the outlet.');
 
-        $this->actingAs($mark)->postJson('/rdana/api/flags', [
+        $this->actingAs($verifier)->postJson('/rdana/api/flags', [
             'subject_type' => 'field_assessment',
             'subject_id' => $assessment,
             'category' => 'Evidence',
             'reason' => 'The source photograph does not show the wall.',
         ])->assertCreated();
-        $this->actingAs($mark)->postJson('/rdana/api/assessments/'.$assessment.'/verify', [
+        $this->actingAs($verifier)->postJson('/rdana/api/assessments/'.$assessment.'/verify', [
             'confirmed' => true,
-            'password' => 'testing-only-assessor-password',
+            'password' => 'secret-pass',
         ])->assertStatus(422);
         $flagId = DB::table('report_flags')->value('id');
-        $this->actingAs($mark)->postJson('/rdana/api/flags/'.$flagId.'/resolve', [
+        $this->actingAs($verifier)->postJson('/rdana/api/flags/'.$flagId.'/resolve', [
             'resolution' => 'A replacement photograph was checked.',
         ])->assertOk();
-        $this->actingAs($mark)->postJson('/rdana/api/assessments/'.$assessment.'/verify', [
+        $this->actingAs($verifier)->postJson('/rdana/api/assessments/'.$assessment.'/verify', [
             'confirmed' => true,
-            'password' => 'testing-only-assessor-password',
+            'password' => 'secret-pass',
         ])->assertOk();
         $this->assertSame('resolved', DB::table('report_flags')->value('status'));
     }
@@ -326,7 +310,7 @@ class FieldWorkspaceTest extends TestCase
 
         $this->actingAs($officer)->getJson('/bdrrm/api/buildings/'.$foreign)->assertForbidden();
         $this->actingAs($officer)->getJson('/bdrrm/api/buildings/'.$building)->assertForbidden();
-        $secretary = $this->user('barangay_secretary', 'Leonida Lagunda');
+        $secretary = $this->user('barangay_secretary', 'Test Secretary');
         DB::table('user_barangay_assignments')->insert([
             'assigned_at' => now(),
             'user_id' => $secretary->id,
@@ -524,13 +508,13 @@ class FieldWorkspaceTest extends TestCase
         ]);
     }
 
-    private function officer(int $barangayId, string $first = 'Barangay', string $middle = 'Officer', string $last = 'Demo'): User
+    private function officer(int $barangayId, string $first = 'Barangay', string $middle = 'Officer', string $last = 'Test', string $role = 'bdrrm'): User
     {
-        $roleId = DB::table('roles')->where('code', 'bdrrm')->value('id');
+        $roleId = DB::table('roles')->where('code', $role)->value('id');
         if ($roleId === null) {
             $roleId = DB::table('roles')->insertGetId([
-                'name' => 'BDRRM',
-                'code' => 'bdrrm',
+                'name' => $role,
+                'code' => $role,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);

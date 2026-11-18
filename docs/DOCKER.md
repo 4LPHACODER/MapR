@@ -23,7 +23,7 @@ chmod 600 .env.docker
 
 For a Linux user whose UID/GID are not 1000, also set `LOCAL_UID` and `LOCAL_GID` to the values from `id -u` / `id -g` before building. Rebuild the development app and Vite images after changing these values. Existing named volumes retain their previous ownership; use a fresh Compose project when verifying a different UID/GID.
 
-Edit `.env.docker`: set different random `DB_PASSWORD` and `MYSQL_ROOT_PASSWORD`, a local-only `MAPR_DEMO_PASSWORD`, and your `MAPBOX_ACCESS_TOKEN`. Leave an existing host `.env` and its database untouched. The Docker environment is separate. Local app, queue, and one-off Artisan containers mount the selected `MAPR_ENV_FILE` read-only at `/run/mapr/.env`; `MAPR_LARAVEL_ENV_PATH` selects that directory before Laravel loads environment files. Host `.env` and `.env.local` files are not loaded. A separate `local-bootstrap-cache` named volume hides host cached configuration and is shared by app and queue. Never commit actual credentials.
+Edit `.env.docker`: set different random `DB_PASSWORD` and `MYSQL_ROOT_PASSWORD` and your `MAPBOX_ACCESS_TOKEN`. Leave an existing host `.env` and its database untouched. The Docker environment is separate. Local app, queue, and one-off Artisan containers mount the selected `MAPR_ENV_FILE` read-only at `/run/mapr/.env`; `MAPR_LARAVEL_ENV_PATH` selects that directory before Laravel loads environment files. Host `.env` and `.env.local` files are not loaded. A separate `local-bootstrap-cache` named volume hides host cached configuration and is shared by app and queue. Never commit actual credentials.
 
 Select that file for Compose interpolation and container environment loading in every new shell. App, queue, and MySQL reject a selected file whose `APP_ENV` does not match the target stack (`local` with the local override, `production` with the base file). This also protects against a leftover `MAPR_ENV_FILE` export; keep `APP_ENV` in custom environment files:
 
@@ -58,12 +58,12 @@ docker compose -f compose.yaml -f compose.local.yaml up -d queue
 
 Local logs, framework caches, sessions, and font caches live in the `local-storage` named volume rather than the host `storage/` directory. Uploads use the separate `uploads` volume. View application stderr logs with `docker compose -f compose.yaml -f compose.local.yaml logs app queue`.
 
-Vite installs locked npm dependencies automatically into a named volume on every start, so startup requires registry access. If installation fails, restore registry connectivity and restart `vite`; the repeated install keeps dependencies aligned with `package-lock.json`. Its home and npm cache use `/home/mapr`, owned by the build-time local UID/GID, including UIDs without a matching account. Startup normalizes `public/storage` to `../storage/app/public`, including existing host-created or dangling symlinks. This updates the link in the source checkout and resolves on both host and containers. A real file or directory at that path is preserved and blocks startup with an error; move it aside manually before retrying. MapR: http://localhost:8000/login; Vite: http://localhost:5173; phpMyAdmin: http://127.0.0.1:8081. All published ports bind to loopback. Log in to phpMyAdmin using `DB_USERNAME` and `DB_PASSWORD`; credentials are not prefilled. Demo login emails are listed in the README and use your local `MAPR_DEMO_PASSWORD`.
+Vite installs locked npm dependencies automatically into a named volume on every start, so startup requires registry access. If installation fails, restore registry connectivity and restart `vite`; the repeated install keeps dependencies aligned with `package-lock.json`. Its home and npm cache use `/home/mapr`, owned by the build-time local UID/GID, including UIDs without a matching account. Startup normalizes `public/storage` to `../storage/app/public`, including existing host-created or dangling symlinks. This updates the link in the source checkout and resolves on both host and containers. A real file or directory at that path is preserved and blocks startup with an error; move it aside manually before retrying. MapR: http://localhost:8000/login; Vite: http://localhost:5173; phpMyAdmin: http://127.0.0.1:8081. All published ports bind to loopback. Log in to phpMyAdmin using `DB_USERNAME` and `DB_PASSWORD`; credentials are not prefilled. Local role account emails are listed in the README. Their initial password is `password`.
 
 The ignored `geospatial_data/` folder is mounted read-only. Supply the separately obtained datasets in the README's layout, or set `MAPR_DATA_DIR` to an existing absolute dataset directory. The source path must exist. Import is explicit:
 
 ```bash
-docker compose -f compose.yaml -f compose.local.yaml exec app php artisan mapr:bootstrap-local-data
+docker compose -f compose.yaml -f compose.local.yaml exec app php artisan mapr:import-geospatial
 ```
 
 No datasets are downloaded or baked into images. Without them the application works with empty registry/map data. To run the automated suite:
@@ -76,7 +76,7 @@ The SQLite test suite does not replace fresh MySQL migration and spatial checks.
 
 ## Production first run
 
-Use a separate server or Compose project and fresh volumes. The base Compose file defaults to `.env.docker.production`; the local override defaults to `.env.docker`. `MAPR_ENV_FILE` explicitly selects another container environment file, while `COMPOSE_ENV_FILES` (or `--env-file`) selects Compose interpolation values. App, queue, and MySQL all load credentials from the selected Docker environment file. Its `APP_ENV` must be `production` for the base stack or `local` for the local override. A mismatch or missing value stops startup before application storage changes or MySQL initialization. MySQL maps its `DB_*` settings to the official image’s `MYSQL_*` variables at startup, so host interpolation cannot substitute different database credentials. Compose interpolation still controls ports, image tags, and build arguments; select the same file for those settings as well. There are no source mounts, demo bootstrap, Vite, phpMyAdmin, or published MySQL/FPM ports in `compose.yaml`. Only Nginx is published, to a configurable loopback port. Nginx waits for the app’s FPM port to accept connections before starting. This check covers the FPM listener; complete the application and HTTPS checks below before opening public traffic.
+Use a separate server or Compose project and fresh volumes. The base Compose file defaults to `.env.docker.production`; the local override defaults to `.env.docker`. `MAPR_ENV_FILE` explicitly selects another container environment file, while `COMPOSE_ENV_FILES` (or `--env-file`) selects Compose interpolation values. App, queue, and MySQL all load credentials from the selected Docker environment file. Its `APP_ENV` must be `production` for the base stack or `local` for the local override. A mismatch or missing value stops startup before application storage changes or MySQL initialization. MySQL maps its `DB_*` settings to the official image’s `MYSQL_*` variables at startup, so host interpolation cannot substitute different database credentials. Compose interpolation still controls ports, image tags, and build arguments; select the same file for those settings as well. There are no source mounts, Vite, phpMyAdmin, or published MySQL/FPM ports in `compose.yaml`. Only Nginx is published, to a configurable loopback port. Nginx waits for the app’s FPM port to accept connections before starting. This check covers the FPM listener; complete the application and HTTPS checks below before opening public traffic.
 
 ```bash
 cp .env.docker.production.example .env.docker.production
@@ -95,7 +95,7 @@ docker compose -f compose.yaml build --pull app web
 docker compose -f compose.yaml run --rm --no-deps app php artisan key:generate --show
 ```
 
-Save the key in `.env.docker.production` and retain it in encrypted off-server backups. Never regenerate it during deployment. Do not configure demo passwords in production.
+Save the key in `.env.docker.production` and retain it in encrypted off-server backups. Never regenerate it during deployment.
 
 ```bash
 # First run: start the queue after migrations and administrator provisioning.
