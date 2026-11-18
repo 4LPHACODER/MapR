@@ -1,13 +1,21 @@
 <script setup>
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import Button from 'primevue/button';
+import Message from 'primevue/message';
 import MapIcon from '../../shared/components/MapIcon.vue';
 import ResidentDetailDrawer from '../../shared/components/ResidentDetailDrawer.vue';
+import ResidentsDialogs from '../../cdrrmo/components/residents/ResidentsDialogs.vue';
+import ResidentsFilters from '../../cdrrmo/components/residents/ResidentsFilters.vue';
+import ResidentsSummary from '../../cdrrmo/components/residents/ResidentsSummary.vue';
+
+const ResidentsTable = defineAsyncComponent(() => import('../../cdrrmo/components/residents/ResidentsTable.vue'));
 
 const route = useRoute();
 const router = useRouter();
 const reportContext = inject('reportContext');
 const apiBase = inject('apiBase', '/rdana/api');
+const barangayRegistry = apiBase === '/bdrrm/api';
 
 const barangays = ref([]);
 const incidents = ref([]);
@@ -33,11 +41,14 @@ const reportsOpen = ref(false);
 const reports = ref(null);
 const reportsError = ref('');
 const reportsResident = ref(null);
+let reportsTicket = 0;
+let reportsTrigger;
 let detailTicket = 0;
 const detailTrigger = ref(null);
 let listTicket = 0;
 let summaryTicket = 0;
 let searchTimer = null;
+let composing = false;
 const ready = ref(false);
 
 const filters = reactive({
@@ -50,6 +61,7 @@ const filters = reactive({
     inclusion: '',
     quality: '',
     status: 'active',
+    ...(barangayRegistry ? { report_availability: 'all' } : {}),
     per_page: 25,
     page: 1,
 });
@@ -155,6 +167,7 @@ function showAffected() {
 }
 
 function clearFilters() {
+    if (barangayRegistry) clearTimeout(searchTimer);
     Object.assign(filters, {
         search: '',
         barangay_id: '',
@@ -188,9 +201,9 @@ function toggleRow(row) {
     selected.value = next;
 }
 
-function togglePage(event) {
+function togglePage(checked) {
     const next = { ...selected.value };
-    if (event.target.checked) pageRows.value.forEach((row) => { next[row.id] = row; });
+    if (checked) pageRows.value.forEach((row) => { next[row.id] = row; });
     else pageRows.value.forEach((row) => { delete next[row.id]; });
     selected.value = next;
 }
@@ -200,10 +213,28 @@ function goToPage(nextPage) {
     reloadList();
 }
 
+function paginate(event) {
+    if (event.rows !== filters.per_page) filters.per_page = event.rows;
+    else goToPage(event.page + 1);
+}
+
+function submitRegistrySearch() {
+    clearTimeout(searchTimer);
+    if (composing) return;
+    filters.page = 1;
+    reloadAll();
+}
+
+function onRegistryComposition(value) {
+    composing = value;
+    clearTimeout(searchTimer);
+    if (!value) searchTimer = setTimeout(submitRegistrySearch, 300);
+}
+
 async function openDetail(row, event) {
     const ticket = ++detailTicket;
     openMenuId.value = null;
-    detailTrigger.value = event?.currentTarget || null;
+    if (event || !detail.value) detailTrigger.value = event?.currentTarget || null;
     detail.value = {
         id: row.id,
         display_name: row.display_name,
@@ -275,19 +306,33 @@ async function viewOnMap(rows) {
     router.push({ path: '/map', query: { focus: 'residents' } });
 }
 
-async function openReports(row) {
+async function openReports(row, trigger) {
+    if (!row) return;
+    const ticket = ++reportsTicket;
+    if (barangayRegistry && !reportsOpen.value) reportsTrigger = trigger || document.activeElement;
     openMenuId.value = null;
     reportsResident.value = row;
     reports.value = null;
     reportsError.value = '';
     reportsOpen.value = true;
     try {
-        reports.value = (await window.axios.get(`${apiBase}/residents/${row.id}/reports`, {
+        const { data } = await window.axios.get(`${apiBase}/residents/${row.id}/reports`, {
             params: { incident_id: filters.incident_id || undefined },
-        })).data;
+        });
+        if (ticket === reportsTicket) reports.value = data;
     } catch {
-        reportsError.value = 'Related reports could not be loaded.';
+        if (ticket === reportsTicket) reportsError.value = 'Related reports could not be loaded.';
     }
+}
+
+function closeRegistryReports() {
+    reportsTicket += 1;
+    reportsOpen.value = false;
+}
+
+function restoreReportsFocus() {
+    reportsTrigger?.focus();
+    reportsTrigger = null;
 }
 
 const reportGroups = computed(() => {
@@ -388,8 +433,12 @@ function onKeydown(event) {
 }
 
 watch(() => filters.search, () => {
-    if (!ready.value) return;
+    if (!ready.value || composing) return;
     clearTimeout(searchTimer);
+    if (barangayRegistry) {
+        searchTimer = setTimeout(submitRegistrySearch, 300);
+        return;
+    }
     searchTimer = setTimeout(() => {
         filters.page = 1;
         reloadAll();
@@ -433,7 +482,84 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <section class="residents-page">
+    <section :class="barangayRegistry ? 'cdrrmo-residents barangay-residents' : 'residents-page'">
+        <template v-if="barangayRegistry">
+            <header class="registry-page-heading">
+                <div class="min-w-0">
+                    <h2>Residents Records</h2>
+                    <p>Browse resident and household records in your assigned barangays.</p>
+                </div>
+                <Button size="small" severity="secondary" outlined class="shrink-0" label="Refresh" :loading="loading" @click="reloadAll">
+                    <template #icon><MapIcon name="refresh" /></template>
+                </Button>
+            </header>
+
+            <Message v-if="notice" severity="success" size="small">{{ notice }}</Message>
+            <Message v-if="mapNotice" severity="warn" size="small">{{ mapNotice }}</Message>
+
+            <ResidentsSummary :summary="summary" :inclusion="filters.inclusion" :status="filters.status" :incident-id="filters.incident_id" @registered="showRegistered" @affected="showAffected" />
+            <ResidentsFilters
+                barangay-registry
+                :model-value="filters"
+                :incidents="incidents"
+                :barangays="barangays"
+                @update:model-value="Object.assign(filters, $event)"
+                @clear="clearFilters"
+                @submit="submitRegistrySearch"
+                @composition="onRegistryComposition"
+            />
+
+            <div v-if="filters.area_scope && areaContext?.active" class="registry-area-banner">
+                <div><strong>{{ areaContext.label }}</strong><p>Barangays {{ areaContext.barangays?.join(', ') || '—' }}</p></div>
+                <div>
+                    <Button as="router-link" to="/map" size="small" severity="secondary" outlined label="Return to map" />
+                    <Button size="small" severity="secondary" text label="Clear area filter" @click="clearAreaFilter" />
+                </div>
+            </div>
+
+            <div v-if="selectedIds.length" class="registry-selection" role="region" aria-label="Selected residents">
+                <div class="registry-selection-heading">
+                    <strong role="status">{{ selectedIds.length }} selected</strong>
+                    <div class="registry-selection-actions">
+                        <Button v-if="selectionHasLocation" size="small" severity="secondary" outlined label="View selected on map" @click="viewOnMap(selectedList)">
+                            <template #icon><MapIcon name="pin" /></template>
+                        </Button>
+                        <Button size="small" severity="secondary" text label="Clear selection" @click="clearSelection" />
+                    </div>
+                </div>
+            </div>
+
+            <ResidentsTable
+                read-only
+                :page="page"
+                :selected="selected"
+                :loading="loading"
+                :error="error"
+                :incident-id="filters.incident_id"
+                @toggle="toggleRow"
+                @toggle-page="togglePage"
+                @page="paginate"
+                @retry="reloadAll"
+                @detail="openDetail"
+                @reports="openReports"
+                @map="viewOnMap"
+            />
+            <ResidentsDialogs
+                read-only
+                :inclusion-form="inclusionForm"
+                :reports-open="reportsOpen"
+                :reports-resident="reportsResident"
+                :reports="reports"
+                :reports-error="reportsError"
+                :report-groups="reportGroups"
+                :reports-empty="reportsEmpty"
+                @close-reports="closeRegistryReports"
+                @retry-reports="openReports(reportsResident)"
+                @report="openReport"
+                @hide="restoreReportsFocus"
+            />
+        </template>
+        <template v-else>
         <header class="residents-header">
             <div>
                 <h2 class="cdrrmo-page-title">Residents Records</h2>
@@ -533,7 +659,7 @@ onBeforeUnmount(() => {
                 <thead>
                     <tr>
                         <th>
-                            <input :checked="pageSelected" type="checkbox" aria-label="Select this page" @change="togglePage">
+                            <input :checked="pageSelected" type="checkbox" aria-label="Select this page" @change="togglePage($event.target.checked)">
                         </th>
                         <th>Resident</th>
                         <th>Resident reference</th>
@@ -607,6 +733,7 @@ onBeforeUnmount(() => {
                 <button type="button" class="mapr-button mapr-button-secondary" :disabled="page.meta.current_page >= page.meta.last_page" @click="goToPage(page.meta.current_page + 1)">Next</button>
             </div>
         </div>
+        </template>
 
         <ResidentDetailDrawer
             :open="!!detail"
@@ -669,7 +796,7 @@ onBeforeUnmount(() => {
             </form>
         </div>
 
-        <div v-if="reportsOpen" class="residents-dialog-backdrop">
+        <div v-if="!barangayRegistry && reportsOpen" class="residents-dialog-backdrop">
             <div class="residents-dialog" role="dialog" aria-modal="true" aria-labelledby="reports-title">
                 <h3 id="reports-title">Related reports</h3>
                 <p class="cdrrmo-muted">{{ reportsResident?.display_name }} · {{ reportsResident?.registry_reference }}</p>

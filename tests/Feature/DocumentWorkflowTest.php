@@ -26,7 +26,7 @@ class DocumentWorkflowTest extends TestCase
         $this->seed(RoleSeeder::class);
     }
 
-    public function test_screen_markup_uses_stat_cards_and_a_scoped_barangay_placeholder(): void
+    public function test_screen_markup_uses_dashboard_metrics_and_a_scoped_barangay_placeholder(): void
     {
         $map = file_get_contents(resource_path('js/shared/components/MapWorkspace.vue'));
         $this->assertStringContainsString('No assigned barangay', $map);
@@ -34,11 +34,11 @@ class DocumentWorkflowTest extends TestCase
 
         foreach ([
             'bdrrm' => ['bdrrm-dash-cards', 'bdrrm-dash-card'],
-            'assessor' => ['cdrrmo-stat-grid', 'cdrrmo-stat-card'],
-        ] as $workspace => [$gridClass, $cardClass]) {
+            'assessor' => ['assessor-dashboard-metrics', 'assessor-dashboard-metric'],
+        ] as $workspace => [$groupClass, $metricClass]) {
             $dashboard = file_get_contents(resource_path("js/{$workspace}/pages/DashboardPage.vue"));
-            $this->assertStringContainsString($gridClass, $dashboard);
-            $this->assertStringContainsString($cardClass, $dashboard);
+            $this->assertMatchesRegularExpression('/class="'.$groupClass.'(?:\s|")/', $dashboard);
+            $this->assertMatchesRegularExpression('/class="'.$metricClass.'(?:\s|")/', $dashboard);
             $this->assertStringNotContainsString('cdrrmo-summary-grid', $dashboard);
         }
 

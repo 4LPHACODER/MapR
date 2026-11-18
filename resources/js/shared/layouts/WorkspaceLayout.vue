@@ -97,7 +97,7 @@ onUnmounted(() => {
                 <MapIcon name="panel" /><span>Menu</span>
             </Button>
         </nav>
-        <Drawer v-if="workspace !== 'resident'" v-model:visible="drawerOpen" :header="`${config.label} navigation`"
+        <Drawer v-if="workspace !== 'resident'" v-model:visible="drawerOpen" :header="`${config.label} navigation`" :aria-label="`${config.label} navigation`"
             append-to=".workspace-app" class="workspace-navigation-drawer" :style="{ width: 'min(21rem, 92vw)' }">
             <WorkspaceSidebar v-bind="sidebarProps" id="workspace-mobile-sidebar" class="workspace-mobile-sidebar" @navigate="drawerOpen = false" />
         </Drawer>

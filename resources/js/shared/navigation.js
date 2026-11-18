@@ -24,7 +24,7 @@ export function workspaceNavigation(workspace, roleCode = '') {
         case 'assessor': return {
             label: 'Assessor', badgeUrl: '/rdana/api/navigation',
             items: [home, link('/map', 'Assessment Map', 'map'), link('/buildings', 'Building Records', 'building-2'), barangay, field, { ...drafts, label: 'Drafts' }, returned, submitted, profile],
-            mobile: ['/', '/map', '/reports/barangay', '/reports/field'],
+            mobile: ['/', '/map', '/buildings', '/reports/barangay'],
         };
         case 'cdrrmo': return {
             label: 'CDRRMO', badgeUrl: '/cdrrmo/api/nav-badges',

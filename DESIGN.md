@@ -170,6 +170,24 @@ Container queries reflow filters at 900px and compact the summary into label/val
 
 Residents controls and authored overlays omit outer focus rings and shadows at the user's request. Subtle indigo field borders, tonal checkbox/menu/selection fills, button fills, and underlined actions identify keyboard focus. Keep system outlines available in forced-colors mode. Popups open instantly; reduced motion removes transitions. Preserve neutral routine actions, distinct archive danger styling, loading/empty/error/retry states, and location-unavailable explanations. Server ordering, pagination, selection, forms, archive, incident inclusion, and map/report destinations follow the contract in `UX-CONTRACT.md`.
 
+### BDRRM report creation
+
+The create page pairs a compact report form with a draft summary that stacks below the form when space is limited. The summary shows the current incident, barangay, building, and save status, with brief forwarding guidance. Show a single assigned barangay as read-only and retain the selector for multiple assignments. Use the existing building picker to preserve linked-resident lookup and building details.
+
+`resources/css/bdrrm/reports.css` scopes the layout, blue and indigo accents, and 8px radii to this form. Use small PrimeVue controls at 36px for desktop and 44px on coarse pointers. Inputs use a border-color change for focus, with system outlines available in forced-colors mode. PrimeVue owns the select popup, photo preview, and unsaved-changes confirmation.
+
+### BDRRM report queues
+
+Keep the three queue counts together and mark the active queue with a pale indigo surface. Draft and submitted cards lead with the reference and the API's status label in a compact Tag, then show the incident, barangay, relevant date, linked resident report, and description. Continue Editing and View Report sit beside the report on wide screens and below the details on narrow screens. Returned reports keep their warning Tag, reviewer feedback panel, and Review Corrections action. All queues put preview, PDF, and history in the PrimeVue Menu.
+
+`resources/js/bdrrm/pages/QueuePage.vue` owns the shared queue layout and consumes the shared PrimeVue tokens. Use 36px small controls and 44px controls on coarse pointers. Search, Select, and calendar inputs use an indigo focus border, with system outlines available in forced colors. Filters reflow by available content width. Use the shared date converters to keep the existing date-only URL parameters.
+
+### RDANA assessment workspace
+
+The dashboard gives the workload and review queue priority. The queue keeps review actions beside the record and groups secondary PDF and location actions in a menu. Registry totals, the barangay overview, and recent activity follow the queue. The dedicated Assessment Map owns map exploration, with assigned-area filters above the canvas and the selection summary alongside it on wide screens. A drawn area is a working extent and carries its own qualification.
+
+Building Records uses one filter row and a divided registry table. A record reference opens the building details drawer, and the map action opens the same location in Assessment Map. At phone widths the table moves household and report counts below the reference. Barangay Reports places counts in the queue tabs and shows assignment actions with selected records. Compact PrimeVue controls use blue field borders, filled selections, or underlined actions for keyboard focus. The phone navigation gives direct access to the dashboard, map, building records, and barangay queue.
+
 ### Content and data visualization
 
 Keep established route labels and plain action verbs. The sidebar adds no charts, domain claims, or numeric formatting.

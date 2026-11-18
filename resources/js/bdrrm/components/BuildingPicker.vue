@@ -1,6 +1,11 @@
 <script setup>
 import { inject, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import mapboxgl from 'mapbox-gl';
+import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
+import InputText from 'primevue/inputtext';
+import Message from 'primevue/message';
+import ProgressSpinner from 'primevue/progressspinner';
 import MapIcon from '../../shared/components/MapIcon.vue';
 
 const props = defineProps({
@@ -18,6 +23,7 @@ const query = ref('');
 const matches = ref([]);
 const meta = ref({ current_page: 1, last_page: 1, total: 0 });
 const searching = ref(false);
+const composing = ref(false);
 const searchError = ref('');
 const residentNotice = ref(false);
 const note = ref('');
@@ -25,11 +31,11 @@ const selected = ref(null);
 const detail = ref(null);
 const photos = ref([]);
 const detailError = ref('');
+const loadingDetail = ref(false);
 const expanded = ref({});
 const broken = ref({});
 const viewer = ref(null);
 const searchInput = ref(null);
-const viewerClose = ref(null);
 const miniMapEl = ref(null);
 let searchTimer;
 let searchTicket = 0;
@@ -137,9 +143,32 @@ async function search(resetPage = true) {
     }
 }
 
+function scheduleSearch() {
+    clearTimeout(searchTimer);
+    searchTicket++;
+    matches.value = [];
+    residentNotice.value = false;
+    searchError.value = '';
+    searching.value = !composing.value && Boolean(props.barangayId) && query.value.trim().length >= 2;
+    if (searching.value) searchTimer = setTimeout(() => search(true), 300);
+}
+
+function submitSearch(event) {
+    if (event.isComposing || composing.value) return;
+    event.preventDefault();
+    clearTimeout(searchTimer);
+    search(true);
+}
+
+function clearSearch() {
+    query.value = '';
+    changeBuilding();
+}
+
 async function loadDetail(id) {
     const ticket = ++detailTicket;
     detailError.value = '';
+    loadingDetail.value = true;
     try {
         const [building, photoList] = await Promise.all([
             window.axios.get(`${apiBase}/buildings/${id}`),
@@ -158,11 +187,16 @@ async function loadDetail(id) {
         detailError.value = exception.response?.status === 403
             ? ''
             : 'This building record could not be loaded.';
+    } finally {
+        if (ticket === detailTicket) loadingDetail.value = false;
     }
 }
 
 function selectBuilding(row) {
     note.value = '';
+    detail.value = null;
+    photos.value = [];
+    destroyMiniMap();
     selected.value = { ...row };
     emit('update:modelValue', row.id);
     emit('selected', selected.value);
@@ -170,6 +204,8 @@ function selectBuilding(row) {
 }
 
 function clearSelection() {
+    detailTicket++;
+    loadingDetail.value = false;
     selected.value = null;
     detail.value = null;
     photos.value = [];
@@ -180,87 +216,89 @@ function clearSelection() {
 }
 
 function changeBuilding() {
-    searchInput.value?.focus();
+    searchInput.value?.$el?.focus();
 }
 
-async function openViewer(buildingId, photo) {
+function openViewer(buildingId, photo) {
     viewer.value = {
         url: photoUrl(buildingId, photo.id),
         alt: photoCaption(photo),
         caption: `${photoCaption(photo)}. This photograph is from a linked report. It does not show the current condition of the building.`,
         broken: false,
     };
-    await nextTick();
-    viewerClose.value?.focus();
 }
 
-function closeViewer() {
-    viewer.value = null;
-}
-
-function onViewerKey(event) {
-    if (event.key === 'Escape') {
-        event.preventDefault();
-        closeViewer();
-    }
-}
-
-watch(query, () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => search(true), 300);
-});
+watch(query, scheduleSearch);
 
 watch(() => props.barangayId, (next, previous) => {
     if (String(next) === String(previous)) return;
-    matches.value = [];
-    residentNotice.value = false;
-    searchError.value = '';
     if (selected.value && previous !== undefined && previous !== '') {
         clearSelection();
         note.value = 'The building was cleared because it is not in the selected barangay.';
     }
-    if (query.value.trim().length >= 2) search(true);
+    scheduleSearch();
 });
 
 onBeforeUnmount(() => {
     clearTimeout(searchTimer);
+    searchTicket++;
+    detailTicket++;
     destroyMiniMap();
 });
 </script>
 
 <template>
     <div class="report-building-picker">
-        <p class="report-note">Find a building using its details or a linked resident in the selected barangay.</p>
-        <label>
-            <span>Building search</span>
-            <span class="report-search-field">
-                <MapIcon name="search" />
-                <input
+        <div class="grid gap-1.5">
+            <label for="report-building_id" class="font-semibold">Building <span class="report-create-optional">Optional for draft</span></label>
+            <div class="report-create-search relative">
+                <MapIcon name="search" class="pointer-events-none absolute inset-s-3 top-1/2 size-3.5 -translate-y-1/2" />
+                <InputText
                     id="report-building_id"
                     ref="searchInput"
                     v-model="query"
-                    type="search"
+                    size="small"
+                    fluid
                     maxlength="80"
                     autocomplete="off"
                     :disabled="!barangayId"
-                    :aria-invalid="invalid"
-                    placeholder="Search building reference, address, resident name, or Resident ID"
+                    :invalid="invalid"
+                    :aria-describedby="error ? 'report-building-help report-building-error' : 'report-building-help'"
+                    :aria-busy="searching"
+                    placeholder="Search for a building"
+                    @keydown.enter="submitSearch"
+                    @compositionstart="composing = true; scheduleSearch()"
+                    @compositionend="composing = false; scheduleSearch()"
+                />
+                <Button
+                    v-if="query"
+                    type="button"
+                    aria-label="Clear building search"
+                    size="small"
+                    severity="secondary"
+                    text
+                    class="report-create-search-clear"
+                    @click="clearSearch"
                 >
-            </span>
-            <span v-if="error" class="report-field-error">{{ error }}</span>
-        </label>
-        <p v-if="note" class="report-note">{{ note }}</p>
+                    <template #icon><MapIcon name="x" class="size-3.5" /></template>
+                </Button>
+            </div>
+            <small id="report-building-help" class="report-note">
+                {{ barangayId ? 'Search by building reference, address, resident name, or resident ID.' : 'A barangay is needed to search for buildings.' }}
+            </small>
+            <small v-if="error" id="report-building-error" class="report-field-error">{{ error }}</small>
+        </div>
+        <p v-if="note" class="report-note" role="status">{{ note }}</p>
         <p class="visually-hidden" aria-live="polite">
-            <template v-if="searching">Searching buildings…</template>
-            <template v-else-if="query.trim().length >= 2">{{ meta.total }} matching {{ meta.total === 1 ? 'building' : 'buildings' }}.</template>
+            <template v-if="!searching && !searchError && query.trim().length >= 2 && matches.length">{{ meta.total }} matching {{ meta.total === 1 ? 'building' : 'buildings' }}.</template>
         </p>
 
         <article v-if="selected" class="report-selected-building">
             <div class="report-building-card">
                 <div class="report-building-photo">
-                    <button v-if="photos[0] && !broken[photos[0].id]" type="button" class="report-photo-button" @click="openViewer(selected.id, photos[0])">
+                    <Button v-if="photos[0] && !broken[photos[0].id]" type="button" size="small" severity="secondary" outlined class="report-photo-button" @click="openViewer(selected.id, photos[0])">
                         <img :src="photoUrl(selected.id, photos[0].id)" :alt="photoCaption(photos[0])" @error="broken[photos[0].id] = true">
-                    </button>
+                    </Button>
                     <p v-else class="report-photo-placeholder"><MapIcon name="building" /> No building photo available.</p>
                 </div>
                 <div>
@@ -270,60 +308,66 @@ onBeforeUnmount(() => {
                     <p>Location source: {{ detail?.location_source || selected.location_source || 'Not recorded' }}</p>
                     <p><span class="report-badge" :data-status="detail?.location_status || selected.location_status">{{ locationLabel(detail?.location_status || selected.location_status) }}</span></p>
                     <p v-if="detail" class="report-note">{{ locationCopy(detail) }}</p>
-                    <p v-else-if="!detailError" class="report-note">Loading location…</p>
-                    <p v-if="detailError" class="report-field-error">{{ detailError }} <button type="button" @click="loadDetail(selected.id)">Retry</button></p>
+                    <p v-else-if="loadingDetail" class="report-note" role="status">Loading location…</p>
+                    <Message v-if="detailError" severity="error" size="small">
+                        {{ detailError }}
+                        <Button type="button" label="Retry" size="small" severity="secondary" text @click="loadDetail(selected.id)" />
+                    </Message>
                 </div>
                 <div class="report-actions-row">
-                    <button type="button" class="report-quiet" @click="changeBuilding"><MapIcon name="search" /> Change Building</button>
-                    <button type="button" @click="clearSelection"><MapIcon name="x" /> Clear Selection</button>
+                    <Button type="button" label="Change Building" size="small" severity="secondary" outlined @click="changeBuilding" />
+                    <Button type="button" label="Clear Selection" size="small" severity="secondary" text @click="clearSelection(); changeBuilding()" />
                 </div>
             </div>
             <div v-if="photos.length > 1" class="report-photo-row">
-                <button v-for="photo in photos.slice(1)" :key="photo.id" type="button" class="report-photo-button" @click="openViewer(selected.id, photo)">
+                <Button v-for="photo in photos.slice(1)" :key="photo.id" type="button" size="small" severity="secondary" outlined class="report-photo-button" @click="openViewer(selected.id, photo)">
                     <img v-if="!broken[photo.id]" :src="photoUrl(selected.id, photo.id)" :alt="photoCaption(photo)" @error="broken[photo.id] = true">
                     <span v-else>No building photo available.</span>
-                </button>
+                </Button>
             </div>
             <div v-if="detail?.longitude != null && detail?.latitude != null" ref="miniMapEl" class="report-mini-map" role="img" aria-label="Recorded building location"></div>
-            <a class="report-quiet" :href="`/bdrrm/map?building_id=${selected.id}`" target="_blank" rel="noopener"><MapIcon name="pin" /> View on Barangay Map</a>
+            <Button as="a" label="View on Barangay Map" size="small" severity="secondary" outlined class="justify-self-start" :href="`/bdrrm/map?building_id=${selected.id}`" target="_blank" rel="noopener" />
         </article>
 
-        <p v-if="searchError" class="cdrrmo-error" role="alert">
-            {{ searchError }}
-            <button type="button" @click="search(true)">Retry</button>
+        <p v-if="searching" class="report-note flex items-center gap-2" role="status">
+            <ProgressSpinner class="size-3.5 shrink-0" stroke-width="5" aria-hidden="true" />
+            Searching buildings…
         </p>
-        <p v-else-if="residentNotice" class="report-note">Resident found, but no linked building is available.</p>
-        <p v-else-if="!searching && query.trim().length >= 2 && !matches.length" class="report-note">No buildings match this search.</p>
+        <Message v-else-if="searchError" severity="error" size="small">
+            {{ searchError }}
+            <Button type="button" label="Retry" size="small" severity="secondary" text @click="search(true)" />
+        </Message>
+        <p v-else-if="residentNotice" class="report-note" role="status">Resident found, but no linked building is available.</p>
+        <p v-else-if="!composing && barangayId && query.trim().length >= 2 && !matches.length" class="report-note" role="status">No buildings match this search.</p>
         <div v-if="matches.length" class="report-building-results">
             <article v-for="row in matches" :key="row.id" class="report-building-card" :class="{ 'is-selected': String(selected?.id) === String(row.id) }">
                 <div class="report-building-photo">
-                    <button v-if="row.photo && !broken[`list-${row.photo.id}`]" type="button" class="report-photo-button" @click="openViewer(row.id, row.photo)">
+                    <Button v-if="row.photo && !broken[`list-${row.photo.id}`]" type="button" size="small" severity="secondary" outlined class="report-photo-button" @click="openViewer(row.id, row.photo)">
                         <img :src="photoUrl(row.id, row.photo.id)" :alt="photoCaption(row.photo)" @error="broken[`list-${row.photo.id}`] = true">
-                    </button>
+                    </Button>
                     <p v-else class="report-photo-placeholder"><MapIcon name="building" /> No building photo available.</p>
                 </div>
                 <div>
                     <h3>{{ row.reference }}</h3>
                     <p v-if="row.matched_residents?.length">Linked resident: {{ row.matched_residents[0].name }} · Resident ID {{ row.matched_residents[0].resident_id }}</p>
-                    <button v-if="row.matched_resident_count > 1" type="button" class="report-quiet" :aria-expanded="Boolean(expanded[row.id])" @click="expanded[row.id] = !expanded[row.id]">
-                        +{{ row.matched_resident_count - 1 }} linked residents
-                    </button>
+                    <Button v-if="row.matched_resident_count > 1" type="button" size="small" severity="secondary" text :label="`+${row.matched_resident_count - 1} linked residents`" :aria-expanded="Boolean(expanded[row.id])" @click="expanded[row.id] = !expanded[row.id]" />
                     <ul v-if="expanded[row.id]" class="report-matches">
                         <li v-for="person in row.matched_residents" :key="person.resident_id">{{ person.name }} · Resident ID {{ person.resident_id }}</li>
                     </ul>
                     <p class="report-meta"><span><MapIcon name="pin" /> {{ row.address || 'Address not recorded' }} · {{ row.barangay_name || 'Barangay' }}</span></p>
                     <p><span class="report-badge" :data-status="row.location_status">{{ locationLabel(row.location_status) }}</span></p>
                 </div>
-                <button type="button" class="report-primary" @click="selectBuilding(row)"><MapIcon name="check" /> Select Building</button>
+                <Button type="button" label="Select Building" size="small" severity="secondary" outlined class="justify-self-start" @click="selectBuilding(row)" />
             </article>
-            <button v-if="meta.current_page < meta.last_page" type="button" :disabled="searching" @click="search(false)">Load More</button>
+            <Button v-if="meta.current_page < meta.last_page" type="button" label="Load More" size="small" severity="secondary" outlined class="justify-self-start" :loading="searching" @click="search(false)" />
         </div>
 
-        <div v-if="viewer" class="report-photo-dialog" role="dialog" aria-modal="true" aria-label="Building photograph" @keydown="onViewerKey">
-            <button ref="viewerClose" type="button" @click="closeViewer">Close</button>
-            <img v-if="!viewer.broken" :src="viewer.url" :alt="viewer.alt" @error="viewer.broken = true">
-            <p v-else>No building photo available.</p>
-            <p>{{ viewer.caption }}</p>
-        </div>
+        <Dialog :visible="Boolean(viewer)" header="Building photograph" modal :draggable="false" :close-button-props="{ size: 'small' }" class="w-[min(36rem,calc(100vw-2rem))]" @update:visible="viewer = null">
+            <div v-if="viewer" class="grid gap-3">
+                <img v-if="!viewer.broken" :src="viewer.url" :alt="viewer.alt" class="max-h-[65dvh] w-full object-contain" @error="viewer.broken = true">
+                <p v-else>No building photo available.</p>
+                <p class="text-sm">{{ viewer.caption }}</p>
+            </div>
+        </Dialog>
     </div>
 </template>
