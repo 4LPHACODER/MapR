@@ -1,8 +1,8 @@
 <script setup>
 import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import MapIcon from '../../shared/components/MapIcon.vue';
 import ReviewSignDialog from '../../shared/components/ReviewSignDialog.vue';
+import ReportReviewList from '../components/ReportReviewList.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -15,16 +15,22 @@ const rows = ref([]);
 const summary = ref({ total: 0, awaiting_review: 0, awaiting_signature: 0, finalized: 0 });
 const filterOptions = ref({ incidents: [], barangays: [] });
 const meta = ref({ total: 0, current_page: 1, last_page: 1, per_page: 20 });
+const hasLoaded = ref(false);
+const appliedFilters = ref({});
 const signRow = ref(null);
-const menuId = ref(null);
 const fileMessage = ref('');
 const flagRow = ref(null);
 const flagForm = reactive({ category: 'Review', reason: '' });
 const flagError = ref('');
+const flagSaving = ref(false);
 const requestId = ref(0);
 
 const reportType = computed(() => route.meta.reportType || 'barangay');
-const title = computed(() => route.meta.title || 'Reports');
+const invalidFlagField = computed(() => {
+    if (!flagForm.category.trim()) return 'category';
+    if (flagForm.reason.trim().length < 10) return 'reason';
+    return null;
+});
 const apiPath = computed(() => `/cdrrmo/api/reports/${reportType.value}`);
 const capacity = computed(() => {
     if (userEmail === 'lestertalan@mapr_admin.com' || userEmail === 'lestertalan@mapr.com') return { role: 'noted_by', position: 'LDRRMO II', path: 'note' };
@@ -69,15 +75,18 @@ function queryParams() {
 
 async function load() {
     const current = ++requestId.value;
+    const params = queryParams();
+    appliedFilters.value = params;
     loading.value = true;
     error.value = '';
     try {
-        const { data } = await window.axios.get(apiPath.value, { params: queryParams() });
+        const { data } = await window.axios.get(apiPath.value, { params });
         if (current !== requestId.value) return;
         rows.value = data.data || [];
         meta.value = data.meta || meta.value;
         summary.value = data.summary || summary.value;
         filterOptions.value = data.filters || { incidents: [], barangays: [] };
+        hasLoaded.value = true;
     } catch {
         if (current !== requestId.value) return;
         error.value = 'Reports could not be loaded.';
@@ -101,16 +110,19 @@ function clearFilters() {
     Object.assign(filters, {
         q: '', incident_id: '', barangay_id: '', workflow_status: '', signature_status: '', flag_status: '', date_from: '', date_to: '', sort: 'updated', direction: 'desc', page: 1,
     });
+    if (reportType.value !== 'barangay' && !Object.keys(route.query).length
+        && Object.entries(appliedFilters.value).some(([key, value]) => value !== filters[key])) {
+        load();
+        return;
+    }
     router.replace({ query: {} });
 }
 
 function openReport(row) {
-    menuId.value = null;
     router.push({ path: `/reports/document/${reportType.value}/${row.id}`, query: { return: route.fullPath } });
 }
 
 function previewFile(row) {
-    menuId.value = null;
     if (row.attachment?.download_path) {
         const name = (row.attachment.filename || '').toLowerCase();
         if (name.endsWith('.pdf')) {
@@ -128,7 +140,6 @@ function previewFile(row) {
 }
 
 function downloadReport(row) {
-    menuId.value = null;
     if (row.attachment?.download_path) {
         window.location.assign(row.attachment.download_path);
         return;
@@ -147,11 +158,17 @@ function subjectType() {
 }
 
 async function saveFlag() {
+    const kind = reportType.value;
+    if (flagSaving.value) return;
     flagError.value = '';
-    if (!flagRow.value || flagForm.reason.trim().length < 10) {
-        flagError.value = 'Enter a reason of at least 10 characters.';
+    if (!flagRow.value || invalidFlagField.value) {
+        flagError.value = invalidFlagField.value === 'category'
+            ? 'Enter a category.'
+            : 'Enter a reason of at least 10 characters.';
         return;
     }
+    const target = flagRow.value;
+    flagSaving.value = true;
     try {
         await window.axios.post('/cdrrmo/api/flags', {
             subject_type: subjectType(),
@@ -159,13 +176,18 @@ async function saveFlag() {
             category: flagForm.category,
             reason: flagForm.reason,
         });
+        window.dispatchEvent(new Event('mapr-nav-refresh'));
+        if (reportType.value !== kind || flagRow.value !== target) return;
         flagRow.value = null;
         flagForm.reason = '';
         notice.value = 'Flag recorded.';
-        window.dispatchEvent(new Event('mapr-nav-refresh'));
         await load();
     } catch (exception) {
-        flagError.value = exception.response?.data?.message || 'The flag could not be saved.';
+        if (reportType.value === kind && flagRow.value === target) {
+            flagError.value = exception.response?.data?.message || 'The flag could not be saved.';
+        }
+    } finally {
+        flagSaving.value = false;
     }
 }
 
@@ -187,6 +209,19 @@ onMounted(() => {
     readQuery();
     load();
 });
+watch(reportType, () => {
+    rows.value = [];
+    summary.value = { total: 0, awaiting_review: 0, awaiting_signature: 0, finalized: 0 };
+    filterOptions.value = { incidents: [], barangays: [] };
+    meta.value = { total: 0, current_page: 1, last_page: 1, per_page: 20 };
+    hasLoaded.value = false;
+    appliedFilters.value = {};
+    signRow.value = null;
+    flagRow.value = null;
+    flagError.value = '';
+    notice.value = '';
+    fileMessage.value = '';
+});
 watch(() => route.fullPath, () => {
     if (route.meta.reportType) {
         readQuery();
@@ -196,139 +231,40 @@ watch(() => route.fullPath, () => {
 </script>
 
 <template>
-    <section class="report-admin">
-        <header class="report-admin-head">
-            <div>
-                <h2 class="cdrrmo-page-title">{{ title }}</h2>
-                <p class="cdrrmo-page-lead">Review reports, inspect supporting documents, and track approvals.</p>
-            </div>
-            <div class="report-admin-head-actions">
-                <button type="button" class="mapr-button mapr-button-secondary" @click="load"><MapIcon name="refresh" /> Refresh</button>
-                <router-link v-if="reportType === 'consolidated'" class="mapr-button mapr-button-primary" :to="{ path: '/map', query: { mode: 'estimate' } }"><MapIcon name="plus" /> Create Report</router-link>
-            </div>
-        </header>
-
-        <div class="cdrrmo-stat-grid">
-            <button type="button" class="cdrrmo-stat-card" @click="clearFilters"><MapIcon name="file" /><p>Total reports</p><strong>{{ summary.total }}</strong></button>
-            <button type="button" class="cdrrmo-stat-card" @click="filters.workflow_status = 'review'; apply()"><MapIcon name="clipboard" /><p>Awaiting review</p><strong>{{ summary.awaiting_review }}</strong></button>
-            <button type="button" class="cdrrmo-stat-card" @click="filters.signature_status = 'unsigned'; apply()"><MapIcon name="pen" /><p>Awaiting signature</p><strong>{{ summary.awaiting_signature }}</strong><span>Not the same as submitted</span></button>
-            <button type="button" class="cdrrmo-stat-card" @click="filters.workflow_status = reportType === 'consolidated' ? 'finalized' : 'submitted'; apply()"><MapIcon name="check" /><p>{{ reportType === 'consolidated' ? 'Finalized' : 'Submitted' }}</p><strong>{{ summary.finalized }}</strong></button>
-        </div>
-
-        <form class="report-filter-bar" @submit.prevent="apply(1)">
-            <label>Search <input v-model="filters.q" type="search" placeholder="Reference or title"></label>
-            <label>Incident
-                <select v-model="filters.incident_id">
-                    <option value="">All incidents</option>
-                    <option v-for="item in filterOptions.incidents" :key="item.id" :value="item.id">{{ item.name }}</option>
-                </select>
-            </label>
-            <label v-if="reportType !== 'consolidated'">Barangay
-                <select v-model="filters.barangay_id">
-                    <option value="">All barangays</option>
-                    <option v-for="item in filterOptions.barangays" :key="item.id" :value="item.id">{{ item.name }}</option>
-                </select>
-            </label>
-            <label>Status
-                <select v-model="filters.workflow_status">
-                    <option value="">All statuses</option>
-                    <option value="draft">Draft</option>
-                    <option value="review">Awaiting review</option>
-                    <option value="signed">Signed</option>
-                    <option value="submitted">Submitted</option>
-                    <option value="returned">Returned for correction</option>
-                    <option v-if="reportType === 'consolidated'" value="finalized">Finalized</option>
-                </select>
-            </label>
-            <label>Signature
-                <select v-model="filters.signature_status">
-                    <option value="">Any signature</option>
-                    <option value="unsigned">Awaiting signature</option>
-                    <option value="partial">Partially signed</option>
-                    <option value="complete">Signed</option>
-                </select>
-            </label>
-            <label>Flags
-                <select v-model="filters.flag_status">
-                    <option value="">Any flag</option>
-                    <option value="open">Open flags</option>
-                    <option value="none">No open flags</option>
-                </select>
-            </label>
-            <label>From <input v-model="filters.date_from" type="date"></label>
-            <label>To <input v-model="filters.date_to" type="date"></label>
-            <button type="submit" class="mapr-button mapr-button-primary">Apply</button>
-            <button type="button" class="mapr-button mapr-button-secondary" @click="clearFilters"><MapIcon name="filter-reset" /> Clear filters</button>
-        </form>
-
-        <p v-if="notice" class="cdrrmo-muted" role="status">{{ notice }}</p>
-        <p v-if="fileMessage" class="cdrrmo-muted" role="status">{{ fileMessage }} <button type="button" class="mapr-button mapr-button-secondary" @click="fileMessage = ''">Dismiss</button></p>
-        <p v-if="error" class="cdrrmo-error" role="alert">{{ error }} <button type="button" class="mapr-button mapr-button-secondary" @click="load">Retry</button></p>
-        <p v-if="loading" class="report-loading">Loading reports…</p>
-
-        <div v-else class="cdrrmo-table-wrap">
-            <table v-if="rows.length" class="cdrrmo-table report-admin-table">
-                <thead>
-                    <tr>
-                        <th><button type="button" @click="filters.sort = 'reference'; filters.direction = filters.direction === 'asc' ? 'desc' : 'asc'; apply(filters.page)">Reference</button></th>
-                        <th>Incident</th>
-                        <th>{{ reportType === 'consolidated' ? 'Scope' : 'Barangay' }}</th>
-                        <th>Submitted by</th>
-                        <th>Status</th>
-                        <th>Signature</th>
-                        <th><button type="button" @click="filters.sort = 'updated'; filters.direction = filters.direction === 'asc' ? 'desc' : 'asc'; apply(filters.page)">Updated</button></th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-for="row in rows" :key="row.id">
-                        <td>
-                            <button type="button" class="report-ref-button" @click="openReport(row)">{{ row.reference }}</button>
-                            <span>{{ row.title }}</span>
-                        </td>
-                        <td>{{ row.incident_name }}</td>
-                        <td>{{ row.barangay_name }}</td>
-                        <td>{{ row.submitted_by }}</td>
-                        <td><span class="report-status" :data-status="row.workflow_status">{{ row.workflow_label }}</span></td>
-                        <td>{{ row.signature_label }}<span v-if="row.open_flags"> · {{ row.open_flags }} open flag{{ row.open_flags === 1 ? '' : 's' }}</span></td>
-                        <td>{{ row.updated_label }}</td>
-                        <td class="report-row-actions">
-                            <button type="button" class="residents-icon-btn" title="View report" aria-label="View report" @click="openReport(row)"><MapIcon name="eye" /></button>
-                            <button type="button" class="residents-icon-btn" title="Preview original file" aria-label="Preview original file" @click="previewFile(row)"><MapIcon name="search" /></button>
-                            <button type="button" class="residents-icon-btn" title="Download" aria-label="Download" @click="downloadReport(row)"><MapIcon name="download" /></button>
-                            <button type="button" class="residents-icon-btn" title="More actions" aria-label="More actions" :aria-expanded="menuId === row.id" @click="menuId = menuId === row.id ? null : row.id"><MapIcon name="more" /></button>
-                            <div v-if="menuId === row.id" class="report-menu" role="menu">
-                                <button v-if="reportType === 'consolidated' && capacity && row.workflow_status !== 'finalized'" type="button" role="menuitem" @click="signRow = row; menuId = null"><MapIcon name="pen" /> Review &amp; Sign</button>
-                                <button type="button" role="menuitem" @click="flagRow = row; menuId = null"><MapIcon name="flag" /> Flag for review</button>
-                                <button type="button" role="menuitem" @click="openReport(row)"><MapIcon name="history" /> Version history</button>
-                                <p v-if="reportType !== 'consolidated'" role="note">Editing and signing stay with the preparing office.</p>
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-            <p v-else class="cdrrmo-muted">No reports match these filters.</p>
-        </div>
-
-        <div v-if="!loading && meta.last_page > 1" class="cdrrmo-actions">
-            <button type="button" class="mapr-button mapr-button-secondary" :disabled="meta.current_page <= 1" @click="apply(meta.current_page - 1)">Previous</button>
-            <span class="cdrrmo-muted">Page {{ meta.current_page }} of {{ meta.last_page }}</span>
-            <button type="button" class="mapr-button mapr-button-secondary" :disabled="meta.current_page >= meta.last_page" @click="apply(meta.current_page + 1)">Next</button>
-        </div>
-
-        <div v-if="flagRow" class="residents-drawer-backdrop" @click.self="flagRow = null">
-            <form class="review-sign-dialog" @submit.prevent="saveFlag">
-                <h3>Flag {{ flagRow.reference }}</h3>
-                <label>Category <input v-model="flagForm.category" maxlength="80" required></label>
-                <label>Reason <textarea v-model="flagForm.reason" rows="4" minlength="10" required></textarea></label>
-                <p v-if="flagError" class="cdrrmo-error">{{ flagError }}</p>
-                <div class="cdrrmo-actions">
-                    <button type="button" class="mapr-button mapr-button-secondary" @click="flagRow = null">Cancel</button>
-                    <button type="submit" class="mapr-button mapr-button-primary">Save flag</button>
-                </div>
-            </form>
-        </div>
-
+    <ReportReviewList
+        :key="reportType"
+        :kind="reportType"
+        :filters="filters"
+        :applied-filters="appliedFilters"
+        :flag-form="flagForm"
+        :rows="rows"
+        :meta="meta"
+        :summary="summary"
+        :filter-options="filterOptions"
+        :loading="loading"
+        :has-loaded="hasLoaded"
+        :error="error"
+        :notice="notice"
+        :file-message="fileMessage"
+        :flag-row="flagRow"
+        :flag-error="flagError"
+        :invalid-flag-field="invalidFlagField"
+        :flag-saving="flagSaving"
+        :can-sign="!!capacity"
+        @update:filters="Object.assign(filters, $event)"
+        @update:flag-form="Object.assign(flagForm, $event)"
+        @apply="apply"
+        @clear="clearFilters"
+        @refresh="load"
+        @open="openReport"
+        @preview="previewFile"
+        @download="downloadReport"
+        @dismiss-file-message="fileMessage = ''"
+        @flag="flagRow = $event; flagError = ''"
+        @close-flag="flagRow = null"
+        @save-flag="saveFlag"
+        @sign="signRow = $event"
+    >
         <ReviewSignDialog
             :open="!!signRow"
             :reference="signRow?.reference || ''"
@@ -338,5 +274,5 @@ watch(() => route.fullPath, () => {
             @close="signRow = null"
             @confirm="confirmSign"
         />
-    </section>
+    </ReportReviewList>
 </template>
