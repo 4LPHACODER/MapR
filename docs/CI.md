@@ -10,8 +10,8 @@ MapR promotes changes through three long-lived branches. GitHub Actions and bran
 | Branch | Purpose | Accepts PRs from | Merge method | Required checks |
 | --- | --- | --- | --- | --- |
 | `develop` | Code review of new features and fixes | `<type>/<name>` work branches | Squash | Branch flow, Commit messages, Lint, Tests, CI scripts + 1 approval |
-| `testing` | Full test run before release | `develop` only | Merge commit | Branch flow, Commit messages, Full test suite, Docker tests, images / Build images |
-| `main` | Production | `testing` only | Merge commit | Branch flow, Commit messages, images / Build images |
+| `testing` | Full test run before release | `develop` only | Merge commit | Branch flow, Commit messages, Full test suite, build / Build application |
+| `main` | Production | `testing` only | Merge commit | Branch flow, Commit messages, build / Build application |
 
 Nobody pushes directly to these branches. Urgent fixes follow the same path (`hotfix/<name>` → `develop` → `testing` → `main`).
 
@@ -48,8 +48,8 @@ Branch names use the same types: `feature/resident-export`, `fix/login-redirect`
 ## Promoting a release
 
 1. Open a PR from `develop` into `testing` titled e.g. `chore/promote develop to testing`. Merge with **Create a merge commit** once the Testing checks pass.
-2. Open a PR from `testing` into `main` titled e.g. `chore/release testing to main`. Merge with **Create a merge commit** once the production image build passes.
-3. Deploy manually from `main` by following [`DOCKER.md`](DOCKER.md). CI builds the images but does not publish or deploy them.
+2. Open a PR from `testing` into `main` titled e.g. `chore/release testing to main`. Merge with **Create a merge commit** once the production application build passes.
+3. Deploy manually from `main` by following the [production setup in the README](../README.md#production-setup). CI installs production PHP dependencies and compiles frontend assets; it does not deploy them.
 
 ## Where the checks live
 
@@ -57,12 +57,12 @@ Branch names use the same types: `feature/resident-export`, `fix/login-redirect`
 | --- | --- | --- |
 | Branch flow, Commit messages | `.github/workflows/pr-policy.yml` | `scripts/ci/check-branch-flow.sh`, `scripts/ci/check-commit-message.sh` |
 | Lint, Tests, CI scripts | `.github/workflows/review.yml` | Pint, `composer test`, `tests/ci` |
-| Full test suite, Docker tests | `.github/workflows/testing.yml` | `composer test` in the development image (with LibreOffice), `tests/docker` |
-| images / Build images | `.github/workflows/build-images.yml` | Production `app` and `web` image builds |
+| Full test suite | `.github/workflows/testing.yml` | Native PHP 8.5 tests with LibreOffice, map tests, frontend build |
+| build / Build application | `.github/workflows/build.yml` | Native PHP production dependency/platform checks and frontend build |
 
 Branch rulesets are versioned in `.github/rulesets/`. If you rename a job, update the matching ruleset `context` or the PR will wait forever for a check that never reports.
 
-Local check results and integration fixes are recorded in [CI_VERIFICATION.md](CI_VERIFICATION.md).
+Historical check results and integration fixes are recorded in [CI_VERIFICATION.md](CI_VERIFICATION.md). They describe the earlier container setup, not verification of the current native workflows.
 
 ## Activation status and owner setup
 
@@ -72,13 +72,9 @@ GitHub promotion smoke test remain pending activation. The `develop` and `testin
 branches were created from `main` at `5f77808` on 2026-11-15. Local checks do not
 prove that GitHub branch protection is active.
 
-The branch includes the Docker integration prerequisite and merges the newer
-`main` application changes. Land the Docker prerequisite first, then land this CI
-branch on `main`, before enabling rulesets. A bootstrap PR directly into `main`
-fails `Branch flow` because its source is not `testing`. Until the Docker prerequisite
-is merged, its older `feat:` commits also fail `Commit messages`; do not rewrite
-existing history or add a permanent policy bypass. Inspect the bootstrap image
-build result before merging.
+The current workflows run directly on GitHub-hosted Ubuntu runners. The Testing job installs LibreOffice Writer and fonts so DOCX preview tests run. Testing and Production call the shared native build workflow. The versioned rulesets require `build / Build application`; Docker-specific checks have been removed.
+
+If rulesets were already activated, update the existing `testing` and `main` rulesets with the versioned JSON files when these workflow changes land. Otherwise, the old required check names can block merging. Changing files in this checkout does not update live GitHub rulesets.
 
 Run the following as an administrator after the bootstrap is on `main`:
 
@@ -145,11 +141,11 @@ After activation, verify the complete flow using a disposable work branch:
    and squash-merge. Verify the squash subject matches the PR title.
 4. Open `develop` into `main`; confirm `Branch flow` rejects it, then close the
    PR without deleting `develop`.
-5. Promote `develop` into `testing` with a merge commit. Confirm all five testing
+5. Promote `develop` into `testing` with a merge commit. Confirm all four testing
    checks pass and `DocxPreviewTest` does not skip.
 6. Promote `testing` into `main` with a merge commit. Confirm all three production
    checks pass, including the subsequent Production push run. Its summary must
-   confirm images were built without publishing them.
+   confirm production PHP dependencies and frontend assets were built without deployment.
 7. Fetch and verify empty content diffs between `origin/develop`,
    `origin/testing`, and `origin/main`. Merge commits may differ.
 

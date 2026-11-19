@@ -25,165 +25,67 @@ MapR uses Laravel 12, PHP, Vue 3, Vue Router, Vite 7, Tailwind CSS 4, MySQL spat
 
 Changes reach production through `develop` → `testing` → `main`, with commit messages formatted as `<type>/<description>` (for example `feature/add resident export`). See [docs/CI.md](docs/CI.md) and run `composer hooks` once per clone.
 
-## Local setup with Docker
+## Local setup
 
-Use this workflow to run MapR locally without installing PHP, Composer, MySQL, or Node.js on your host. The images provide PHP 8.5.12, MySQL 8.4, and Node.js 22. Install Docker Engine and Docker Compose **2.24.4 or later**; the local override requires Compose's `!override` support. Check that Docker is running and accessible:
-
-```bash
-docker compose version
-docker info
-```
-
-Run all commands below from the repository root. **Plain `docker compose up -d` selects the production configuration**, which requires `.env.docker.production`. Local development uses both `compose.yaml` and `compose.local.yaml`, with `.env.docker` selected explicitly.
-
-### 1. Configure the local Docker environment
-
-For a new installation only:
-
-```bash
-cp .env.docker.example .env.docker
-chmod 600 .env.docker
-mkdir -p geospatial_data
-```
-
-If `.env.docker` already exists, keep it and its application key. Edit it before starting:
-
-- Set different random values for `DB_PASSWORD` and `MYSQL_ROOT_PASSWORD`.
-- Set `MAPBOX_ACCESS_TOKEN` for map tiles.
-- Keep `APP_ENV=local`, `DB_HOST=db`, and `SESSION_SECURE_COOKIE=false`.
-
-Keep your host `.env` separate. Docker app, queue, and database services load `.env.docker`; local Laravel containers mount it read-only. Changing database passwords later does not change credentials in an existing MySQL volume.
-
-On Linux, check `id -u` and `id -g`. If either is not 1000, add the matching `LOCAL_UID` and `LOCAL_GID` values to `.env.docker` before building. See [Docker setup and operations](docs/DOCKER.md) for ownership changes on existing volumes.
-
-### 2. Build and start the supporting services
-
-Select the local environment in every new terminal. `MAPR_ENV_FILE` selects the container environment file; `--env-file` selects the same file for Compose interpolation:
-
-```bash
-export MAPR_ENV_FILE=.env.docker
-docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml config --quiet
-docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml up -d --build app web db vite phpmyadmin
-```
-
-Leave the queue stopped until dependencies and database tables are ready. Vite runs `npm ci` automatically; the first build and dependency installs require network access. The application can return an error until the following steps finish.
-
-### 3. Install PHP dependencies and set the application key
-
-```bash
-docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml run --rm app composer install --no-interaction --prefer-dist
-docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml run --rm app php artisan key:generate --show
-```
-
-For a new installation, copy the printed `base64:...` value into `APP_KEY` in `.env.docker`. Skip key generation if the file already has a key. Keep that key for subsequent starts. Use `--show`: plain `key:generate` cannot write to the read-only environment mount.
-
-Recreate app to load the saved key, then create and seed the database:
-
-```bash
-docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml up -d --force-recreate app
-docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml exec app php artisan migrate
-docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml exec app php artisan db:seed
-docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml up -d queue
-```
-
-Open **http://localhost:8000/login** and sign in with a [local role account](#local-role-accounts), such as `cdrrmo.admin@mapr.test`, using `password`.
-
-| Service | Local URL |
-| --- | --- |
-| MapR | http://localhost:8000/login |
-| Vite asset server | http://localhost:5173 |
-| phpMyAdmin | http://127.0.0.1:8081 |
-
-For phpMyAdmin, use `DB_USERNAME` and `DB_PASSWORD` from `.env.docker`. All published ports bind to loopback.
-
-### 4. Import optional geospatial data
-
-The application can start without the source datasets; registry and map data remain empty. To import them, supply the files using the [dataset layout below](#4-supply-geospatial-data), then run:
-
-```bash
-docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml exec app php artisan mapr:import-geospatial
-```
-
-### Start and stop after setup
-
-For an already configured installation, start all local services from a new terminal with:
-
-```bash
-export MAPR_ENV_FILE=.env.docker
-docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml up -d
-```
-
-Check status and application logs:
-
-```bash
-docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml ps
-docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml logs --tail=100 app queue vite
-```
-
-Stop the stack while retaining its database and other named volumes:
-
-```bash
-docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml down
-```
-
-Do not add `--volumes` unless you intend to delete the stored data. After changing `.env.docker`, recreate app and queue with `up -d --force-recreate app queue`; clear Laravel's cached configuration first if you previously cached it. Rebuild with `up -d --build` when image dependencies or Dockerfiles change.
-
-Run Composer and Artisan through the local Compose prefix, for example:
-
-```bash
-docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml exec app composer install
-```
-
-Host `composer install` uses your host's PHP and extensions. Use the separate host setup below only when intentionally running without Docker.
-
-## Production setup with Docker
-
-Follow [Production first run and HTTPS proxy setup](docs/DOCKER.md#production-first-run) before deploying. Use a separate server or Compose project and fresh volumes. Create `.env.docker.production` from `.env.docker.production.example`, set `APP_ENV=production`, strong distinct database passwords, your public HTTPS `APP_URL`, and a persistent `APP_KEY`. Configure the HTTPS reverse proxy and verified `TRUSTED_PROXIES` as described in the guide. Production does not use the local override, Vite, phpMyAdmin, or demo accounts.
-
-After configuring the production environment and key:
-
-```bash
-export COMPOSE_ENV_FILES=.env.docker.production
-export MAPR_ENV_FILE=.env.docker.production
-export COMPOSE_PROJECT_NAME=mapr-production
-docker compose -f compose.yaml up -d --build app web db
-docker compose -f compose.yaml ps
-# After MySQL reports healthy:
-docker compose -f compose.yaml exec app php artisan migrate --force
-docker compose -f compose.yaml exec app php artisan db:seed --force
-# Verify reference records and zero users on a fresh database, as in the guide:
-docker compose -f compose.yaml exec app php artisan mapr:provision-admin
-docker compose -f compose.yaml up -d queue
-```
-
-Verify the new administrator can sign in at the public HTTPS `/login` and open `/cdrrmo`. Administrator passwords are entered only through masked prompts; there is no registration route.
-
-## Local setup without Docker
-
-This section requires PHP and its extensions installed directly on the host. For the configured Docker stack, use the Docker instructions above.
+Run MapR directly with PHP, Composer, MySQL, and Node.js. Run commands from the repository root.
 
 ### 1. Install prerequisites
 
-- PHP 8.5.12+ within the 8.5 series and Composer, with the extensions required by Composer and the MySQL PDO driver.
+- PHP **8.5.12+ within the 8.5 series** and Composer 2. Install the extensions required by Composer, including `pdo_mysql`, `pdo_sqlite` (tests), `mbstring`, `xml`, `dom`, `fileinfo`, `curl`, `gd`, `zip`, `bcmath`, `intl`, `exif`, and `pcntl` (queue listener/log streaming). Use the same PHP version for CLI and PHP-FPM.
 - Node.js 20.19+ within the 20.x series, or Node.js 22.12+; npm is required for frontend dependencies.
-- MySQL 8 with spatial support. Migrations use MySQL-specific SQL, geometry columns, and SRID 4326. SQLite is not a substitute for running the application schema.
+- MySQL **8.0.16+** with spatial support (8.4 is also supported). Migrations use MySQL-specific SQL, geometry columns, and SRID 4326. SQLite is not a substitute for running the application schema.
 - A Mapbox access token for map tiles.
 - The study area's geospatial source files for the full data import (see below).
-- Optional: LibreOffice at `/usr/bin/soffice` or `/usr/bin/libreoffice` for imported DOCX previews. Original documents can still be downloaded without it.
+- Optional: LibreOffice Writer at `/usr/bin/soffice` or `/usr/bin/libreoffice`, plus DejaVu/Liberation fonts, for imported DOCX previews. Install it to run preview tests without skips. Original documents can still be downloaded without it.
+
+Set the following in the PHP configuration used by CLI and PHP-FPM (`php --ini` shows the CLI configuration), then restart PHP-FPM after changes. These limits support the application's photo uploads:
+
+```ini
+memory_limit=512M
+upload_max_filesize=25M
+post_max_size=30M
+max_execution_time=120
+expose_php=Off
+session.upload_progress.enabled=0
+```
+
+Set the web server's request body limit to at least 30 MiB as well; for Nginx, use `client_max_body_size 30m;` in the server block.
+
+Report PDFs use Carlito at `/usr/share/fonts/google-carlito-fonts/Carlito-Regular.ttf` and `Carlito-Bold.ttf`. On Ubuntu/Debian, install the fonts and create the expected paths:
+
+```bash
+sudo apt-get install fonts-crosextra-carlito fonts-dejavu-core fonts-liberation
+sudo mkdir -p /usr/share/fonts/google-carlito-fonts
+sudo ln -sfn /usr/share/fonts/truetype/crosextra/Carlito-Regular.ttf /usr/share/fonts/google-carlito-fonts/Carlito-Regular.ttf
+sudo ln -sfn /usr/share/fonts/truetype/crosextra/Carlito-Bold.ttf /usr/share/fonts/google-carlito-fonts/Carlito-Bold.ttf
+```
 
 ### 2. Install dependencies and configure the environment
 
 From the repository root:
 
 ```bash
+php -v
 composer install
+composer check-platform-reqs
 npm ci
-cp .env.example .env
+# Create the environment file only when it does not already exist.
+[ -f .env ] || cp .env.example .env
 ```
 
 For an existing installation, retain your `.env` and application key rather than replacing them.
 
-Create an empty MySQL database, such as `mapr_db`, and configure `.env`:
+Start MySQL and connect as a database administrator (`mysql -u root -p`). For a new local installation, create a dedicated database and user; replace the example password before running:
+
+```sql
+CREATE DATABASE mapr_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'mapr'@'localhost' IDENTIFIED BY 'replace-with-a-strong-local-password';
+GRANT ALL PRIVILEGES ON mapr_db.* TO 'mapr'@'localhost';
+```
+
+Migrations install triggers. If binary logging is enabled and MySQL rejects trigger creation, ask the database administrator to configure `log_bin_trust_function_creators=1` for this server. Do not grant the application global administrator privileges.
+
+Configure `.env` with the same database credentials:
 
 ```dotenv
 APP_NAME=MapR
@@ -194,13 +96,13 @@ DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_DATABASE=mapr_db
-DB_USERNAME=your_mysql_user
-DB_PASSWORD=your_mysql_password
+DB_USERNAME=mapr
+DB_PASSWORD="replace-with-a-strong-local-password"
 
 MAPBOX_ACCESS_TOKEN=your_mapbox_access_token
 ```
 
-`.env.example` defaults to SQLite: change the database connection to MySQL before migrating. Keep `.env` private.
+`.env.example` already selects MySQL. Keep `.env` private. For an existing installation, retain its database credentials and `APP_KEY`. After editing settings, run `php artisan config:clear`.
 
 For a new installation, generate the application key:
 
@@ -248,7 +150,7 @@ Building locations become eligible for map display after location verification. 
 composer run dev
 ```
 
-This starts Laravel's server, the database queue listener, log streaming, and Vite. Open `http://localhost:8000/login`.
+This starts Laravel's server, the database queue listener, log streaming, and Vite. Open `http://localhost:8000/login`. Stop any previous application and Vite processes using ports 8000 and 5173 before starting.
 
 For compiled frontend assets, run:
 
@@ -281,7 +183,7 @@ The default seeder creates reference data and local role accounts. On local or t
 php artisan db:seed --class=DemoDataSeeder
 ```
 
-For Docker, run the same Artisan command inside the local app container. This seeder fills all four barangays and links registry data, report stages, photos, PDFs, simulated signatures, assessment and impact records, and audit history. It also creates expired session/cache examples and inert examples on a dedicated queue. Migrations write their own ledger.
+This seeder fills all four barangays and links registry data, report stages, photos, PDFs, simulated signatures, assessment and impact records, and audit history. It also creates expired session/cache examples and inert examples on a dedicated queue. Migrations write their own ledger.
 
 The data is synthetic and labeled for training. The seeder preserves existing report records and skips after a successful run. The default resident login shows the full report lifecycle for its barangay. Other training residents use `resident.<barangay-code>@mapr.test` with `password`.
 
@@ -302,23 +204,15 @@ After signing in as a CDRRMO administrator:
 - Open `/cdrrmo/residents` for imported active residents.
 - Open `/cdrrmo/reports/field` and `/cdrrmo/reports/barangay` for reports once users submit them.
 
-For a running local Docker stack:
+Run automated checks:
 
 ```bash
-export MAPR_ENV_FILE=.env.docker
-docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml exec app composer test
-```
-
-For a host installation:
-
-```bash
+composer validate --strict
+composer check-platform-reqs
 composer test
-```
-
-To check Docker environment selection and entrypoint behavior without starting containers (requires Python 3 and Docker Compose; the FPM listener check also needs host PHP):
-
-```bash
-python3 -B -m unittest discover -s tests/docker -v
+npm run test:map
+npm run build
+python3 -B -m unittest discover -s tests/ci -v
 ```
 
 PHPUnit is configured to use in-memory SQLite and test-specific settings. Passing these tests does not independently verify MySQL spatial migrations or the full geospatial import.
@@ -327,11 +221,10 @@ PHPUnit is configured to use in-memory SQLite and test-specific settings. Passin
 
 | Symptom | Check or action |
 | --- | --- |
-| `env file .../.env.docker.production not found` during local startup | Use the local start command above with both Compose files and `.env.docker`; plain `docker compose up -d` selects production |
-| `APP_ENV does not match this Compose stack` | Set `MAPR_ENV_FILE=.env.docker` and `APP_ENV=local` for local development; production requires its own file with `APP_ENV=production` |
-| Docker socket permission denied or daemon unavailable | Confirm Docker is running and your user has access; `docker info` must succeed before setup |
-| Composer reports a PHP version or extension mismatch on the host | Run Composer inside the local Docker app container, or install the prerequisites in the host setup section |
-| Docker login page errors after first startup | Finish Composer installation, save `APP_KEY`, recreate app, and migrate/seed; inspect `logs --tail=100 app` using the local Compose prefix |
+| Composer reports a PHP version or extension mismatch | Check `php -v`, `php --ini`, and `composer check-platform-reqs`; select PHP 8.5.12+ and enable missing extensions for CLI and PHP-FPM |
+| MySQL connection refused or access denied | Start MySQL and check `.env` host, port, database, user, and password; run `php artisan config:clear` |
+| MySQL rejects trigger creation with binary logging enabled | Ask the database administrator to configure `log_bin_trust_function_creators=1` |
+| Login page errors after first startup | Set `APP_KEY`, run migrations and seeding, and inspect `storage/logs/laravel.log`; ensure `storage/` and `bootstrap/cache/` are writable |
 | Migration fails with SQLite or geometry SQL errors | Configure MySQL in `.env`; run `php artisan config:clear` after changing cached settings |
 | Geospatial import cannot find shapefiles | Supply the datasets at the exact paths above; they are not downloaded by setup |
 | Empty resident registry | Complete `php artisan mapr:import-geospatial` with household data present |
@@ -340,9 +233,34 @@ PHPUnit is configured to use in-memory SQLite and test-specific settings. Passin
 | Frontend assets or Vite are missing | Run `npm ci`, then `composer run dev` or `npm run build` |
 | Imported DOCX preview unavailable | Install LibreOffice at a supported path, or download the original document |
 
-For Docker, run the Artisan commands in this table through the local Compose prefix (`exec app php artisan ...`) and edit `.env.docker`.
-
 Use `php artisan migrate` for normal setup. `migrate:fresh` deletes existing tables and data.
+
+## Production setup
+
+Use a separate host database and a private `.env`. Install the same PHP/extensions and MySQL prerequisites as local development. Configure a web server with HTTPS and PHP-FPM, using `public/` as its document root and forwarding application requests to `public/index.php`. Give the web and queue users write access to `storage/` and `bootstrap/cache/`; keep `.env` outside the document root.
+
+1. Install locked dependencies and compile assets:
+
+   ```bash
+   composer install --no-dev --optimize-autoloader --no-interaction
+   composer check-platform-reqs --no-dev
+   npm ci
+   npm run build
+   ```
+
+2. Create `.env` from `.env.example` only for a new installation. Set `APP_ENV=production`, `APP_DEBUG=false`, your HTTPS `APP_URL`, `SESSION_SECURE_COOKIE=true`, and production MySQL credentials. Generate `APP_KEY` once with `php artisan key:generate`; retain it on updates. Behind a reverse proxy, set `TRUSTED_PROXIES` to its verified IP addresses/CIDRs and forward HTTPS headers.
+3. Back up an existing database and `storage/app/` before upgrades. Run:
+
+   ```bash
+   php artisan migrate --force
+   php artisan db:seed --force
+   ```
+
+   The production seeder creates reference records only. On a new installation, run `php artisan mapr:provision-admin` and enter the administrator password at its masked prompt.
+4. Run `php artisan queue:work --tries=1 --timeout=60` under a process manager such as systemd or Supervisor. Keep the worker running and restart it after releases with `php artisan queue:restart`. Keep the worker timeout below the database queue's `retry_after` (90 seconds by default). Use the PHP-FPM web server for production; `composer run dev` starts development tools.
+5. Cache configuration with `php artisan config:cache` after settings are final. Verify `/up`, HTTPS login, role access, compiled assets, queued work, report downloads, and DOCX previews if enabled.
+
+CI verifies the native application build; deployment remains manual. If migrating an existing installation, transfer its database, `storage/app/`, and original `APP_KEY` before serving traffic. Existing data is not imported automatically.
 
 ## Repository guide
 

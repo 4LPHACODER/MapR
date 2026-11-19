@@ -1,0 +1,36 @@
+name: Build application
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build application
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: bcmath, exif, gd, intl, mbstring, pcntl, pdo_mysql, zip
+          tools: composer:v2
+          coverage: none
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: composer validate --strict
+      - run: composer install --no-dev --no-interaction --prefer-dist --no-progress --optimize-autoloader
+      - run: composer check-platform-reqs --no-dev
+      - run: npm ci
+      - run: npm run build
+      - name: Summarize
+        run: |
+          {
+            echo "### Application build verified"
+            echo "Commit: \`$GITHUB_SHA\`"
+            echo "PHP dependencies and frontend assets built. Deploy manually using README.md#production-setup."
+          } >> "$GITHUB_STEP_SUMMARY"
