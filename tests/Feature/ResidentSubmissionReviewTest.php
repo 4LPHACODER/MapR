@@ -28,7 +28,7 @@ class ResidentSubmissionReviewTest extends TestCase
         $home = $this->barangay('Mabua');
         $other = $this->barangay('Awasian');
         $incident = $this->incident($home, 'River flood');
-        $resident = $this->user('resident', 'Maricar Irizari', $home);
+        $resident = $this->user('resident', 'Case Rivera', $home);
         $officer = $this->officer($home);
         $this->report($resident, $incident, $home, 'submitted', 'RIR-QUEUE-LIVE', 'Chapel road');
         $this->report($resident, $incident, $home, 'draft', 'RIR-QUEUE-DRAFT', 'Hidden draft');
@@ -37,7 +37,7 @@ class ResidentSubmissionReviewTest extends TestCase
         $reviewed = $this->report($resident, $incident, $home, 'reviewed', 'RIR-QUEUE-DONE', 'Accepted road');
         DB::table('resident_incident_reports')->where('id', $reviewed)->update(['barangay_report_id' => 41]);
 
-        $pending = $this->actingAs($officer)->getJson('/bdrrm/api/submissions?search=Irizari')->assertOk();
+        $pending = $this->actingAs($officer)->getJson('/bdrrm/api/submissions?search=Rivera')->assertOk();
         $references = collect($pending->json('data'))->pluck('reference');
         $this->assertTrue($references->contains('RIR-QUEUE-LIVE'));
         $this->assertFalse($references->contains('RIR-QUEUE-DRAFT'));

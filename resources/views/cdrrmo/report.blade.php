@@ -62,18 +62,13 @@
         @endforeach
     </ul>
 
-    <div class="sign">
-        <p>Noted by</p>
-        <p><strong>{{ $signatories['noted_by']['name'] }}</strong><br>
-        {{ $signatories['noted_by']['title'] }}<br>
-        {{ $signatories['noted_by']['office'] }}</p>
-        <p class="muted">Unsigned</p>
-    </div>
-    <div class="sign">
-        <p>Approved by</p>
-        <p><strong>{{ $signatories['approved_by']['name'] }}</strong><br>
-        {{ $signatories['approved_by']['title'] }}</p>
-        <p class="muted">Unsigned</p>
-    </div>
+    @foreach ($signatories as $signatory)
+        <div class="sign">
+            <p>{{ $signatory['title'] }}</p>
+            <p><strong>{{ $signatory['name'] }}</strong><br>
+            {{ $signatory['position'] }}</p>
+            <p class="muted">Unsigned</p>
+        </div>
+    @endforeach
 </body>
 </html>

@@ -23,9 +23,9 @@ defineEmits(['add-flag', 'resolve-flag']);
 const reason = defineModel('reason', { type: String, required: true });
 const resolution = defineModel('resolution', { type: String, required: true });
 const expandedChecklist = ref([]);
+const completeCount = computed(() => props.checklist.filter(item => item.state === 'complete').length);
 
 const overview = computed(() => [
-    ['Reference', props.record.reference || 'Not recorded'],
     ['Type', props.title],
     ['Barangay', props.record.barangay?.name || 'Not recorded'],
     ['Incident', props.record.incident?.name || props.record.incident?.reference || 'Not recorded'],
@@ -33,66 +33,75 @@ const overview = computed(() => [
 ]);
 const indicators = {
     complete: { label: 'Complete', icon: 'pi-check-circle', tone: 'text-emerald-700' },
+    pending: { label: 'Pending', icon: 'pi-clock', tone: 'text-indigo-700' },
     locked: { label: 'Restricted', icon: 'pi-lock', tone: 'text-surface-600' },
     attention: { label: 'Needs review', icon: 'pi-exclamation-circle', tone: 'text-amber-800' },
 };
 </script>
 
 <template>
-    <aside id="barangay-document-details" class="barangay-document-details min-w-0 divide-y divide-surface-200 rounded-lg border border-surface-200 bg-white" aria-label="Report details">
-        <section class="px-4 py-3.5" aria-labelledby="barangay-overview-title">
-            <h3 id="barangay-overview-title" class="mb-2.5 text-sm font-semibold">Overview</h3>
-            <dl class="barangay-document-metadata grid gap-y-2">
-                <div v-for="[label, value] in overview" :key="label">
-                    <dt>{{ label }}</dt>
-                    <dd :class="{ 'text-surface-600': value === 'Not recorded', 'font-semibold tabular-nums': label === 'Reference' }">{{ value }}</dd>
-                </div>
-                <div><dt>Workflow</dt><dd><Tag :value="record.label" :severity="statusTone" /></dd></div>
-                <div>
-                    <dt>Updated</dt>
-                    <dd>
-                        <span class="block font-medium">Version {{ record.version || 1 }}</span>
-                        <span class="block text-xs text-surface-600">{{ record.updated_at || 'Not recorded' }}</span>
-                    </dd>
-                </div>
-            </dl>
-        </section>
+    <aside id="barangay-document-details" class="barangay-document-details grid min-w-0 gap-3" aria-label="Report details">
+        <div class="min-w-0 divide-y divide-surface-200 rounded-lg border border-surface-200 bg-white">
+            <section class="px-3.5 py-3" aria-labelledby="barangay-overview-title">
+                <h3 id="barangay-overview-title" class="mb-2 text-sm font-semibold">Overview</h3>
+                <dl class="barangay-document-metadata grid gap-y-1">
+                    <div class="barangay-document-reference mb-1 rounded-md bg-surface-50 px-2.5 py-1.5">
+                        <dt>Reference</dt>
+                        <dd class="font-semibold text-indigo-800 tabular-nums">{{ record.reference || 'Not recorded' }}</dd>
+                    </div>
+                    <div v-for="[label, value] in overview" :key="label">
+                        <dt>{{ label }}</dt>
+                        <dd :class="{ 'text-surface-600': value === 'Not recorded' }">{{ value }}</dd>
+                    </div>
+                    <div class="mt-1 border-t border-surface-200 pt-2"><dt>Workflow status</dt><dd><Tag :value="record.label" :severity="statusTone" /></dd></div>
+                    <div>
+                        <dt>Updated</dt>
+                        <dd>
+                            <span class="font-medium">Version {{ record.version || 1 }}</span>
+                            <span class="block text-xs text-surface-600 tabular-nums">{{ record.updated_at || 'Not recorded' }}</span>
+                        </dd>
+                    </div>
+                </dl>
+            </section>
 
-        <section class="px-4 py-3.5" aria-labelledby="barangay-records-title">
-            <h3 id="barangay-records-title" class="mb-2.5 text-sm font-semibold">Linked records</h3>
-            <dl class="barangay-document-metadata grid gap-y-2">
-                <div v-for="[label, value, known] in linked" :key="label">
-                    <dt>{{ label }}</dt>
-                    <dd class="flex items-start gap-1.5" :class="{ 'text-surface-600': !known }">
-                        <i v-if="known" class="pi pi-link pt-1 text-xs text-primary-700" aria-hidden="true"></i>
-                        <span>
-                            <span v-if="known" class="sr-only">Linked </span>{{ value }}
-                            <span v-if="!known && value !== 'Not recorded'" class="block text-xs">Not a verified link</span>
-                        </span>
-                    </dd>
+            <section class="px-3.5 py-2.5" aria-labelledby="barangay-records-title">
+                <div class="mb-1 flex flex-wrap items-center justify-between gap-x-1">
+                    <h3 id="barangay-records-title" class="text-sm font-semibold">Linked records</h3>
+                    <Button as="router-link" to="/map" label="View on Map" icon="pi pi-map-marker" size="small" severity="secondary" text />
                 </div>
-            </dl>
-            <Button as="router-link" to="/map" class="mt-3" label="View on Map" icon="pi pi-map-marker" size="small" severity="secondary" outlined />
-        </section>
+                <dl class="barangay-document-metadata grid gap-y-1">
+                    <div v-for="[label, value, known] in linked" :key="label">
+                        <dt>{{ label }}</dt>
+                        <dd class="flex items-start gap-1.5" :class="known ? 'font-medium' : 'text-surface-600'">
+                            <i v-if="known" class="pi pi-link shrink-0 pt-1 text-xs text-primary-700" aria-hidden="true"></i>
+                            <span><span v-if="known" class="sr-only">Linked </span>{{ value }}</span>
+                        </dd>
+                    </div>
+                </dl>
+            </section>
+        </div>
 
-        <section class="px-4 py-3.5" aria-labelledby="barangay-checklist-title">
-            <h3 id="barangay-checklist-title" class="mb-1 text-sm font-semibold">Checklist</h3>
+        <section class="min-w-0 rounded-lg border border-surface-200 bg-white px-3.5 pt-3 pb-1.5" aria-labelledby="barangay-checklist-title">
+            <div class="mb-1 flex flex-wrap items-baseline justify-between gap-x-2">
+                <h3 id="barangay-checklist-title" class="text-sm font-semibold">Checklist</h3>
+                <span v-if="checklist.length" class="text-xs text-surface-600 tabular-nums">{{ completeCount }} of {{ checklist.length }} complete</span>
+            </div>
             <Accordion v-if="checklist.length" v-model:value="expandedChecklist" multiple class="barangay-document-checklist">
                 <AccordionPanel v-for="item in checklist" :key="item.key" :value="item.key">
                     <AccordionHeader>
                         <i class="pi shrink-0" :class="[indicators[item.state].icon, indicators[item.state].tone]" aria-hidden="true"></i>
                         <span class="min-w-0 flex-1 text-start">{{ item.label }}</span>
-                        <span class="text-[11px] font-medium" :class="indicators[item.state].tone">{{ indicators[item.state].label }}</span>
+                        <span class="text-xs font-medium" :class="indicators[item.state].tone">{{ indicators[item.state].label }}</span>
                     </AccordionHeader>
                     <AccordionContent :pt="{ transition: { css: false } }">
                         <p>{{ item.detail }}</p>
                     </AccordionContent>
                 </AccordionPanel>
             </Accordion>
-            <p v-else class="text-surface-600">No checklist results are recorded.</p>
+            <p v-else class="pb-1.5 text-surface-600">No checklist results are recorded.</p>
         </section>
 
-        <section class="px-4 py-3.5" aria-labelledby="barangay-history-title">
+        <section class="min-w-0 rounded-lg border border-surface-200 bg-white px-3.5 py-3" aria-labelledby="barangay-history-title">
             <h3 id="barangay-history-title" class="mb-2 text-sm font-semibold">Workflow and history</h3>
             <ul v-if="record.timeline?.length" class="grid gap-2">
                 <li v-for="(event, index) in record.timeline" :key="index" class="min-w-0 wrap-anywhere border-s-2 border-surface-200 ps-2">

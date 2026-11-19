@@ -1,6 +1,8 @@
 <script setup>
 import { provide, reactive } from 'vue';
+import { useRoute } from 'vue-router';
 import WorkspaceLayout from '../shared/layouts/WorkspaceLayout.vue';
+import '../../css/rdana/workspace.css';
 
 defineProps({
     userName: { type: String, default: '' },
@@ -11,6 +13,7 @@ defineProps({
     csrfToken: { type: String, default: '' },
 });
 
+const route = useRoute();
 const areaState = reactive({
     hasPolygon: false,
     coordinates: null,
@@ -49,7 +52,7 @@ provide('reportContext', {
 </script>
 
 <template>
-    <WorkspaceLayout v-bind="$props" workspace="assessor">
+    <WorkspaceLayout v-bind="$props" workspace="assessor" :class="{ 'rdana-compact': route.meta.compact }">
         <router-view />
     </WorkspaceLayout>
 </template>

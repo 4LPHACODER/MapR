@@ -1,0 +1,9 @@
+.rdana-compact :is(.resident-header, .resident-sidebar, .resident-bottom-nav, .resident-header-popover) :is(a, button):focus-visible,
+body:has(.rdana-compact) .workspace-navigation-drawer :is(a, button):focus-visible {
+    outline: none;
+    box-shadow: none;
+    color: var(--resident-navy, #123b70);
+    background: var(--p-blue-100);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}

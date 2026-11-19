@@ -67,7 +67,7 @@ const checklistLabels = {
 const checklist = computed(() => (record.value?.checklist || []).map(item => ({
     key: item.key,
     label: checklistLabels[item.key] || item.label,
-    state: checklistState(item),
+    state: !item.met && ['fields', 'evidence', 'predecessor'].includes(item.key) ? 'pending' : checklistState(item),
     detail: checklistDetail(item),
 })));
 
@@ -171,34 +171,46 @@ watch([kind, () => route.params.id], () => {
 </script>
 
 <template>
-    <section :class="barangay ? 'barangay-document grid min-w-0 gap-3' : 'report-document-page'">
-        <header v-if="barangay" class="barangay-document-header grid min-w-0 gap-2">
+    <section :class="barangay ? 'barangay-document grid min-w-0 gap-4' : 'report-document-page'">
+        <header v-if="barangay" class="barangay-document-header grid min-w-0 gap-1 border-b border-surface-200 pb-3">
             <Button label="Back to Reports" icon="pi pi-arrow-left" class="-ms-2 justify-self-start" size="small" severity="secondary" text @click="goBack" />
-            <div class="flex min-w-0 flex-wrap items-end justify-between gap-x-4 gap-y-3">
-                <div class="min-w-0">
-                    <h2 class="text-xl leading-7 font-semibold tracking-tight">{{ title }}</h2>
-                    <div v-if="record" class="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs">
-                        <span class="min-w-0 wrap-anywhere font-semibold text-indigo-800 tabular-nums">{{ record.reference }}</span>
-                        <Tag :value="record.label" :severity="statusTone" />
-                        <span class="text-surface-600">Version {{ record.version || 1 }}</span>
+            <div class="flex min-w-0 flex-wrap items-center justify-between gap-x-5 gap-y-3">
+                <div class="min-w-0 border-s-2 border-indigo-500 ps-3">
+                    <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                        <h2 class="text-xl/7 font-semibold">{{ title }}</h2>
+                        <Tag v-if="record" :value="record.label" :severity="statusTone" />
+                    </div>
+                    <div v-if="record" class="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs/5">
+                        <span class="min-w-0 wrap-anywhere font-medium text-indigo-800 tabular-nums">{{ record.reference }}</span>
+                        <span class="text-surface-600 sm:border-s sm:border-surface-300 sm:ps-2.5">Version {{ record.version || 1 }}</span>
                     </div>
                     <p v-else-if="!error" class="mt-1 text-xs text-surface-600" role="status">Loading report…</p>
                 </div>
-                <div v-if="record" class="flex min-w-0 flex-wrap items-center gap-1.5">
-                    <div v-if="hasOriginal" class="flex flex-wrap gap-0.5 rounded-lg border border-surface-200 bg-white p-0.5" role="group" aria-label="Document version">
-                        <Button label="Original document" size="small" severity="secondary" text :aria-pressed="mode === 'original'" @click="setMode('original')" />
-                        <Button label="Generated report" size="small" severity="secondary" text :aria-pressed="mode === 'generated'" @click="setMode('generated')" />
+                <div v-if="record" class="flex min-w-0 flex-wrap items-center gap-2">
+                    <div v-if="hasOriginal" class="flex min-w-0 flex-wrap gap-0.5 rounded-lg border border-surface-200 bg-white p-0.5" role="group" aria-label="Document version">
+                        <Button aria-label="Original document" size="small" severity="secondary" text :aria-pressed="mode === 'original'" @click="setMode('original')">
+                            <span class="font-semibold">Original<span class="barangay-mode-label-suffix"> document</span></span>
+                        </Button>
+                        <Button aria-label="Generated report" size="small" severity="secondary" text :aria-pressed="mode === 'generated'" @click="setMode('generated')">
+                            <span class="font-semibold">Generated<span class="barangay-mode-label-suffix"> report</span></span>
+                        </Button>
                     </div>
-                    <Button
-                        size="small" severity="secondary" outlined icon="pi pi-list"
-                        :label="detailsOpen ? 'Hide details' : 'Show details'" :aria-expanded="detailsOpen"
-                        aria-controls="barangay-document-details" @click="detailsOpen = !detailsOpen"
-                    />
-                    <Button
-                        v-tooltip.bottom="'More actions'" size="small" severity="secondary" outlined icon="pi pi-ellipsis-h"
-                        aria-label="More actions" aria-haspopup="menu" aria-controls="barangay-document-actions_list"
-                        :aria-expanded="actionsOpen" @click="actions.toggle($event)"
-                    />
+                    <div class="flex items-center gap-1.5">
+                        <Button
+                            v-tooltip.bottom="detailsOpen ? 'Hide details' : 'Show details'"
+                            size="small" severity="secondary" outlined class="barangay-details-toggle"
+                            :aria-label="detailsOpen ? 'Hide details' : 'Show details'" :aria-expanded="detailsOpen"
+                            aria-controls="barangay-document-details" @click="detailsOpen = !detailsOpen"
+                        >
+                            <i class="pi pi-list" aria-hidden="true"></i>
+                            <span class="barangay-details-toggle-label">{{ detailsOpen ? 'Hide details' : 'Show details' }}</span>
+                        </Button>
+                        <Button
+                            v-tooltip.bottom="'More actions'" size="small" severity="secondary" outlined icon="pi pi-ellipsis-h"
+                            aria-label="More actions" aria-haspopup="menu" aria-controls="barangay-document-actions_list"
+                            :aria-expanded="actionsOpen" @click="actions.toggle($event)"
+                        />
+                    </div>
                     <Menu id="barangay-document-actions" ref="actions" class="barangay-document-actions-menu" :model="documentActions" popup
                         @show="actionsOpen = true" @hide="actionsOpen = false" />
                 </div>
@@ -235,7 +247,7 @@ watch([kind, () => route.params.id], () => {
             <p v-if="error" class="cdrrmo-error" role="alert">{{ error }} <button type="button" class="resident-action resident-action-secondary" @click="load">Retry</button></p>
             <p v-if="message" class="cdrrmo-muted" role="status">{{ message }}</p>
         </template>
-        <div :class="[barangay ? 'barangay-document-layout grid min-w-0 items-start gap-3' : 'report-document-layout', { 'details-hidden': !detailsOpen }]">
+        <div :class="[barangay ? 'barangay-document-layout grid min-w-0 items-start gap-4' : 'report-document-layout', { 'details-hidden': !detailsOpen }]">
             <ReportDocumentViewer
                 v-if="record"
                 ref="viewer"
@@ -244,7 +256,7 @@ watch([kind, () => route.params.id], () => {
                 :mode-label="mode === 'original' ? 'Original document' : 'Generated report'"
                 :presentation="barangay ? 'barangay' : ''"
             />
-            <Skeleton v-else-if="barangay && !error" height="28rem" class="barangay-document-loading" aria-hidden="true" />
+            <Skeleton v-else-if="barangay && !error" height="var(--barangay-viewer-height)" aria-hidden="true" />
             <BarangayDocumentDetails v-if="barangay && record" v-show="detailsOpen"
                 v-model:reason="flagForm.reason" v-model:resolution="resolution"
                 :record="record" :title="title" :status-tone="statusTone" :linked="linked" :checklist="checklist"

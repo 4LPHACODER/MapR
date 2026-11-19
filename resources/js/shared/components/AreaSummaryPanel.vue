@@ -9,8 +9,10 @@ const props = defineProps({
     summaryLoading: { type: Boolean, default: false },
     hasPolygon: { type: Boolean, default: false },
     areaName: { type: String, default: 'Current selected area' },
+    areaNote: { type: String, default: '' },
     selection: { type: Object, required: true },
     showImpact: { type: Boolean, default: true },
+    showLinkedAreaRecords: { type: Boolean, default: true },
     residentReports: { type: Boolean, default: false },
     singleClear: { type: Boolean, default: false },
 });
@@ -159,10 +161,10 @@ function formatUpdated(value) {
     <aside class="cdrrmo-panel map-summary-panel" role="region" :aria-label="title">
         <header class="map-summary-header">
             <div class="map-summary-heading">
-                <MapIcon :name="headerIcon" />
+                <MapIcon v-if="view !== 'empty' || !$slots.empty" :name="headerIcon" />
                 <div>
                     <h3>{{ title }}</h3>
-                    <p>{{ subtitle }}</p>
+                    <p v-if="view !== 'empty' || !$slots.empty">{{ subtitle }}</p>
                 </div>
             </div>
             <Button :size="compact ? 'small' : undefined" severity="secondary" outlined
@@ -177,10 +179,13 @@ function formatUpdated(value) {
                 v-else-if="selection.featureType"
                 type="button"
                 class="map-summary-header-btn"
+                :class="{ 'is-icon-only': singleClear }"
                 aria-label="Clear selection"
+                :title="singleClear ? 'Clear selection' : undefined"
                 @click="$emit('clear-feature')"
             >
-                Clear selection
+                <MapIcon v-if="singleClear" name="x" />
+                <template v-else>Clear selection</template>
             </Button>
         </header>
 
@@ -195,16 +200,19 @@ function formatUpdated(value) {
 
         <div class="map-summary-body">
             <template v-if="view === 'empty'">
-                <p>Click a household marker, draw an area, or choose a barangay. Details appear in this panel.</p>
-                <ul class="selection-help">
-                    <li>A teal marker opens household or building details.</li>
-                    <li>Draw area summarizes the polygon from the registry.</li>
-                    <li>A barangay uses that stored boundary.</li>
-                </ul>
+                <slot name="empty">
+                    <p>Click a household marker, draw an area, or choose a barangay. Details appear in this panel.</p>
+                    <ul class="selection-help">
+                        <li>A teal marker opens household or building details.</li>
+                        <li>Draw area summarizes the polygon from the registry.</li>
+                        <li>A barangay uses that stored boundary.</li>
+                    </ul>
+                </slot>
             </template>
 
             <template v-else-if="view === 'area'">
                 <p v-if="summaryLoading">Calculating area totals…</p>
+                <p v-else-if="areaNote && !summary?.source_registry_unverified && !summary?.official" class="cdrrmo-muted">{{ areaNote }}</p>
                 <template v-else-if="summary">
                     <div class="selection-metrics">
                         <article>
@@ -399,9 +407,9 @@ function formatUpdated(value) {
             </template>
         </div>
 
-        <footer v-if="view === 'area' && summary" class="map-summary-footer">
-            <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" @click="$emit('view-records')">View linked residents</Button>
-            <Button :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" @click="$emit('view-households')">View households</Button>
+        <footer v-if="view === 'area' && summary && (showLinkedAreaRecords || showImpact)" class="map-summary-footer">
+            <Button v-if="showLinkedAreaRecords" :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" @click="$emit('view-records')">View linked residents</Button>
+            <Button v-if="showLinkedAreaRecords" :size="compact ? 'small' : undefined" severity="secondary" outlined type="button" @click="$emit('view-households')">View households</Button>
             <Button :size="compact ? 'small' : undefined"
                 v-if="showImpact"
                 type="button"

@@ -15,6 +15,7 @@ export default defineConfig({
             input: [
                 'resources/css/app.css',
                 'resources/js/app.js',
+                'resources/js/login.js',
                 'resources/js/cdrrmo.js',
                 'resources/js/rdana.js',
                 'resources/js/bdrrm.js',

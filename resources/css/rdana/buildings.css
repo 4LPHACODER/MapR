@@ -1,0 +1,565 @@
+.rdana-buildings,
+.building-drawer,
+.building-select-overlay {
+    --building-ink: var(--resident-ink, #172033);
+    --building-muted: var(--p-slate-600);
+    --building-navy: var(--resident-navy, #123b70);
+    --building-line: var(--resident-line, #e2e8f0);
+    --building-surface: var(--resident-card, #fff);
+    --building-wash: var(--resident-wash, #eff6ff);
+    --building-radius: var(--p-border-radius-sm, 8px);
+    --building-control: 2rem;
+    --p-focus-ring-width: 0;
+    font-size: .8125rem;
+    line-height: 1.5;
+}
+
+.rdana-buildings {
+    display: grid;
+    gap: 16px;
+    min-width: 0;
+    color: var(--building-ink);
+}
+
+.rdana-buildings :is(h2, p),
+.building-drawer :is(h2, h3, h4, p, dl, dd, ul) {
+    margin: 0;
+}
+
+.building-snapshot,
+.building-registry {
+    min-width: 0;
+    border: 1px solid var(--building-line);
+    border-radius: var(--building-radius);
+    background: var(--building-surface);
+}
+
+.building-snapshot-heading,
+.building-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px 16px;
+    padding: 10px 16px;
+}
+
+.building-snapshot-heading h2,
+.building-state h2 {
+    color: var(--building-ink);
+    font-size: .9375rem;
+    font-weight: 650;
+}
+
+.building-snapshot-heading p,
+.building-sub,
+.building-footer {
+    color: var(--building-muted);
+    font-size: .75rem;
+}
+
+.building-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-top: 1px solid var(--building-line);
+}
+
+.rdana-buildings .building-metric {
+    display: grid;
+    justify-items: start;
+    justify-content: stretch;
+    align-content: start;
+    gap: 2px;
+    min-width: 0;
+    padding: 10px 16px 12px;
+    border: 0;
+    border-radius: 0;
+    color: var(--building-muted);
+    text-align: left;
+    font-size: .75rem;
+    font-weight: 500;
+}
+
+.building-metric + .building-metric {
+    border-inline-start: 1px solid var(--building-line);
+}
+
+.rdana-buildings .building-metric:last-child {
+    border-end-end-radius: var(--building-radius);
+}
+
+.building-metric strong {
+    color: var(--building-ink);
+    font-size: 1.375rem;
+    font-weight: 650;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+}
+
+.rdana-buildings .building-metric[aria-pressed="true"] {
+    color: var(--building-navy);
+    background: var(--building-wash);
+}
+
+.building-filters {
+    display: grid;
+    gap: 10px;
+    padding: 12px 16px 14px;
+}
+
+.building-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 10px;
+}
+
+.building-field {
+    display: grid;
+    flex: 0 1 10rem;
+    gap: 4px;
+    min-width: 0;
+}
+
+.building-field label {
+    font-size: .75rem;
+    font-weight: 550;
+    color: var(--building-muted);
+}
+
+.building-search {
+    flex: 1 1 15rem;
+    max-width: 24rem;
+}
+
+.building-filter-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
+}
+
+.building-extra-filters {
+    padding-top: 10px;
+    border-top: 1px solid var(--building-line);
+}
+
+.building-extra-filters .building-field {
+    flex: 1 1 9rem;
+    max-width: 14rem;
+}
+
+.rdana-buildings :is(.p-inputtext, .p-select) {
+    width: 100%;
+    min-height: var(--building-control);
+    border-color: var(--p-slate-300);
+    border-radius: var(--building-radius);
+    font-size: .8125rem;
+}
+
+.rdana-buildings .p-inputtext {
+    padding-block: .35rem;
+}
+
+.rdana-buildings .p-select-label {
+    padding-block: .35rem;
+}
+
+.building-drawer .p-button,
+.rdana-buildings .p-button:not(.building-metric),
+.rdana-buildings .p-paginator .p-paginator-prev,
+.rdana-buildings .p-paginator .p-paginator-next {
+    min-height: var(--building-control);
+    padding-block: .25rem;
+    border-radius: var(--building-radius);
+    font-size: .8125rem;
+    text-decoration: none;
+}
+
+.rdana-buildings .building-table {
+    border-top: 1px solid var(--building-line);
+    --p-datatable-header-cell-background: var(--p-slate-50);
+    --p-datatable-header-cell-color: var(--building-muted);
+    --p-datatable-header-cell-border-color: var(--building-line);
+    --p-datatable-body-cell-border-color: var(--building-line);
+}
+
+.rdana-buildings .building-table .p-datatable-table {
+    min-width: 38rem;
+}
+
+.rdana-buildings .building-table :is(th, td) {
+    padding: 8px 12px;
+    vertical-align: middle;
+}
+
+.rdana-buildings .building-table th {
+    font-size: .75rem;
+    font-weight: 650;
+    white-space: nowrap;
+}
+
+.rdana-buildings .building-table :is(th, td):first-child {
+    padding-inline-start: 12px;
+}
+
+.rdana-buildings .building-table th:first-child {
+    padding-inline-start: 16px;
+}
+
+.rdana-buildings .building-table :is(th, td):last-child {
+    padding-inline-end: 16px;
+}
+
+.rdana-buildings .building-table tbody tr:hover {
+    background: var(--p-slate-50);
+}
+
+.rdana-buildings .building-table strong,
+.rdana-buildings .building-table .building-sub {
+    display: block;
+}
+
+.rdana-buildings .building-table .building-reference {
+    max-width: 100%;
+    padding-inline: 4px;
+    color: var(--building-navy);
+    font-variant-numeric: tabular-nums;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+
+.rdana-buildings .building-table .building-reference:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.rdana-buildings .building-table .building-mobile-counts {
+    display: none;
+}
+
+.rdana-buildings .building-table .building-number {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.rdana-buildings .building-table .building-number .p-datatable-column-header-content {
+    justify-content: flex-end;
+}
+
+.building-location-cell .p-tag,
+.building-detail-heading .p-tag {
+    padding: 1px 6px;
+    border-radius: var(--p-border-radius-xs);
+    font-size: .6875rem;
+}
+
+.rdana-buildings .building-map-col {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.rdana-buildings .building-map-col .p-datatable-column-header-content {
+    justify-content: flex-end;
+}
+
+.rdana-buildings .building-footer {
+    align-items: center;
+    min-height: 42px;
+    font-variant-numeric: tabular-nums;
+}
+
+.rdana-buildings .p-paginator {
+    gap: 4px;
+    padding: 0;
+}
+
+.rdana-buildings .p-paginator .p-select {
+    width: auto;
+}
+
+.rdana-buildings .p-paginator :is(.p-paginator-prev, .p-paginator-next) {
+    width: var(--building-control);
+    min-width: var(--building-control);
+}
+
+.building-state {
+    display: grid;
+    justify-items: start;
+    gap: 4px;
+    padding: 18px 16px;
+    border-top: 1px solid var(--building-line);
+    color: var(--building-muted);
+}
+
+.building-state:first-child {
+    border-top: 0;
+}
+
+.building-alert {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    color: var(--p-red-700);
+}
+
+.building-loading {
+    display: grid;
+    gap: 8px;
+}
+
+.building-loading .p-skeleton {
+    width: 100%;
+}
+
+.building-drawer.p-drawer {
+    width: min(440px, 100%);
+    color: var(--building-ink);
+    font-family: var(--font-sans);
+}
+
+.building-drawer .p-drawer-header {
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--building-line);
+}
+
+.building-drawer .p-drawer-content {
+    padding: 0 18px calc(16px + env(safe-area-inset-bottom));
+}
+
+.building-drawer h2 {
+    color: var(--building-navy);
+    font-size: 1.0625rem;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+}
+
+.building-drawer h3 {
+    color: var(--building-ink);
+    font-size: .9375rem;
+    font-weight: 650;
+}
+
+.building-drawer h4 {
+    color: var(--building-muted);
+    font-size: .8125rem;
+    font-weight: 650;
+}
+
+.building-drawer :is(.building-alert, .building-loading),
+.building-detail > section {
+    padding: 14px 0;
+}
+
+.building-detail > section {
+    display: grid;
+    justify-items: start;
+    gap: 8px;
+}
+
+.building-detail > section + section {
+    border-top: 1px solid var(--building-line);
+}
+
+.building-detail-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.building-detail dl {
+    display: grid;
+    gap: 4px;
+    width: 100%;
+}
+
+.building-detail dl div {
+    display: grid;
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    gap: 8px;
+}
+
+.building-detail dt,
+.building-detail p {
+    color: var(--building-muted);
+}
+
+.building-detail :is(dd, li) {
+    overflow-wrap: anywhere;
+}
+
+.building-detail ul {
+    display: grid;
+    gap: 6px;
+    width: 100%;
+    padding: 0;
+    list-style: none;
+}
+
+.building-detail li {
+    display: grid;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: var(--p-border-radius-xs);
+    background: var(--p-slate-50);
+}
+
+.building-detail a {
+    color: var(--building-navy);
+    text-underline-offset: 2px;
+}
+
+.building-mini-map {
+    width: 100%;
+    height: 150px;
+    overflow: hidden;
+    border: 1px solid var(--building-line);
+    border-radius: var(--building-radius);
+}
+
+.building-select-overlay {
+    border-radius: var(--building-radius);
+}
+
+.building-select-overlay .p-select-option {
+    padding-block: 7px;
+}
+
+:is(.rdana-buildings, .building-drawer, .building-select-overlay) :focus-visible {
+    outline: none;
+    box-shadow: none;
+}
+
+:is(.rdana-buildings, .building-drawer) :is(.p-button, a, .p-paginator-prev, .p-paginator-next):focus-visible {
+    color: var(--building-navy);
+    background: var(--p-blue-100);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.rdana-buildings :is(.p-inputtext:focus, .p-select.p-focus) {
+    border-color: var(--resident-blue);
+    outline: none;
+    box-shadow: none;
+}
+
+.building-select-overlay .p-select-option.p-focus {
+    background: var(--p-blue-100);
+    color: var(--building-navy);
+}
+
+@media (max-width: 767px) {
+    .building-snapshot-heading,
+    .building-footer {
+        padding-inline: 12px;
+    }
+
+    .building-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .rdana-buildings .building-metric {
+        padding: 9px 12px;
+    }
+
+    .rdana-buildings .building-metric:nth-child(odd) {
+        border-inline-start: 0;
+    }
+
+    .building-metric:nth-child(n + 3) {
+        border-top: 1px solid var(--building-line);
+    }
+
+    .rdana-buildings .building-metric:nth-child(3) {
+        border-end-start-radius: var(--building-radius);
+    }
+
+    .building-filters {
+        padding: 10px 12px 12px;
+    }
+
+    .building-field {
+        flex: 1 1 9rem;
+    }
+
+    .building-search {
+        flex-basis: 100%;
+        max-width: none;
+    }
+
+    .building-extra-filters .building-field {
+        max-width: none;
+    }
+
+    .rdana-buildings .building-table .p-datatable-table {
+        min-width: 0;
+        table-layout: fixed;
+    }
+
+    .rdana-buildings .building-table :is(th, td) {
+        padding-inline: 8px;
+    }
+
+    .rdana-buildings .building-table :is(th, td):nth-child(2) {
+        width: 26%;
+        overflow-wrap: anywhere;
+    }
+
+    .rdana-buildings .building-table :is(th, td):nth-child(3) {
+        width: 25%;
+    }
+
+    .rdana-buildings .building-table :is(th, td):last-child {
+        width: calc(var(--building-control) + 8px);
+        padding-inline: 4px;
+        text-align: center;
+    }
+
+    .rdana-buildings .building-map-col .p-datatable-column-header-content {
+        justify-content: center;
+    }
+
+    .rdana-buildings .building-table .building-map-col .p-button {
+        width: var(--building-control);
+        padding-inline: 0;
+    }
+
+    .rdana-buildings .building-table .building-mobile-counts {
+        display: block;
+        padding-inline-start: 4px;
+        font-size: .6875rem;
+    }
+
+    .rdana-buildings .building-table :is(.building-number, .building-address-label) {
+        display: none;
+    }
+
+    .rdana-buildings .building-table .building-map-col .p-button-label {
+        display: none;
+    }
+
+    .rdana-buildings .building-table td {
+        vertical-align: top;
+    }
+}
+
+@media (pointer: coarse) {
+    .rdana-buildings,
+    .building-drawer {
+        --building-control: 2.75rem;
+    }
+
+    .rdana-buildings .p-inputtext {
+        font-size: 1rem;
+    }
+}
+
+.rdana-buildings .cdrrmo-icon,
+.building-drawer .cdrrmo-icon {
+    flex: none;
+    width: 1rem;
+    height: 1rem;
+}

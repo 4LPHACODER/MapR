@@ -206,29 +206,30 @@ defineExpose({ printDocument, reload: load, canPrint });
 
 <template>
     <section v-if="compact" class="barangay-pdf grid min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-lg border border-surface-200 bg-surface-100" aria-label="Document preview">
-        <div class="barangay-pdf-toolbar flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-surface-200 bg-white px-2 py-1.5">
-            <div class="flex min-w-0 items-center gap-0.5" role="group" aria-label="Zoom controls">
-                <Button v-tooltip.bottom="'Zoom out'" size="small" severity="secondary" text icon="pi pi-search-minus" aria-label="Zoom out"
-                    :disabled="!canPrint || (!fitWidth && zoom <= 0.6)" @click="setZoom(false, 0.85)" />
-                <Button v-tooltip.bottom="'Zoom in'" size="small" severity="secondary" text icon="pi pi-search-plus" aria-label="Zoom in"
-                    :disabled="!canPrint || (!fitWidth && zoom >= 2.5)" @click="setZoom(false, 1.15)" />
-                <Button v-tooltip.bottom="'Fit width'" size="small" severity="secondary" text :disabled="!canPrint" :aria-pressed="fitWidth"
-                    aria-label="Fit width" @click="setZoom(true, 1)">
-                    <i class="pi pi-arrows-h" aria-hidden="true"></i><span class="barangay-pdf-button-label">Fit width</span>
-                </Button>
-            </div>
-            <div class="flex items-center gap-0.5" role="group" aria-label="Page navigation">
+        <div class="barangay-pdf-toolbar flex flex-wrap items-center justify-between gap-y-1 border-b border-surface-200 bg-white px-2 py-1.5">
+            <div class="flex items-center" role="group" aria-label="Page navigation">
                 <Button v-tooltip.bottom="'Previous page'" size="small" severity="secondary" text icon="pi pi-chevron-left" aria-label="Previous page"
                     :disabled="!canPrint || pageNumber <= 1" @click="showPage(pageNumber - 1)" />
-                <span class="min-w-10 px-1 text-center text-xs font-medium whitespace-nowrap text-surface-600 tabular-nums" role="status">
-                    <template v-if="pageCount"><span class="sr-only">Page </span>{{ pageNumber }}<span aria-hidden="true"> / </span><span class="sr-only"> of </span>{{ pageCount }}</template>
+                <span class="min-w-10 rounded-md bg-surface-100 px-1.5 py-1 text-center text-xs font-medium whitespace-nowrap text-surface-700 tabular-nums" role="status">
+                    <template v-if="pageCount"><span class="sr-only">Page </span>{{ pageNumber }}<span aria-hidden="true" class="text-surface-500"> / </span><span class="sr-only"> of </span>{{ pageCount }}</template>
                     <template v-else>—</template>
                 </span>
                 <Button v-tooltip.bottom="'Next page'" size="small" severity="secondary" text icon="pi pi-chevron-right" aria-label="Next page"
                     :disabled="!canPrint || pageNumber >= pageCount" @click="showPage(pageNumber + 1)" />
             </div>
+            <div class="flex items-center" role="group" aria-label="Zoom controls">
+                <Button v-tooltip.bottom="'Zoom out'" size="small" severity="secondary" text icon="pi pi-search-minus" aria-label="Zoom out"
+                    :disabled="!canPrint || (!fitWidth && zoom <= 0.6)" @click="setZoom(false, 0.85)" />
+                <Button v-tooltip.bottom="'Zoom in'" size="small" severity="secondary" text icon="pi pi-search-plus" aria-label="Zoom in"
+                    :disabled="!canPrint || (!fitWidth && zoom >= 2.5)" @click="setZoom(false, 1.15)" />
+                <Button v-tooltip.bottom="'Fit width'" class="ms-1" size="small" severity="secondary" text :disabled="!canPrint" :aria-pressed="fitWidth"
+                    aria-label="Fit width" @click="setZoom(true, 1)">
+                    <i class="pi pi-arrows-h" aria-hidden="true"></i><span class="barangay-pdf-button-label">Fit width</span>
+                </Button>
+            </div>
             <div class="flex items-center gap-0.5" role="group" aria-label="Document actions">
-                <Button v-if="downloadUrl" v-tooltip.bottom="'Download this version'" as="a" :href="downloadUrl" size="small" severity="secondary" text aria-label="Download this version">
+                <Button v-tooltip.bottom="'Download this version'" :as="downloadUrl ? 'a' : 'button'" :href="downloadUrl || undefined" :disabled="!downloadUrl"
+                    class="barangay-pdf-download" size="small" text aria-label="Download this version">
                     <i class="pi pi-download" aria-hidden="true"></i><span class="barangay-pdf-button-label">Download</span>
                 </Button>
                 <Button v-tooltip.bottom="'Print'" size="small" severity="secondary" text aria-label="Print" :disabled="!canPrint" @click="printDocument">

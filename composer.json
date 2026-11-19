@@ -49,9 +49,6 @@
             "@php artisan config:clear --ansi",
             "@php artisan test"
         ],
-        "setup:cdrrmo-local": [
-            "@php artisan mapr:bootstrap-local-data"
-        ],
         "hooks": [
             "git config core.hooksPath .githooks"
         ],

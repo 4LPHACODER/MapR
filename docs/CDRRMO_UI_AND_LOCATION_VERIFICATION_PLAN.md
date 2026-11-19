@@ -1,6 +1,6 @@
 ---
 name: CDRRMO UI verification
-overview: Plan minimal centered login, modern CDRRMO shell with Reports submenu, polygon-based building location review APIs and map UI, safe Lester demo email migration, and regression tests—without changing app code during this planning phase.
+overview: Plan minimal centered login, modern CDRRMO shell with Reports submenu, polygon-based building location review APIs and map UI, and regression tests—without changing app code during this planning phase.
 todos:
   - id: login-minimal-card
     content: Centered login card, remove split brand panel, in-field eye icon toggle
@@ -19,9 +19,6 @@ todos:
     status: pending
   - id: map-verification-ui
     content: Estimate vs Review modes, paginated selection panel, map status colors, refresh flows
-    status: pending
-  - id: lester-account-update
-    content: Seeder email migration to lestertalan@mapr_admin.com, env password only, validation decision
     status: pending
   - id: validation-and-regression
     content: npm build, php artisan test, browser checklist, persist docs/CDRRMO_UI_AND_LOCATION_VERIFICATION_PLAN.md
@@ -82,22 +79,6 @@ Equal totals in dev mean every imported point had person-01 names; this is **not
 
 - Only [`ReportController::preview`](app/Http/Controllers/Cdrrmo/ReportController.php) exists; **no** consolidated report list API. Reports submenu item **Report history** → disabled “Coming soon” (no fake list).
 
-### Demo account
-
-- [`MaprDemoUserSeeder`](database/seeders/MaprDemoUserSeeder.php): `lester.talan.demo@mapr.test`, password from `config('mapr.demo_password')` / `MAPR_DEMO_PASSWORD`; skip-if-exists (no email/password updates on rerun).
-- Login validation: [`LoginController`](app/Http/Controllers/Auth/LoginController.php) uses `'email' => ['required', 'email']`.
-
-### Email validator blocker (must resolve in implementation)
-
-Requested local login id: `lestertalan@mapr_admin.com` — underscore in the **domain label** (`mapr_admin`) is invalid for DNS and is **often rejected** by Laravel’s default `email` rule (RFC/DNS validation).
-
-**Decision path (pick one during implementation, document in plan doc §10):**
-
-- **A (preferred if validation passes):** Keep address; add feature test proving login form + `LoginController` accept it.
-- **B:** If validation fails, use `Rule::when` / custom demo-only normalization **only in seeder + login lookup** without disabling global email validation — **or** ask product owner for an RFC-valid local domain (e.g. `lestertalan@mapr-admin.test`) while storing display alias separately.
-
-Do **not** silently rename in seeder without documenting.
-
 ---
 
 ## 2. Files to create or change
@@ -115,11 +96,10 @@ Do **not** silently rename in seeder without documenting.
 | Models | **New** `app/Models/BuildingLocationReview.php`; extend [`Building`](app/Models/Building.php) if needed |
 | Migration | **New** `database/migrations/2026_10_29_000006_create_building_location_reviews_table.php` (name/date as next available) |
 | Reports session | [`ReportController`](app/Http/Controllers/Cdrrmo/ReportController.php), optional `POST cdrrmo/api/reports/context` |
-| Seeder / tests | [`MaprDemoUserSeeder.php`](database/seeders/MaprDemoUserSeeder.php), [`DemoUserSeederTest.php`](tests/Feature/DemoUserSeederTest.php), **new** `tests/Feature/BuildingLocationReviewTest.php`, **new** `tests/Feature/LoginLayoutTest.php` (or extend [`CdrrmoWorkspaceTest`](tests/Feature/CdrrmoWorkspaceTest.php)) |
+| Tests | **new** `tests/Feature/BuildingLocationReviewTest.php`, **new** `tests/Feature/LoginLayoutTest.php` (or extend [`CdrrmoWorkspaceTest`](tests/Feature/CdrrmoWorkspaceTest.php)) |
 | Docs | [`docs/CDRRMO_UI_AND_LOCATION_VERIFICATION_PLAN.md`](docs/CDRRMO_UI_AND_LOCATION_VERIFICATION_PLAN.md) (this file), brief note in [`docs/MAPR_VISUAL_ASSETS.md`](docs/MAPR_VISUAL_ASSETS.md) for login logo placement |
-| Env example | [`.env.example`](.env.example) — comment only for `MAPR_DEMO_PASSWORD` (no plaintext) |
 
-**Do not change:** landing Vue, other role workspaces, geospatial import logic, `report_signatories.md` content, signed-report guards.
+**Do not change:** landing Vue, other role workspaces, geospatial import logic, signed-report guards.
 
 ---
 
@@ -341,29 +321,9 @@ Do **not** alter `building_verifications` or field-assessment workflow.
 
 ---
 
-## 8. Lester demo account migration
+## 8. Local role accounts
 
-Target email: `lestertalan@mapr_admin.com`. Password: **only** via `MAPR_DEMO_PASSWORD` in untracked `.env` (never in plan file, code, `.env.example` value, or tests — tests use `config(['mapr.demo_password' => '...'])`).
-
-**Seeder logic** (local/testing only, DB transaction):
-
-| Condition | Action |
-|-----------|--------|
-| Old exists, new absent | Verify old row is Lester (name + `cdrrmo_admin` role); update email; rehash password from config |
-| New exists | If intended Lester demo, skip on rerun; **do not** auto-reset password |
-| Neither | Create Lester with role code lookup |
-| Both exist | Throw `RuntimeException` with clear message |
-
-**Optional explicit reset:** `php artisan mapr:reset-lester-demo-password` (local only) — not default seeder behavior.
-
-**Post-implementation operator steps** (document only):
-
-1. Set `MAPR_DEMO_PASSWORD` in local `.env` (quote if special chars).
-2. `php artisan config:clear`
-3. `php artisan db:seed --class=MaprDemoUserSeeder`
-4. Login → expect redirect to `/cdrrmo`.
-
-Update [`DemoUserSeederTest.php`](tests/Feature/DemoUserSeederTest.php): migration path preserves user `id`; rerun idempotency; conflict case; email validation test.
+Run `php artisan db:seed` to create the [local role accounts](../README.md#local-role-accounts).
 
 ---
 
@@ -397,9 +357,9 @@ Update [`DemoUserSeederTest.php`](tests/Feature/DemoUserSeederTest.php): migrati
 - Repeat verify on verified → no timestamp churn (or explicit unchanged count).
 - Assert residents/households rows unchanged except via existing FK semantics (none expected).
 
-### Demo account
+### Local role accounts
 
-- Creation, old→new email preserves id, conflict throws, production rejected, login with configured password.
+- Verify one account per role, login and workspace routing, and idempotent reseeding.
 
 ### Build / regression
 
@@ -417,16 +377,14 @@ Update [`DemoUserSeederTest.php`](tests/Feature/DemoUserSeederTest.php): migrati
 4. **`map-selection-preview-api`** — `PolygonSpatial` extract; `MapSelectionController`; session selection token; tests.
 5. **`location-verification-service`** — migration `building_location_reviews`; `BuildingLocationReviewService`; `BuildingLocationController`; transactional bulk rules; tests.
 6. **`map-verification-ui`** — modes, review panel, map styling, stale selection invalidation, refresh hooks.
-7. **`lester-account-update`** — seeder migration + tests + `.env.example` comment; resolve email underscore validation (§1).
-8. **`validation-and-regression`** — build, full test suite, browser checklist; write [`docs/CDRRMO_UI_AND_LOCATION_VERIFICATION_PLAN.md`](docs/CDRRMO_UI_AND_LOCATION_VERIFICATION_PLAN.md) if not already synced.
+7. **`validation-and-regression`** — build, full test suite, browser checklist; write [`docs/CDRRMO_UI_AND_LOCATION_VERIFICATION_PLAN.md`](docs/CDRRMO_UI_AND_LOCATION_VERIFICATION_PLAN.md) if not already synced.
 
 ---
 
 ## Remaining blockers / decisions
 
-1. **Email domain underscore** — confirm Laravel accepts `lestertalan@mapr_admin.com` or choose documented alternative (§1).
-2. **Report history** — no list API; ship “Coming soon” only.
-3. **Session vs signed selection token** — session sufficient for same-origin SPA; document TTL.
+1. **Report history** — no list API; ship “Coming soon” only.
+2. **Session vs signed selection token** — session sufficient for same-origin SPA; document TTL.
 4. **Verified → rejected** — product confirmation that CDRRMO may overturn prior verification with reason (schema allows; audit required).
 5. **Batch size** — default 50 page / 100 verify max to protect MySQL transaction time.
 

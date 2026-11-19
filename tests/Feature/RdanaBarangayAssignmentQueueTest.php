@@ -23,8 +23,8 @@ class RdanaBarangayAssignmentQueueTest extends TestCase
     public function test_supervisor_assigns_and_queues_move_correctly(): void
     {
         $barangay = $this->barangay();
-        $admin = $this->member('rdana_admin_officer', 'Mark Merillo', $barangay);
-        $city = $this->member('rdana_city_assessor', 'Lovy Dedicatoria', $barangay);
+        $admin = $this->member('rdana_admin_officer', 'Test Assessor', $barangay);
+        $city = $this->member('rdana_city_assessor', 'Test City Assessor', $barangay);
         $assessor = $this->member('rdana', 'James Tan', $barangay);
         $other = $this->member('rdana', 'Orland Falcon', $barangay);
         $officer = $this->member('bdrrm', 'Bdrrm Officer', $barangay);
@@ -108,7 +108,7 @@ class RdanaBarangayAssignmentQueueTest extends TestCase
     {
         $barangay = $this->barangay();
         $personnel = $this->member('bdrrm', 'Field Officer', $barangay);
-        $secretary = $this->member('barangay_secretary', 'Leonida Lagunda', $barangay);
+        $secretary = $this->member('barangay_secretary', 'Test Secretary', $barangay);
 
         $this->actingAs($personnel)->getJson('/bdrrm/api/residents')->assertForbidden();
         $this->actingAs($secretary)->getJson('/bdrrm/api/residents')->assertOk();

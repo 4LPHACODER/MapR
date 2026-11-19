@@ -20,7 +20,7 @@ MapR uses Laravel 12, PHP, Vue 3, Vue Router, Vite 7, Tailwind CSS 4, MySQL spat
 ### Current limitations
 
 - **AI inference is not connected.** The queued `ClassifyBuildingPhoto` job currently records a failed prediction without assigning a damage class. The repository does not provide an executable EfficientNetB0 inference integration.
-- Official map eligibility requires field-verified building locations. Imported CBMS coordinates start unverified; local demo bootstrap verifies a sample for testing.
+- Map eligibility requires field-verified building locations. Imported CBMS coordinates start unverified.
 - Resident impact counts are estimates subject to field validation, not confirmed casualty counts.
 
 Changes reach production through `develop` → `testing` → `main`, with commit messages formatted as `<type>/<description>` (for example `feature/add resident export`). See [docs/CI.md](docs/CI.md) and run `composer hooks` once per clone.
@@ -49,7 +49,6 @@ mkdir -p geospatial_data
 If `.env.docker` already exists, keep it and its application key. Edit it before starting:
 
 - Set different random values for `DB_PASSWORD` and `MYSQL_ROOT_PASSWORD`.
-- Set `MAPR_DEMO_PASSWORD` for the local demo accounts.
 - Set `MAPBOX_ACCESS_TOKEN` for map tiles.
 - Keep `APP_ENV=local`, `DB_HOST=db`, and `SESSION_SECURE_COOKIE=false`.
 
@@ -87,7 +86,7 @@ docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml exec
 docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml up -d queue
 ```
 
-Open **http://localhost:8000/login** and sign in with a [demo account](#demo-accounts), such as `admin.demo@mapr.test`, using your `MAPR_DEMO_PASSWORD`.
+Open **http://localhost:8000/login** and sign in with a [local role account](#local-role-accounts), such as `cdrrmo.admin@mapr.test`, using `password`.
 
 | Service | Local URL |
 | --- | --- |
@@ -99,10 +98,10 @@ For phpMyAdmin, use `DB_USERNAME` and `DB_PASSWORD` from `.env.docker`. All publ
 
 ### 4. Import optional geospatial data
 
-The application can start without the source datasets; registry and map data remain empty. To import them, supply the files using the [dataset layout below](#4-supply-geospatial-data-and-bootstrap-the-demo), then run:
+The application can start without the source datasets; registry and map data remain empty. To import them, supply the files using the [dataset layout below](#4-supply-geospatial-data), then run:
 
 ```bash
-docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml exec app php artisan mapr:bootstrap-local-data
+docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml exec app php artisan mapr:import-geospatial
 ```
 
 ### Start and stop after setup
@@ -198,11 +197,10 @@ DB_DATABASE=mapr_db
 DB_USERNAME=your_mysql_user
 DB_PASSWORD=your_mysql_password
 
-MAPR_DEMO_PASSWORD=choose-a-local-demo-password
 MAPBOX_ACCESS_TOKEN=your_mapbox_access_token
 ```
 
-`.env.example` defaults to SQLite: change the database connection to MySQL before migrating. `MAPR_DEMO_PASSWORD` is required when seeding local demo accounts. Keep `.env` private.
+`.env.example` defaults to SQLite: change the database connection to MySQL before migrating. Keep `.env` private.
 
 For a new installation, generate the application key:
 
@@ -217,9 +215,9 @@ php artisan migrate
 php artisan db:seed
 ```
 
-Seeding loads the configured barangays, roles, disaster types, damage classes, and vulnerability categories. In `local` and `testing`, it also creates demo accounts.
+Seeding loads the configured barangays, roles, disaster types, damage classes, and vulnerability categories. In `local` and `testing`, it also creates one account for each role.
 
-### 4. Supply geospatial data and bootstrap the demo
+### 4. Supply geospatial data
 
 **Geospatial source data is not bundled with this checkout.** The `geospatial_data/` directory is ignored by Git. Obtain the project datasets separately and preserve these paths, including the corresponding `.shp` and `.dbf` files and any supplied companion files:
 
@@ -239,36 +237,10 @@ Household data can alternatively be provided as `geospatial_data/CBMS22/CBMS22.{
 Once the files are available:
 
 ```bash
-php artisan mapr:bootstrap-local-data
+php artisan mapr:import-geospatial
 ```
 
-This command seeds reference data when needed, imports the geospatial registry, verifies a sample of building locations, and seeds demo report workflow rows when no field assessments exist. It refuses to run in production.
-
-The Composer alias runs the same bootstrap command:
-
-```bash
-composer setup:cdrrmo-local
-```
-
-The alias does not install dependencies or run migrations. Without the source datasets, you can run the application after step 3, but imported registry data and map markers will be unavailable. Use `--skip-import` only when intentionally skipping import, for example to refresh sample verification on an existing registry:
-
-```bash
-php artisan mapr:bootstrap-local-data --skip-import
-```
-
-To add Resident Report samples for `resident.demo@mapr.test`, covering all five stored statuses and all six tracking labels (including assessor review, CDRRMO review, and finalized), run after `db:seed`:
-
-```bash
-php artisan db:seed --class=ResidentReportSeeder
-```
-
-For the Docker setup, run it inside the app container:
-
-```bash
-docker compose --env-file .env.docker -f compose.yaml -f compose.local.yaml exec app php artisan db:seed --class=ResidentReportSeeder
-```
-
-This seeder runs only in local or testing environments. It creates eight reports and their tracking links, preserves existing samples on reruns, and does not create photos or signatures. If the standard demo account does not exist, it uses `resident@mapr.test`. Reports appear only in the owning resident's Dashboard and My Reports.
+Building locations become eligible for map display after location verification. Registry data is optional for local sign-in.
 
 ### 5. Start development servers
 
@@ -284,36 +256,51 @@ For compiled frontend assets, run:
 npm run build
 ```
 
-## Demo accounts
+## Local role accounts
 
-Newly seeded accounts use the value of `MAPR_DEMO_PASSWORD`:
+On a fresh database, all eight accounts use `password`. The seeder creates accounts only in `local` and `testing` and preserves existing accounts on reruns.
 
-| Role | Email |
+| Display name | Email |
 | --- | --- |
-| CDRRMO administrator | `admin.demo@mapr.test` |
-| CDRRMO administrator | `lestertalan@mapr_admin.com` |
-| Resident | `resident.demo@mapr.test` |
-| BDRRM personnel | `bdrrm.demo@mapr.test` |
-| RDANA assessor | `rdana.demo@mapr.test` |
+| Resident | `resident@mapr.test` |
+| BDRRM Personnel | `bdrrm@mapr.test` |
+| RDANA Assessor | `rdana@mapr.test` |
+| CDRRMO Administrator | `cdrrmo.admin@mapr.test` |
+| Barangay Secretary | `barangay.secretary@mapr.test` |
+| Punong Barangay | `barangay.captain@mapr.test` |
+| RDANA Administrative Officer III | `rdana.admin.officer@mapr.test` |
+| City Assessor | `rdana.city.assessor@mapr.test` |
 
-Existing accounts are generally skipped when reseeding; changing the environment variable does not generally reset their passwords.
+Assign barangays through the CDRRMO Users workspace to grant access to scoped records. Set `MAPR_CONSOLIDATED_NOTED_BY_EMAIL` and `MAPR_CONSOLIDATED_APPROVED_BY_EMAIL` to the active CDRRMO accounts authorized for those signature slots.
 
-An additional assessor account is available through a separate seeder. Set `MAPR_ASSESSOR_DEMO_PASSWORD` in `.env`, then run:
+## Optional training data
+
+The default seeder creates reference data and local role accounts. On local or testing MySQL, load a full training dataset after migrating.
 
 ```bash
-php artisan db:seed --class=AssessorDemoUserSeeder
+php artisan db:seed --class=DemoDataSeeder
 ```
 
-This creates `mark.merillo@mapr.test` if absent. It does not reset an existing account or assign barangays; field access still requires assignments.
+For Docker, run the same Artisan command inside the local app container. This seeder fills all four barangays and links registry data, report stages, photos, PDFs, simulated signatures, assessment and impact records, and audit history. It also creates expired session/cache examples and inert examples on a dedicated queue. Migrations write their own ledger.
+
+The data is synthetic and labeled for training. The seeder preserves existing report records and skips after a successful run. The default resident login shows the full report lifecycle for its barangay. Other training residents use `resident.<barangay-code>@mapr.test` with `password`.
+
+The bundled photos are illustrative public-domain FEMA images sourced from Wikimedia Commons. [Flood damage by Bob McMillan](https://commons.wikimedia.org/wiki/File:FEMA_-_31130_-_Flood_Damaged_home_in_Texas.jpg) and [storm damage by Jocelyn Augustino](https://commons.wikimedia.org/wiki/File:FEMA_-_38660_-_Damaged_house_on_Galveston_Island.jpg).
+
+To run the training seeder integration tests, create and migrate a disposable MySQL database named `mapr_demo_seed_test`, then run the test against that database.
+
+```bash
+DB_DATABASE=mapr_demo_seed_test vendor/bin/phpunit --no-configuration --bootstrap vendor/autoload.php tests/Integration/DemoDataSeederTest.php
+```
 
 ## Verify the setup
 
 After signing in as a CDRRMO administrator:
 
-- Open `/cdrrmo/map` and check for household markers after the geospatial bootstrap.
+- Open `/cdrrmo/map` and check for household markers after the geospatial import and location verification.
 - Check `/cdrrmo/api/map/meta` for `eligible_marker_count > 0`.
 - Open `/cdrrmo/residents` for imported active residents.
-- Open `/cdrrmo/reports/field` and `/cdrrmo/reports/barangay` for demo reports.
+- Open `/cdrrmo/reports/field` and `/cdrrmo/reports/barangay` for reports once users submit them.
 
 For a running local Docker stack:
 
@@ -346,12 +333,10 @@ PHPUnit is configured to use in-memory SQLite and test-specific settings. Passin
 | Composer reports a PHP version or extension mismatch on the host | Run Composer inside the local Docker app container, or install the prerequisites in the host setup section |
 | Docker login page errors after first startup | Finish Composer installation, save `APP_KEY`, recreate app, and migrate/seed; inspect `logs --tail=100 app` using the local Compose prefix |
 | Migration fails with SQLite or geometry SQL errors | Configure MySQL in `.env`; run `php artisan config:clear` after changing cached settings |
-| Demo seeding requests a password | Set `MAPR_DEMO_PASSWORD` before running `php artisan db:seed` |
-| Bootstrap cannot find shapefiles | Supply the datasets at the exact paths above; they are not downloaded by setup |
-| Empty resident registry | Complete `php artisan mapr:bootstrap-local-data` with household data present |
-| Buildings exist but map markers are missing | Check location verification; locally, run `php artisan mapr:mark-sample-locations-verified` |
+| Geospatial import cannot find shapefiles | Supply the datasets at the exact paths above; they are not downloaded by setup |
+| Empty resident registry | Complete `php artisan mapr:import-geospatial` with household data present |
+| Buildings exist but map markers are missing | Check building location verification |
 | Map tiles do not load | Check `MAPBOX_ACCESS_TOKEN` and its permissions; tiles and API markers load separately |
-| Empty demo report lists | Re-run bootstrap without `--skip-reports` |
 | Frontend assets or Vite are missing | Run `npm ci`, then `composer run dev` or `npm run build` |
 | Imported DOCX preview unavailable | Install LibreOffice at a supported path, or download the original document |
 
@@ -369,7 +354,7 @@ Use `php artisan migrate` for normal setup. `migrate:fresh` deletes existing tab
 | `app/Jobs/` | Queued photo classification placeholder |
 | `resources/js/` | Vue workspaces and shared map/report components |
 | `database/migrations/` | Application schema and database guards |
-| `database/seeders/` | Reference data and local demo accounts/reports |
+| `database/seeders/` | Reference data and local role accounts |
 | `tests/` | Feature and unit tests |
 
 Further documentation:
@@ -379,4 +364,3 @@ Further documentation:
 - [CDRRMO UI and location verification plan](docs/CDRRMO_UI_AND_LOCATION_VERIFICATION_PLAN.md)
 - [Implementation plan](docs/MAPR_IMPLEMENTATION_PLAN.md) — historical snapshot from October 2026; some implementation status descriptions are outdated.
 - [Building assessment criteria](Assessor_Building_Assessment_Criteria.md)
-- [Report signatories](report_signatories.md)
