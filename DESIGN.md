@@ -170,6 +170,10 @@ Container queries reflow filters at 900px and compact the summary into label/val
 
 Residents controls and authored overlays omit outer focus rings and shadows at the user's request. Subtle indigo field borders, tonal checkbox/menu/selection fills, button fills, and underlined actions identify keyboard focus. Keep system outlines available in forced-colors mode. Popups open instantly; reduced motion removes transitions. Preserve neutral routine actions, distinct archive danger styling, loading/empty/error/retry states, and location-unavailable explanations. Server ordering, pagination, selection, forms, archive, incident inclusion, and map/report destinations follow the contract in `UX-CONTRACT.md`.
 
+### CDRRMO activity log
+
+The activity log uses one bordered ledger with Philippine-date dividers and exact local times. PrimeVue DataTable and Tag distinguish event types from their summaries. The actor has a dedicated desktop column and appears under the event on narrow screens. PrimeVue Paginator shows the record range and current page, and pagination restores from the URL. Keep controls small and use tonal keyboard focus without an outer ring. Route styles in `resources/css/cdrrmo/activity.css` use the shared resident shell and PrimeVue tokens.
+
 ### BDRRM report creation
 
 The create page pairs a compact report form with a draft summary that stacks below the form when space is limited. The summary shows the current incident, barangay, building, and save status, with brief forwarding guidance. Show a single assigned barangay as read-only and retain the selector for multiple assignments. Use the existing building picker to preserve linked-resident lookup and building details.
