@@ -32,7 +32,7 @@
         <env name="PULSE_ENABLED" value="false" force="true"/>
         <env name="TELESCOPE_ENABLED" value="false" force="true"/>
         <env name="NIGHTWATCH_ENABLED" value="false" force="true"/>
-        <!-- PHP CLI inherits container variables in $_SERVER too. Override both adapters. -->
+        <!-- PHP CLI inherits environment variables in $_SERVER too. Override both adapters. -->
         <server name="APP_ENV" value="testing"/>
         <server name="APP_MAINTENANCE_DRIVER" value="file"/>
         <server name="BCRYPT_ROUNDS" value="4"/>

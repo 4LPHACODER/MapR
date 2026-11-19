@@ -1,6 +1,6 @@
 # CDRRMO local setup
 
-Follow the [local setup in the README](../README.md#local-setup-without-docker) for PHP, MySQL, and environment requirements.
+Complete the [local setup in the README](../README.md#local-setup) first, including dependency installation, MySQL configuration, and application key generation.
 
 ```bash
 composer install

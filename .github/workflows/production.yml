@@ -14,5 +14,5 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  images:
-    uses: ./.github/workflows/build-images.yml
+  build:
+    uses: ./.github/workflows/build.yml

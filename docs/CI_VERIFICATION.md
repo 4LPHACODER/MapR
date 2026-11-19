@@ -1,5 +1,7 @@
 # CI implementation verification
 
+> Historical record from before Docker removal. Container checks and workflow names below no longer describe the current setup. See [CI.md](CI.md) for the native workflows.
+
 Verified locally on 2026-11-15 on `ci/github-actions-branch-flow`, after merging
 `origin/main` at `5f77808` into the Docker integration and CI changes.
 
@@ -78,3 +80,20 @@ methods, and the full promotion smoke test have not been verified on GitHub.
 Follow [CI activation instructions](CI.md#activation-status-and-owner-setup) when
 admin access becomes available. Do not treat local results as proof of active
 GitHub branch enforcement.
+
+## Native setup verification — 2026-11-19
+
+After removing Docker setup, verification ran directly on the host with an isolated PHP 8.5.12 runtime, MySQL 8.0.46, Node.js 26.13.1, and the host LibreOffice installation.
+
+- `composer test`: 131 tests passed, 1,752 assertions.
+- Focused `DocxPreviewTest`: 4 tests passed, 21 assertions, no skips.
+- `npm run test:map`: 17 tests passed.
+- `npm run build`: passed; Vite still reports large chunks.
+- CI policy tests: 28 passed.
+- Composer manifest validation, development/production platform requirements, bootstrap syntax, and Pint on the changed bootstrap file passed.
+- Composer removed only `laravel/sail` and its orphan `symfony/yaml` dependency. Retained package versions are unchanged.
+- A fresh, disposable native MySQL database migrated and seeded successfully: 52 tables, 35 triggers, and 8 local role accounts.
+- A clean source export with production PHP dependencies served `/up`, the login page, compiled JavaScript, administrator sign-in, and the CDRRMO workspace successfully.
+- All five workflow files parsed; reusable workflow paths and versioned ruleset check names matched.
+
+Network downloads were unavailable. PHP binaries/extensions and installed dependency files were copied from the existing local stack, then Composer reconciled dependencies and the application ran on the host. This verifies native execution, not a fresh online download. The default host PHP remains 8.4 and must be upgraded before using normal setup commands. GitHub Actions runs and live ruleset updates were not performed; existing application data and container volumes were preserved. Node 22 is configured in CI but was not available for this local run.
