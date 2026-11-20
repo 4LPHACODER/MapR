@@ -57,6 +57,9 @@ class ReportAssignmentService
             if ($reason === '') {
                 abort(422, 'A reason is required when replacing the assigned officer.');
             }
+            if ($subjectType === 'barangay_report' && $assignmentRole === 'rdana') {
+                $this->assertBarangayReportReassignable($subjectId);
+            }
             DB::table('report_assignments')->where('id', $current->id)->update([
                 'is_active' => false,
                 'replaced_reason' => $reason,
@@ -75,7 +78,39 @@ class ReportAssignmentService
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+    }
 
+    /**
+     * Block silent transfer of signed or supervisor-stage field assessments.
+     */
+    public function assertBarangayReportReassignable(int $barangayReportId): void
+    {
+        if (! Schema::hasTable('field_assessments')) {
+            return;
+        }
+
+        $assessment = DB::table('field_assessments')
+            ->where('barangay_report_id', $barangayReportId)
+            ->orderByDesc('id')
+            ->first();
+        if ($assessment === null) {
+            return;
+        }
+
+        $status = (string) ($assessment->assessment_status ?? '');
+        $stage = (string) ($assessment->workflow_stage ?? '');
+        if (in_array($status, ['submitted', 'signed'], true)
+            || in_array($stage, ['pending_admin_verification', 'pending_city_assessor', 'forwarded_cdrrmo'], true)) {
+            abort(422, 'This assessment has already been submitted for verification. Use the return or correction workflow instead of reassignment.');
+        }
+
+        if (Schema::hasTable('report_signatures')
+            && DB::table('report_signatures')
+                ->where('field_assessment_id', $assessment->id)
+                ->where('signature_role', 'assessed_by')
+                ->exists()) {
+            abort(422, 'This assessment has already been signed by the assigned assessor. Use the return or correction workflow instead of reassignment.');
+        }
     }
 
     /**
@@ -243,17 +278,41 @@ class ReportAssignmentService
     }
 
     /**
-     * Distribute selected unassigned barangay reports to assessors in selection order.
+     * Distribute selected barangay reports to assessors in selection order.
      *
      * @param  list<int>  $reportIds
      * @param  list<array{assignee_user_id: int, count: int}>  $distribution
      * @return list<array{report_id: int, assignee_user_id: int}>
      */
-    public function distributeBarangayReports(User $actor, array $reportIds, array $distribution, ?string $remarks): array
+    public function distributeBarangayReports(User $actor, array $reportIds, array $distribution, ?string $remarks, ?string $replacedReason = null): array
     {
         $ids = array_values(array_unique(array_map('intval', $reportIds)));
         if ($ids === []) {
             abort(422, 'Select at least one barangay report.');
+        }
+
+        $barangayIds = DB::table('barangay_reports')->whereIn('id', $ids)->pluck('barangay_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+        if (count($barangayIds) > 1) {
+            abort(422, 'Select reports from one barangay.');
+        }
+
+        $needsReason = false;
+        if (Schema::hasTable('report_assignments')) {
+            $needsReason = DB::table('report_assignments')
+                ->where('subject_type', 'barangay_report')
+                ->where('assignment_role', 'rdana')
+                ->where('is_active', true)
+                ->whereIn('subject_id', $ids)
+                ->exists();
+        }
+        if ($needsReason && trim((string) $replacedReason) === '') {
+            abort(422, 'A reason is required when replacing the assigned officer.');
+        }
+
+        foreach ($ids as $reportId) {
+            if ($needsReason) {
+                $this->assertBarangayReportReassignable($reportId);
+            }
         }
 
         $planned = [];
@@ -279,7 +338,7 @@ class ReportAssignmentService
             abort(422, 'Assign every selected report before confirming.');
         }
 
-        DB::transaction(function () use ($actor, $planned, $remarks) {
+        DB::transaction(function () use ($actor, $planned, $remarks, $replacedReason) {
             foreach ($planned as $row) {
                 $this->assign(
                     $actor,
@@ -288,7 +347,7 @@ class ReportAssignmentService
                     $row['assignee_user_id'],
                     'rdana',
                     $remarks,
-                    null,
+                    $replacedReason,
                 );
             }
         });

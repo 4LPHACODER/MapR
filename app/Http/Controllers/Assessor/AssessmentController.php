@@ -405,6 +405,7 @@ class AssessmentController extends Controller
             'building_status_label' => $buildingStatusLabel,
             'estimated_cost_php' => $estimatedCost,
             'can_assign' => $canAssign && $queue === 'unassigned',
+            'can_reassign' => $canAssign && $queue === 'pending' && $assignment !== null,
             'can_open_assessment' => $assessmentId !== null || ($assignment && (int) ($assignment->assignee_user_id ?? 0) === (int) $user->id),
             'can_view' => true,
             'can_download' => true,

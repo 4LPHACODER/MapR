@@ -22,9 +22,11 @@ const queue = ref('unassigned');
 const selectedIds = ref([]);
 const selectedMeta = ref({});
 const assignOpen = ref(false);
+const reassignMode = ref(false);
 const assignees = ref([]);
 const selectedAssessorId = ref(null);
 const assignRemarks = ref('');
+const replacedReason = ref('');
 const assignError = ref('');
 const assigning = ref(false);
 const loadingAssignees = ref(false);
@@ -97,17 +99,39 @@ const selectedRows = computed(() => selectedIds.value.map((id) => {
     return live || cached || { id, reference: `#${id}`, barangay_name: '—', incident_name: null, barangay_id: null };
 }));
 const pageSelected = computed(() => rows.value.length > 0 && rows.value.every((row) => selectedIds.value.includes(row.id)));
-const selectedAssessor = computed(() => assignees.value.find((row) => Number(row.id) === Number(selectedAssessorId.value)) || null);
-const assignValid = computed(() => (
-    selectedIds.value.length > 0
-    && selectedAssessorId.value !== null
-    && selectedAssessorId.value !== ''
-    && Boolean(selectedAssessor.value)
-));
+const currentAssignees = computed(() => {
+    const names = selectedRows.value.map((row) => row.assignee_name).filter(Boolean);
+    return [...new Set(names)];
+});
+const currentAssigneeIds = computed(() => selectedRows.value
+    .map((row) => Number(row.assignee_user_id))
+    .filter((id) => Number.isFinite(id) && id > 0));
+const eligibleAssignees = computed(() => {
+    if (!reassignMode.value) return assignees.value;
+    const blocked = new Set(currentAssigneeIds.value);
+    return assignees.value.filter((person) => !blocked.has(Number(person.id)));
+});
+const selectedAssessor = computed(() => {
+    const pool = reassignMode.value ? eligibleAssignees.value : assignees.value;
+    return pool.find((row) => Number(row.id) === Number(selectedAssessorId.value)) || null;
+});
+const assignValid = computed(() => {
+    const base = selectedIds.value.length > 0
+        && selectedAssessorId.value !== null
+        && selectedAssessorId.value !== ''
+        && Boolean(selectedAssessor.value);
+    if (!base) return false;
+    if (reassignMode.value) return replacedReason.value.trim().length > 0;
+    return true;
+});
 const assignActionLabel = computed(() => {
     const count = selectedIds.value.length;
+    if (reassignMode.value) {
+        return count === 1 ? 'Confirm Reassignment' : `Reassign ${count} Reports`;
+    }
     return count === 1 ? 'Assign 1 Report' : `Assign ${count} Reports`;
 });
+const selectionEnabled = computed(() => canAssign.value && (queue.value === 'unassigned' || queue.value === 'pending'));
 
 function rememberRows(list) {
     const next = { ...selectedMeta.value };
@@ -118,6 +142,13 @@ function rememberRows(list) {
             barangay_name: row.barangay_name,
             barangay_id: row.barangay_id,
             incident_name: row.incident_name,
+            reporting_resident: row.reporting_resident,
+            assignee_user_id: row.assignee_user_id,
+            assignee_name: row.assignee_name,
+            assigned_at: row.assigned_at,
+            verification_label: row.verification_label,
+            label: row.label,
+            assessment_progress: row.assessment_progress,
         };
     }
     selectedMeta.value = next;
@@ -260,9 +291,19 @@ function openAssessment(row) {
 }
 
 async function openAssign(row = null) {
+    await openAssignmentModal(row, false);
+}
+
+async function openReassign(row = null) {
+    await openAssignmentModal(row, true);
+}
+
+async function openAssignmentModal(row = null, asReassign = false) {
     menuId.value = null;
+    reassignMode.value = asReassign;
     assignError.value = '';
     assignRemarks.value = '';
+    replacedReason.value = '';
     selectedAssessorId.value = null;
     assignees.value = [];
     if (row) {
@@ -270,21 +311,29 @@ async function openAssign(row = null) {
         rememberRows([row]);
     }
     if (!selectedIds.value.length) {
-        assignError.value = 'Select at least one unassigned report.';
+        assignError.value = asReassign
+            ? 'Select at least one pending assessment report.'
+            : 'Select at least one unassigned report.';
+        assignOpen.value = true;
+        return;
+    }
+    const barangayIds = [...new Set(selectedRows.value.map((item) => item.barangay_id).filter(Boolean))];
+    if (asReassign && barangayIds.length > 1) {
+        assignError.value = 'Select reports from one barangay.';
         assignOpen.value = true;
         return;
     }
     assignOpen.value = true;
     loadingAssignees.value = true;
     try {
-        const barangayId = selectedRows.value.find((item) => item.barangay_id)?.barangay_id
+        const barangayId = barangayIds[0]
             || filters.barangay_id
             || barangays.value[0]?.id;
         const response = await window.axios.get(`${apiBase}/personnel`, {
             params: { barangay_id: barangayId, role: 'rdana' },
         });
         assignees.value = response.data.data || [];
-        if (!assignees.value.length) {
+        if (!(asReassign ? eligibleAssignees.value : assignees.value).length) {
             assignError.value = 'No eligible RDANA Assessor Personnel were found for this barangay.';
         }
     } catch (exception) {
@@ -297,7 +346,9 @@ async function openAssign(row = null) {
 async function confirmAssign() {
     assignError.value = '';
     if (!assignValid.value) {
-        assignError.value = 'Select an assessor and at least one report before confirming.';
+        assignError.value = reassignMode.value
+            ? 'Select a new assessor and provide a reassignment reason.'
+            : 'Select an assessor and at least one report before confirming.';
         return;
     }
     assigning.value = true;
@@ -307,14 +358,21 @@ async function confirmAssign() {
             report_ids: selectedIds.value.map((id) => Number(id)),
             remarks: assignRemarks.value.trim() || undefined,
         };
+        if (reassignMode.value) {
+            payload.replaced_reason = replacedReason.value.trim();
+        }
         await window.axios.post(`${apiBase}/barangay-reports/assign`, payload);
         assignOpen.value = false;
+        reassignMode.value = false;
         clearSelection();
         selectedAssessorId.value = null;
+        replacedReason.value = '';
         queue.value = 'pending';
         await load();
     } catch (exception) {
-        assignError.value = exception.response?.data?.message || 'Assignment could not be saved.';
+        assignError.value = exception.response?.data?.message || (reassignMode.value
+            ? 'Reassignment could not be saved.'
+            : 'Assignment could not be saved.');
     } finally {
         assigning.value = false;
     }
@@ -407,13 +465,22 @@ onBeforeUnmount(() => clearTimeout(searchTimer));
                     <MapIcon name="refresh" /> Refresh
                 </button>
                 <button
-                    v-if="canAssign"
+                    v-if="canAssign && queue === 'unassigned'"
                     type="button"
                     class="submission-primary"
                     :disabled="!selectedIds.length && queue !== 'unassigned'"
                     @click="openAssign()"
                 >
                     <MapIcon name="user-round-plus" /> Assign RDANA Personnel
+                </button>
+                <button
+                    v-else-if="canAssign && queue === 'pending'"
+                    type="button"
+                    class="submission-primary"
+                    :disabled="!selectedIds.length"
+                    @click="openReassign()"
+                >
+                    <MapIcon name="user-round-cog" /> Reassign Selected
                 </button>
             </div>
         </header>
@@ -500,11 +567,16 @@ onBeforeUnmount(() => clearTimeout(searchTimer));
             <button v-if="filtersActive" type="button" class="submission-quiet" @click="clearFilters"><MapIcon name="x" /> Clear filters</button>
         </form>
 
-        <div v-if="canAssign && queue === 'unassigned' && (selectedIds.length || rows.length)" class="submission-toolbar">
+        <div v-if="selectionEnabled && (selectedIds.length || rows.length)" class="submission-toolbar">
             <button type="button" class="submission-quiet" :disabled="!rows.length" @click="togglePage">{{ pageSelected ? 'Clear page' : 'Select page' }}</button>
             <template v-if="selectedIds.length">
                 <strong>{{ selectedIds.length }} {{ selectedIds.length === 1 ? 'report' : 'reports' }} selected</strong>
-                <button type="button" class="submission-primary" @click="openAssign()"><MapIcon name="user-round-plus" /> Assign RDANA Personnel</button>
+                <button v-if="queue === 'unassigned'" type="button" class="submission-primary" @click="openAssign()">
+                    <MapIcon name="user-round-plus" /> Assign RDANA Personnel
+                </button>
+                <button v-else-if="queue === 'pending'" type="button" class="submission-primary" @click="openReassign()">
+                    <MapIcon name="user-round-cog" /> Reassign Selected
+                </button>
                 <button type="button" class="submission-quiet" @click="clearSelection">Clear selection</button>
             </template>
         </div>
@@ -524,7 +596,7 @@ onBeforeUnmount(() => clearTimeout(searchTimer));
             <li v-for="row in rows" :key="row.id">
                 <article class="submission-card">
                     <div class="submission-card-main">
-                        <label v-if="canAssign && queue === 'unassigned'" class="submission-check">
+                        <label v-if="selectionEnabled" class="submission-check">
                             <input type="checkbox" :checked="selectedIds.includes(row.id)" :aria-label="`Select ${row.reference}`" @change="toggleRow(row.id)">
                         </label>
                         <div class="submission-card-icon" aria-hidden="true"><MapIcon name="file-text" /></div>
@@ -554,12 +626,20 @@ onBeforeUnmount(() => clearTimeout(searchTimer));
                             <MapIcon name="user-round-plus" /> Assign Assessor
                         </button>
                         <button
-                            v-if="queue === 'pending'"
+                            v-if="!canAssign && queue === 'pending'"
                             type="button"
                             class="submission-primary"
                             @click="openAssessment(row)"
                         >
                             <MapIcon name="clipboard-check" /> Assess Report
+                        </button>
+                        <button
+                            v-if="canAssign && queue === 'pending'"
+                            type="button"
+                            class="submission-primary"
+                            @click="openReassign(row)"
+                        >
+                            <MapIcon name="user-round-cog" /> Reassign
                         </button>
                         <button
                             v-if="canAssign && queue === 'completed'"
@@ -570,7 +650,7 @@ onBeforeUnmount(() => clearTimeout(searchTimer));
                             <MapIcon name="shield-check" /> Verify Report
                         </button>
                         <RouterLink
-                            v-else-if="queue === 'completed' || queue === 'pending' || queue === 'unassigned'"
+                            v-if="queue === 'pending' || queue === 'unassigned' || (queue === 'completed' && !canAssign)"
                             class="submission-quiet"
                             :to="detailHref(row)"
                         >
@@ -590,28 +670,65 @@ onBeforeUnmount(() => clearTimeout(searchTimer));
             </li>
         </ul>
 
-        <div v-if="assignOpen" class="assign-modal" role="presentation" @click.self="assignOpen = false">
+        <div v-if="assignOpen" class="assign-modal" role="presentation" @click.self="assignOpen = false; reassignMode = false">
             <div class="assign-panel assign-panel-wide" role="dialog" aria-modal="true" aria-labelledby="rdana-assign-title">
                 <header class="assign-panel-header">
                     <div>
-                        <h2 id="rdana-assign-title">Assign RDANA Assessor Personnel</h2>
-                        <p>Assign selected barangay damage reports to an authorized RDANA assessor.</p>
+                        <h2 id="rdana-assign-title">{{ reassignMode ? 'Reassign RDANA Assessor' : 'Assign RDANA Assessor Personnel' }}</h2>
+                        <p>
+                            {{ reassignMode
+                                ? 'Transfer pending assessments to another authorized RDANA assessor. Existing draft work is preserved.'
+                                : 'Assign selected barangay damage reports to an authorized RDANA assessor.' }}
+                        </p>
                     </div>
-                    <button type="button" class="submission-icon-button" aria-label="Close" @click="assignOpen = false">
+                    <button type="button" class="submission-icon-button" aria-label="Close" @click="assignOpen = false; reassignMode = false">
                         <MapIcon name="x" />
                     </button>
                 </header>
 
                 <section class="assign-section">
-                    <h3><MapIcon name="files" /> Selected Barangay Reports</h3>
+                    <h3><MapIcon name="files" /> {{ reassignMode ? 'Report Information' : 'Selected Barangay Reports' }}</h3>
                     <p class="assign-count"><strong>{{ selectedIds.length }}</strong> {{ selectedIds.length === 1 ? 'Report Selected' : 'Reports Selected' }}</p>
-                    <div class="assign-report-list" tabindex="0">
+                    <div v-if="reassignMode && selectedRows.length === 1" class="assign-summary">
+                        <dl>
+                            <div>
+                                <dt>Reference</dt>
+                                <dd>{{ selectedRows[0].reference }}</dd>
+                            </div>
+                            <div>
+                                <dt>Incident</dt>
+                                <dd>{{ selectedRows[0].incident_name || '—' }}</dd>
+                            </div>
+                            <div>
+                                <dt>Barangay</dt>
+                                <dd>{{ selectedRows[0].barangay_name || '—' }}</dd>
+                            </div>
+                            <div>
+                                <dt>Resident</dt>
+                                <dd>{{ selectedRows[0].reporting_resident || '—' }}</dd>
+                            </div>
+                            <div>
+                                <dt>Current Assessor</dt>
+                                <dd>{{ selectedRows[0].assignee_name || '—' }}</dd>
+                            </div>
+                            <div>
+                                <dt>Assigned</dt>
+                                <dd>{{ formatWhen(selectedRows[0].assigned_at) }}</dd>
+                            </div>
+                            <div>
+                                <dt>Status</dt>
+                                <dd>{{ selectedRows[0].verification_label || selectedRows[0].label || 'Pending' }}</dd>
+                            </div>
+                        </dl>
+                    </div>
+                    <div v-else class="assign-report-list" tabindex="0">
                         <table>
                             <thead>
                                 <tr>
                                     <th>Report Reference</th>
                                     <th>Barangay</th>
                                     <th>Incident</th>
+                                    <th v-if="reassignMode">Current Assessor</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -619,6 +736,7 @@ onBeforeUnmount(() => clearTimeout(searchTimer));
                                     <td>{{ row.reference }}</td>
                                     <td>{{ row.barangay_name || '—' }}</td>
                                     <td>{{ row.incident_name || '—' }}</td>
+                                    <td v-if="reassignMode">{{ row.assignee_name || '—' }}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -628,32 +746,27 @@ onBeforeUnmount(() => clearTimeout(searchTimer));
                 <section class="assign-section">
                     <AssessorCombobox
                         v-model="selectedAssessorId"
-                        :options="assignees"
+                        :options="reassignMode ? eligibleAssignees : assignees"
                         :loading="loadingAssignees"
                         :disabled="assigning || !selectedIds.length"
-                        placeholder="Search assessor by name..."
+                        :label="reassignMode ? 'Select New RDANA Assessor' : 'Select RDANA Assessor Personnel'"
+                        :placeholder="reassignMode ? 'Search RDANA Assessor Personnel...' : 'Search assessor by name...'"
                     />
                 </section>
 
-                <section v-if="selectedAssessor" class="assign-section assign-summary">
-                    <h3><MapIcon name="clipboard-list" /> Assignment Summary</h3>
-                    <dl>
-                        <div>
-                            <dt>Selected Assessor</dt>
-                            <dd>{{ selectedAssessor.name }}</dd>
-                        </div>
-                        <div>
-                            <dt>Reports to Assign</dt>
-                            <dd>{{ selectedIds.length }}</dd>
-                        </div>
-                        <div>
-                            <dt>Assignment Type</dt>
-                            <dd>Barangay Damage Assessment</dd>
-                        </div>
-                    </dl>
-                </section>
+                <label v-if="reassignMode" class="assign-remarks">
+                    <span><MapIcon name="pen-line" /> Reason for Reassignment</span>
+                    <textarea
+                        v-model="replacedReason"
+                        rows="3"
+                        maxlength="500"
+                        required
+                        placeholder="Explain why this assessment is being reassigned..."
+                        :disabled="assigning"
+                    />
+                </label>
 
-                <label class="assign-remarks">
+                <label v-else class="assign-remarks">
                     <span><MapIcon name="pen-line" /> Assignment Remarks (Optional)</span>
                     <textarea
                         v-model="assignRemarks"
@@ -664,12 +777,34 @@ onBeforeUnmount(() => clearTimeout(searchTimer));
                     />
                 </label>
 
+                <section v-if="selectedAssessor" class="assign-section assign-summary">
+                    <h3><MapIcon name="clipboard-list" /> {{ reassignMode ? 'Reassignment Confirmation' : 'Assignment Summary' }}</h3>
+                    <dl>
+                        <div v-if="reassignMode">
+                            <dt>Current</dt>
+                            <dd>{{ currentAssignees.length ? currentAssignees.join(', ') : '—' }}</dd>
+                        </div>
+                        <div>
+                            <dt>{{ reassignMode ? 'New Assessor' : 'Selected Assessor' }}</dt>
+                            <dd>{{ selectedAssessor.name }}</dd>
+                        </div>
+                        <div>
+                            <dt>{{ reassignMode ? 'Report(s)' : 'Reports to Assign' }}</dt>
+                            <dd>{{ selectedIds.length === 1 ? selectedRows[0]?.reference : `${selectedIds.length} reports` }}</dd>
+                        </div>
+                        <div v-if="!reassignMode">
+                            <dt>Assignment Type</dt>
+                            <dd>Barangay Damage Assessment</dd>
+                        </div>
+                    </dl>
+                </section>
+
                 <p v-if="assignError" class="cdrrmo-error" role="alert">{{ assignError }}</p>
                 <div class="bdrrm-dialog-actions assign-panel-footer">
-                    <button type="button" class="submission-quiet" :disabled="assigning" @click="assignOpen = false">Cancel</button>
+                    <button type="button" class="submission-quiet" :disabled="assigning" @click="assignOpen = false; reassignMode = false">Cancel</button>
                     <button type="button" class="submission-primary" :disabled="!assignValid || assigning" @click="confirmAssign">
-                        <MapIcon name="circle-check" />
-                        {{ assigning ? 'Assigning…' : assignActionLabel }}
+                        <MapIcon :name="reassignMode ? 'user-round-cog' : 'circle-check'" />
+                        {{ assigning ? (reassignMode ? 'Reassigning…' : 'Assigning…') : assignActionLabel }}
                     </button>
                 </div>
             </div>

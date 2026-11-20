@@ -489,12 +489,45 @@ class ReportWorkflow
             return 0;
         }
 
-        $existing = DB::table('field_assessments')
+        $existingForAssessor = DB::table('field_assessments')
             ->where('barangay_report_id', $report->id)
             ->where('assigned_assessor_id', $assessor->id)
             ->value('id');
-        if ($existing) {
-            return (int) $existing;
+        if ($existingForAssessor) {
+            return (int) $existingForAssessor;
+        }
+
+        // Reassignment: transfer the latest draft FA instead of creating a duplicate.
+        $latest = DB::table('field_assessments')
+            ->where('barangay_report_id', $report->id)
+            ->orderByDesc('id')
+            ->first();
+        if ($latest) {
+            $status = (string) ($latest->assessment_status ?? '');
+            $stage = (string) ($latest->workflow_stage ?? '');
+            $signed = Schema::hasTable('report_signatures')
+                && DB::table('report_signatures')
+                    ->where('field_assessment_id', $latest->id)
+                    ->where('signature_role', 'assessed_by')
+                    ->exists();
+            $locked = in_array($status, ['submitted', 'signed'], true)
+                || in_array($stage, ['pending_admin_verification', 'pending_city_assessor', 'forwarded_cdrrmo'], true)
+                || $signed;
+            if (! $locked) {
+                DB::table('field_assessments')->where('id', $latest->id)->update([
+                    'assigned_assessor_id' => $assessor->id,
+                    'updated_at' => now(),
+                ]);
+                $this->logger->log(
+                    $assessor,
+                    'field_assessment_reassigned',
+                    'Field assessment for '.$report->report_reference.' transferred to the newly assigned assessor.',
+                    'field_assessment',
+                    (int) $latest->id,
+                );
+
+                return (int) $latest->id;
+            }
         }
 
         $payload = [

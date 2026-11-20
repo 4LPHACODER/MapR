@@ -100,6 +100,7 @@ class ReportAssignmentController extends Controller
             'report_ids' => ['required', 'array', 'min:1', 'max:100'],
             'report_ids.*' => ['integer', 'distinct'],
             'remarks' => ['nullable', 'string', 'max:500'],
+            'replaced_reason' => ['nullable', 'string', 'max:500'],
         ]);
 
         $reportIds = array_values(array_unique(array_map('intval', $data['report_ids'])));
@@ -109,6 +110,7 @@ class ReportAssignmentController extends Controller
             $reportIds,
             [['assignee_user_id' => $assigneeId, 'count' => count($reportIds)]],
             $data['remarks'] ?? null,
+            $data['replaced_reason'] ?? null,
         );
 
         foreach ($planned as $row) {
@@ -131,6 +133,7 @@ class ReportAssignmentController extends Controller
         if ($assessor === null) {
             return;
         }
+        // startAssessment transfers an existing draft FA on reassignment instead of duplicating.
         $this->workflow->startAssessment($assessor, $report);
     }
 
