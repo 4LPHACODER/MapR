@@ -563,7 +563,6 @@
 .cdrrmo-stat-card strong { display: block; margin-top: 0.35rem; font-size: 1.65rem; color: #123b70; }
 button.cdrrmo-stat-card { width: 100%; text-align: left; font: inherit; cursor: pointer; }
 .signature-preview { display: block; max-width: 16rem; max-height: 6rem; margin: 0.75rem 0; background: #fff; }
-.review-sign-dialog { max-width: 32rem; margin: 10vh auto; }
 .report-workspace { display: flex; flex-direction: column; gap: 0.75rem; min-height: 0; }
 .report-workspace-header, .report-workspace-actions, .report-workspace-toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; justify-content: space-between; }
 .report-workspace-header h2, .report-breadcrumb { margin: 0; }

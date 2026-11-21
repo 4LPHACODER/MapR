@@ -42,16 +42,13 @@ const fieldErrors = reactive({
 });
 const incidents = ref([]);
 const barangays = ref([]);
-const classes = ref([]);
 const profile = ref(null);
 const signOpen = ref(false);
-const signMode = ref('verify');
+const signing = ref(false);
+const signError = ref('');
 const saveState = ref('Saved');
 const savedSnapshot = ref('');
 const createBaseline = ref('');
-const editing = ref(false);
-const menuOpen = ref(false);
-const zoom = ref('100%');
 const detailsOpen = ref(false);
 const contextReady = ref(false);
 const contextError = ref('');
@@ -164,7 +161,6 @@ async function loadRecord() {
     form.building_id = data.data.building?.id || data.data.buildings?.[0]?.building_id || '';
     savedSnapshot.value = JSON.stringify({ findings: form.findings, description: form.report_description, building_id: form.building_id });
     saveState.value = 'Saved';
-    editing.value = false;
     if (route.query.panel === 'history') detailsOpen.value = true;
     if (route.query.saved === '1') {
         message.value = 'Draft saved. Photographs, the checklist, signing, and forwarding are available on this report. Saving a draft does not send it for review.';
@@ -190,23 +186,33 @@ async function keep(action) {
     }
 }
 
-function openSign(mode) {
-    signMode.value = mode;
+function openSign() {
+    signError.value = '';
     signOpen.value = true;
 }
 
 async function confirmSign(payload) {
-    const mode = signMode.value;
-    signOpen.value = false;
-    if (mode === 'barangay') {
-        await keep(() => window.axios.post(`${apiBase}/reports/${record.value.id}/sign`, payload));
-        return;
+    if (signing.value || !record.value?.signing_action) return;
+    const endpoint = record.value.signing_action === 'endorse' ? 'captain-approve' : 'sign';
+    signing.value = true;
+    signError.value = '';
+    error.value = '';
+    message.value = '';
+    try {
+        const { data } = await window.axios.post(`${apiBase}/reports/${record.value.id}/${endpoint}`, payload);
+        signOpen.value = false;
+        message.value = data.message || 'Signature recorded.';
+        await loadRecord();
+    } catch (exception) {
+        if (signOpen.value) {
+            const response = exception.response?.data;
+            signError.value = response?.errors?.password?.[0] || response?.message || 'The signature could not be recorded. Try again.';
+        } else {
+            error.value = 'The signature was recorded. Reload the page to see the updated report.';
+        }
+    } finally {
+        signing.value = false;
     }
-    if (mode === 'approve') {
-        await keep(() => window.axios.post(`${apiBase}/assessments/${record.value.id}/approve`, payload));
-        return;
-    }
-    await keep(() => window.axios.post(`${apiBase}/assessments/${record.value.id}/verify`, payload));
 }
 
 async function createReport() {
@@ -473,22 +479,13 @@ onBeforeUnmount(() => {
             v-else-if="record"
             :record="record"
             :form="form"
-            :profile="profile"
-            :classes="classes"
             :api-base="apiBase"
-            :saving="saving"
+            :saving="saving || signing"
             :save-state="saveState"
-            :editing="editing"
-            :zoom="zoom"
             :details-open="detailsOpen"
-            :menu-open="menuOpen"
             :back-to="backHref"
-            @update:editing="editing = $event"
-            @update:zoom="zoom = $event"
-            @update:details-open="detailsOpen = $event"
-            @update:menu-open="menuOpen = $event"
             @save="saveDraft()"
-            @sign="openSign('barangay')"
+            @sign="openSign"
             @submit="keep(() => window.axios.post(`${apiBase}/reports/${record.id}/submit`, { updated_at: record.updated_at }))"
             @upload="uploadPhoto"
             @flag="addFlag"
@@ -499,7 +496,10 @@ onBeforeUnmount(() => {
             :reference="record?.reference || ''"
             :name="profile?.name || ''"
             :position="profile?.job_title || profile?.role || ''"
-            :capacity="signMode === 'approve' ? 'approved_by' : (signMode === 'barangay' ? 'barangay_signer' : 'verified_by')"
+            capacity="barangay_signer"
+            :signature-preview-url="record?.signing_action === 'endorse' ? `${apiBase}/signature/preview` : ''"
+            :busy="signing"
+            :server-error="signError"
             @close="signOpen = false"
             @confirm="confirmSign"
         />

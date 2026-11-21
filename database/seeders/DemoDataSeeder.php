@@ -16,7 +16,16 @@ use Throwable;
 
 class DemoDataSeeder extends Seeder
 {
-    private const FIRST_INCIDENT = 'TRAINING-FLOOD';
+    private const INCIDENT_DESCRIPTION = 'Synthetic local training scenario.';
+
+    private const RESIDENT_NAMES = [
+        '166819002' => [['Celia', 'Bautista'], ['Myrna', 'Mateo'], ['Sofia', 'Padilla']],
+        '166819005' => [['Janelle', 'Santos'], ['Agnes', 'Domingo'], ['Elisa', 'Reyes']],
+        '166819008' => [['Noemi', 'Valdez'], ['Mila', 'Gonzales'], ['Nina', 'Rosales']],
+        '166819022' => [['Hazel', 'Navarro'], ['Cora', 'Castillo'], ['Lara', 'Mendoza']],
+    ];
+
+    private const INACTIVE_RESIDENT_NAME = ['Grace', 'Manalo'];
 
     private array $files = [];
 
@@ -40,7 +49,8 @@ class DemoDataSeeder extends Seeder
         $this->signatureAssets = [];
         try {
             DB::transaction(function () {
-                if (DB::table('disaster_incidents')->where('incident_reference', self::FIRST_INCIDENT)->exists()) {
+                if (DB::table('disaster_incidents')->where('description', self::INCIDENT_DESCRIPTION)
+                    ->orWhere('incident_reference', 'TRAINING-FLOOD')->exists()) {
                     $this->command?->info('Training records are already seeded.');
 
                     return;
@@ -61,8 +71,8 @@ class DemoDataSeeder extends Seeder
                 }
 
                 User::query()->create([
-                    'first_name' => 'Inactive',
-                    'last_name' => 'Training Resident',
+                    'first_name' => self::INACTIVE_RESIDENT_NAME[0],
+                    'last_name' => self::INACTIVE_RESIDENT_NAME[1],
                     'email' => 'resident.inactive@mapr.test',
                     'role_id' => $resident->role_id,
                     'password' => 'password',
@@ -73,7 +83,7 @@ class DemoDataSeeder extends Seeder
                 foreach ($barangays as $index => $barangay) {
                     $owner = $this->barangayAccount($barangay->id, $barangay->barangay_code, $resident, $staff);
                     $registry = $this->registry($barangay, $index, $owner, $staff['cdrrmo_admin'], $incidents);
-                    $this->reports($barangay->id, $barangay->barangay_code, $owner, $staff, $registry, $incidents, $models);
+                    $this->reports($barangay->id, $barangay->barangay_code, $owner->id, $staff, $registry, $incidents, $models);
                 }
                 $this->runtimeFixtures();
             });
@@ -103,7 +113,7 @@ class DemoDataSeeder extends Seeder
         return $accounts;
     }
 
-    private function barangayAccount(int $barangay, string $code, User $resident, array $staff): int
+    private function barangayAccount(int $barangay, string $code, User $resident, array $staff): User
     {
         $admin = $staff['cdrrmo_admin'];
         foreach (Arr::except($staff, ['resident', 'cdrrmo_admin']) as $id) {
@@ -116,30 +126,32 @@ class DemoDataSeeder extends Seeder
             }
         }
         if ((int) $resident->barangay_id === $barangay) {
-            return $resident->id;
+            return $resident;
         }
 
+        [$firstName, $lastName] = self::RESIDENT_NAMES[$code][0];
+
         return User::query()->create([
-            'first_name' => 'Training',
-            'last_name' => 'Resident '.$code,
+            'first_name' => $firstName,
+            'last_name' => $lastName,
             'email' => 'resident.'.$code.'@mapr.test',
             'role_id' => $resident->role_id,
             'barangay_id' => $barangay,
             'password' => 'password',
             'account_status' => 'active',
-        ])->id;
+        ]);
     }
 
     private function incidents(int $admin): array
     {
         $type = DB::table('disaster_types')->where('name', 'Flood')->value('id');
         $incidents = [];
-        foreach (['active' => self::FIRST_INCIDENT, 'closed' => 'TRAINING-FLOOD-HISTORY'] as $status => $reference) {
+        foreach (['active' => 'FD0001', 'closed' => 'FD0002'] as $status => $suffix) {
             $active = $status === 'active';
             $incidents[$status] = $this->row('disaster_incidents', [
-                'incident_reference' => $reference,
-                'incident_name' => $active ? 'Training Flood Exercise' : 'Training Flood Exercise Archive',
-                'description' => 'Synthetic local training scenario.',
+                'incident_reference' => 'INC-'.now()->year.'-'.$suffix,
+                'incident_name' => $active ? 'Tandag Riverside Flooding' : 'Tandag Low-Lying Area Flooding',
+                'description' => self::INCIDENT_DESCRIPTION,
                 'occurred_at' => now()->subDays($active ? 5 : 15),
                 'incident_status' => $status,
                 'published_for_residents' => $active,
@@ -153,7 +165,7 @@ class DemoDataSeeder extends Seeder
         return $incidents;
     }
 
-    private function registry(object $barangay, int $index, int $owner, int $admin, array $incidents): array
+    private function registry(object $barangay, int $index, User $owner, int $admin, array $incidents): array
     {
         $code = $barangay->barangay_code;
         $lng = 126.169 + $index * 0.007;
@@ -179,12 +191,13 @@ class DemoDataSeeder extends Seeder
         $sites = [];
         foreach (['verified', 'unverified', 'rejected'] as $offset => $status) {
             $point = $this->geometry(sprintf('POINT(%.7F %.7F)', $lng + $offset * 0.00035, $lat));
-            $reference = 'TRAINING-'.$code.'-'.($offset + 1);
+            $reference = $code.'-'.sprintf('%03d', $offset + 1);
+            $address = 'Purok '.($offset + 2).', '.$barangay->barangay_name.', Tandag City';
             $building = $this->row('buildings', [
                 'building_reference' => 'BLDG-'.$reference,
-                'building_name' => 'Training House '.($offset + 1),
+                'building_name' => 'Residence, Purok '.($offset + 2),
                 'building_type' => 'Residential',
-                'address_description' => 'Training location, '.$barangay->barangay_name,
+                'address_description' => $address,
                 'geographic_point' => $point,
                 'location_source' => 'Synthetic training location',
                 'location_verification_status' => $status,
@@ -210,10 +223,13 @@ class DemoDataSeeder extends Seeder
                 'Child under five' => now()->subYears(3)->toDateString(),
                 default => '1995-05-20',
             };
+            [$firstName, $lastName] = $offset === 0
+                ? [$owner->first_name, $owner->last_name]
+                : self::RESIDENT_NAMES[$code][$offset];
             $registryResident = $this->row('residents', [
                 'registry_reference' => 'RES-'.$reference,
-                'first_name' => 'Training',
-                'last_name' => 'Resident '.($offset + 1),
+                'first_name' => $firstName,
+                'last_name' => $lastName,
                 'birth_date' => $birthDate,
                 'sex' => 'female',
                 'residency_status' => $status === 'rejected' ? 'inactive' : 'active',
@@ -249,13 +265,13 @@ class DemoDataSeeder extends Seeder
             $this->inclusion($incidents['active'], $registryResident, $admin, $offset);
             $sites[] = [
                 'building' => $building, 'household' => $household, 'resident' => $registryResident,
-                'point' => $point, 'category' => $category->id, 'reference' => $reference,
+                'point' => $point, 'category' => $category->id, 'reference' => $reference, 'address' => $address,
             ];
         }
 
-        if (! DB::table('account_resident_links')->where('user_id', $owner)->exists()) {
+        if (! DB::table('account_resident_links')->where('user_id', $owner->id)->exists()) {
             $this->row('account_resident_links', [
-                'user_id' => $owner,
+                'user_id' => $owner->id,
                 'resident_id' => $sites[0]['resident'],
                 'verified_by' => $admin,
                 'verified_at' => now()->subDay(),
@@ -340,15 +356,16 @@ class DemoDataSeeder extends Seeder
             'finalized' => ['reviewed', 'review', 'handed_to_rdana', 'submitted', 'forwarded_cdrrmo', 'finalized'],
         ];
         $classes = DB::table('damage_classes')->pluck('id', 'class_code');
+        $sequence = 0;
         foreach ($scenarios as $name => [$residentStatus, $barangayStatus, $barangayStage, $fieldStatus, $fieldStage, $finalStatus]) {
-            $reference = 'TRAINING-'.$code.'-'.strtoupper($name);
             $incident = $incidents[$name === 'finalized' ? 'closed' : 'active'];
             $observed = now()->subDays($name === 'finalized' ? 15 : 5);
+            $reference = sprintf('%d-%s%03d', $observed->year, substr($code, -3), ++$sequence);
             $file = $name === 'finalized' ? 'storm' : 'flood';
             $barangayReport = $barangayStatus === null ? null : $this->row('barangay_reports', [
                 'created_at' => $observed->copy()->addDays(2),
                 'report_reference' => 'BR-'.$reference,
-                'report_description' => 'Training report: water entered a ground-floor room and damaged interior finishes.',
+                'report_description' => 'Floodwater entered a ground-floor room and damaged the wall finishes.',
                 'workflow_stage' => $barangayStage,
                 'disaster_incident_id' => $incident,
                 'barangay_id' => $barangay,
@@ -358,9 +375,9 @@ class DemoDataSeeder extends Seeder
             ]);
             $residentReport = $this->row('resident_incident_reports', [
                 'created_at' => $observed->copy()->addDay(),
-                'report_reference' => 'RR-'.$reference,
-                'incident_description' => 'Training submission: water reached the doorway and soaked walls and belongings.',
-                'reported_location' => 'Synthetic training location',
+                'report_reference' => 'RIR-'.$reference,
+                'incident_description' => 'Floodwater reached the doorway and soaked the walls and belongings inside.',
+                'reported_location' => $site['address'],
                 'reported_point' => $site['point'],
                 'report_status' => $residentStatus,
                 'submitted_at' => $residentStatus === 'draft' ? null : $observed->copy()->addDay(),
@@ -375,9 +392,13 @@ class DemoDataSeeder extends Seeder
                 'building_id' => $site['building'],
                 'barangay_report_id' => $barangayReport,
             ]);
-            $this->photo('incident_report_id', $residentReport, $site['building'], $owner, $file, 'RR-'.$reference);
+            $this->photo('incident_report_id', $residentReport, $site['building'], $owner, $file, 'RIR-'.$reference);
             if ($residentStatus !== 'draft') {
-                $this->signature('resident_incident_report_id', $residentReport, 'RR-'.$reference, 'resident_signer', $owner);
+                $this->signature('resident_incident_report_id', $residentReport, 'RIR-'.$reference, 'resident_signer', $owner, match ($name) {
+                    'correction' => 'rejected',
+                    'submitted' => 'pending',
+                    default => 'verified',
+                });
                 if ($residentStatus !== 'submitted') {
                     $this->assign('resident_incident_report', $residentReport, $bdrrm, $staff['barangay_secretary'], 'bdrrm');
                 }
@@ -388,7 +409,7 @@ class DemoDataSeeder extends Seeder
 
                 continue;
             }
-            $this->signature('resident_incident_report_id', $residentReport, 'RR-'.$reference, 'bdrrm_reviewer', $bdrrm);
+            $this->signature('resident_incident_report_id', $residentReport, 'RIR-'.$reference, 'bdrrm_reviewer', $bdrrm);
             if ($name !== 'secretary' && $name !== 'returned-barangay') {
                 $this->signature('barangay_report_id', $barangayReport, 'BR-'.$reference, 'barangay_secretary', $staff['barangay_secretary']);
             }
@@ -482,7 +503,7 @@ class DemoDataSeeder extends Seeder
             $consolidated = $this->consolidated($finalStatus, $reference, $incident, $admin, $estimate, $fieldReport);
             if ($finalStatus === 'finalized') {
                 foreach ([
-                    'RR' => ['resident_incident_report_id', $residentReport, 'reviewed', 'BDRRM'],
+                    'RIR' => ['resident_incident_report_id', $residentReport, 'reviewed', 'BDRRM'],
                     'BR' => ['barangay_report_id', $barangayReport, $barangayStatus, 'RDANA'],
                     'FA' => ['field_assessment_id', $fieldReport, $fieldStatus, 'CDRRMO'],
                     'CR' => ['consolidated_report_id', $consolidated, $finalStatus, 'CDRRMO'],
@@ -683,7 +704,7 @@ class DemoDataSeeder extends Seeder
         ]);
     }
 
-    private function signature(string $parent, int $id, string $document, string $role, int $signer): void
+    private function signature(string $parent, int $id, string $document, string $role, int $signer, string $verificationStatus = 'verified'): void
     {
         if (! isset($this->signatureAssets[$signer])) {
             $image = imagecreatetruecolor(240, 60);
@@ -713,11 +734,7 @@ class DemoDataSeeder extends Seeder
             'signature_role' => $role,
             'mechanism' => 'simulated_demo',
             'signed_at' => now()->subHour(),
-            'verification_status' => match (true) {
-                str_ends_with($document, '-CORRECTION') => 'rejected',
-                str_ends_with($document, '-SUBMITTED') => 'pending',
-                default => 'verified',
-            },
+            'verification_status' => $verificationStatus,
             'signer_user_id' => $signer,
             'user_signature_asset_id' => $this->signatureAssets[$signer],
             'signature_statement' => 'Simulated training endorsement. No person signed this document.',

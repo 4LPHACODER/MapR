@@ -1,5 +1,13 @@
 <script setup>
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import Button from 'primevue/button';
+import Checkbox from 'primevue/checkbox';
+import Dialog from 'primevue/dialog';
+import InputText from 'primevue/inputtext';
+import Message from 'primevue/message';
+import Select from 'primevue/select';
+import Tag from 'primevue/tag';
+import Textarea from 'primevue/textarea';
 import { useRoute } from 'vue-router';
 import MapIcon from '../../shared/components/MapIcon.vue';
 import ReportPdfViewer from '../../shared/components/ReportPdfViewer.vue';
@@ -13,14 +21,15 @@ const phase = ref('loading');
 const error = ref('');
 const actionError = ref('');
 const downloadError = ref('');
+const reviewError = ref('');
+const downloading = ref(false);
 const busy = ref(false);
-const menuOpen = ref(false);
 const viewer = ref(null);
-const flagDialog = ref(null);
-const returnDialog = ref(null);
-const signDialog = ref(null);
+const flagOpen = ref(false);
+const returnOpen = ref(false);
 const pad = ref(null);
-const flagCategory = ref('Photographs');
+const flagCategories = ['Photographs', 'Description', 'Location', 'Other'];
+const flagCategory = ref(flagCategories[0]);
 const flagSection = ref('');
 const flagReason = ref('');
 const returnReason = ref('');
@@ -32,7 +41,7 @@ const officerRole = ref('');
 const assignment = ref('');
 const signPreview = ref('');
 const signOpen = ref(false);
-const resolveDialog = ref(null);
+const resolveOpen = ref(false);
 const resolveTarget = ref(null);
 const resolution = ref('');
 let signPreviewUrl = '';
@@ -94,15 +103,16 @@ const backLabel = computed(() => {
     return 'Back to Submissions';
 });
 const openFlags = computed(() => Number(report.value?.open_flags || 0));
-const wideReview = ref(typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches);
-const reviewOpen = ref(false);
+const statusSeverity = computed(() => {
+    if (report.value?.status === 'returned') return 'warn';
+    if (report.value?.label === 'Finalized') return 'success';
+    return 'info';
+});
+const openFlagList = computed(() => (report.value?.flags || []).filter((flag) => flag.status === 'open'));
 const historyOpen = ref(false);
-const menuButton = ref(null);
-const panelOpen = computed(() => wideReview.value || reviewOpen.value);
 const historyNewest = computed(() => [...(report.value?.timeline || [])].reverse());
 const historyVisible = computed(() => (historyOpen.value ? historyNewest.value : historyNewest.value.slice(0, 3)));
 const hiddenHistory = computed(() => Math.max(0, historyNewest.value.length - 3));
-let stopReviewMedia = () => {};
 
 function formatWhen(value) {
     if (!value) return '—';
@@ -122,6 +132,9 @@ async function load() {
     phase.value = 'loading';
     error.value = '';
     actionError.value = '';
+    downloadError.value = '';
+    reviewError.value = '';
+    historyOpen.value = false;
     report.value = null;
     try {
         if (!submissionId.value) {
@@ -151,13 +164,23 @@ async function reloadReport() {
 }
 
 function openRequestedPanel() {
-    if (route.query.panel === 'flag') flagDialog.value?.showModal();
-    if (route.query.panel === 'return' && canReview.value) returnDialog.value?.showModal();
+    if (route.query.panel === 'flag') openFlag();
+    if (route.query.panel === 'return' && canReview.value) openReturn();
+}
+
+function openFlag() {
+    actionError.value = '';
+    flagOpen.value = true;
+}
+
+function openReturn() {
+    actionError.value = '';
+    returnOpen.value = true;
 }
 
 async function downloadPdf() {
-    if (busy.value || !report.value) return;
-    busy.value = true;
+    if (downloading.value || !report.value) return;
+    downloading.value = true;
     downloadError.value = '';
     try {
         const response = await window.axios.get(documentUrl.value, {
@@ -178,7 +201,7 @@ async function downloadPdf() {
     } catch (exception) {
         downloadError.value = exception.response?.data?.message || 'The PDF could not be downloaded.';
     } finally {
-        busy.value = false;
+        downloading.value = false;
     }
 }
 
@@ -197,7 +220,7 @@ async function submitFlag() {
         });
         flagReason.value = '';
         flagSection.value = '';
-        flagDialog.value?.close();
+        flagOpen.value = false;
         await reloadReport();
     } catch (exception) {
         flagReason.value = typed;
@@ -210,7 +233,8 @@ async function submitFlag() {
 function openResolve(flag) {
     resolveTarget.value = flag;
     resolution.value = '';
-    resolveDialog.value?.showModal();
+    actionError.value = '';
+    resolveOpen.value = true;
 }
 
 async function resolveFlag() {
@@ -220,7 +244,7 @@ async function resolveFlag() {
     actionError.value = '';
     try {
         await window.axios.post(`${apiBase}/flags/${resolveTarget.value.id}/resolve`, { resolution: typed.trim() });
-        resolveDialog.value?.close();
+        resolveOpen.value = false;
         resolution.value = '';
         await reloadReport();
     } catch (exception) {
@@ -243,7 +267,7 @@ async function returnReport() {
             return_reason: typed.trim(),
         });
         report.value = data.data;
-        returnDialog.value?.close();
+        returnOpen.value = false;
         await viewer.value?.reload();
     } catch (exception) {
         returnReason.value = typed;
@@ -257,13 +281,13 @@ async function returnReport() {
 async function startReview() {
     if (!canStartReview.value || busy.value) return;
     busy.value = true;
-    actionError.value = '';
+    reviewError.value = '';
     try {
         const { data } = await window.axios.post(`${apiBase}/submissions/${submissionId.value}/start-review`);
         report.value = data.data;
         await viewer.value?.reload();
     } catch (exception) {
-        actionError.value = exception.response?.data?.message || 'The review could not be started.';
+        reviewError.value = exception.response?.data?.message || 'The review could not be started.';
     } finally {
         busy.value = false;
     }
@@ -292,7 +316,6 @@ async function openSign(mode = 'bdrrm') {
         officerRole.value = mode === 'secretary' ? 'Barangay Secretary' : (mode === 'captain' ? 'Barangay Captain' : 'BDRRM');
         assignment.value = 'Assigned barangay';
     }
-    signDialog.value?.showModal();
     signOpen.value = true;
     await nextTick();
 }
@@ -368,7 +391,7 @@ async function signAndAccept() {
             await window.axios.post(`${apiBase}/reports/${report.value.barangay_report_id}/captain-approve`, body);
             await reloadReport();
         }
-        signDialog.value?.close();
+        signOpen.value = false;
         await viewer.value?.reload();
     } catch (exception) {
         actionError.value = exception.response?.data?.message || 'The signature could not be saved.';
@@ -386,286 +409,215 @@ async function signAndAccept() {
     }
 }
 
-function showHistory() {
-    menuOpen.value = false;
-    reviewOpen.value = true;
-    nextTick(() => document.getElementById('bdrrm-review-history')?.scrollIntoView({ block: 'start' }));
-}
-
-function onPanelToggle(event) {
-    if (!wideReview.value) reviewOpen.value = event.target.open;
-}
-
-async function toggleActions() {
-    menuOpen.value = !menuOpen.value;
-    if (!menuOpen.value) return;
-    await nextTick();
-    document.querySelector('#bdrrm-action-menu [role="menuitem"]:not(:disabled)')?.focus();
-}
-
-function closeActions(restore = true) {
-    menuOpen.value = false;
-    if (restore) menuButton.value?.focus();
-}
-
-function onActionMenuKey(event) {
-    const items = [...event.currentTarget.querySelectorAll('[role="menuitem"]:not(:disabled)')];
-    const index = items.indexOf(document.activeElement);
-    if (event.key === 'Escape') {
-        event.preventDefault();
-        closeActions();
-        return;
-    }
-    if ((event.key !== 'ArrowDown' && event.key !== 'ArrowUp') || !items.length) return;
-    event.preventDefault();
-    const next = event.key === 'ArrowDown' ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
-    items[next]?.focus();
-}
-
-function onDocumentPointer(event) {
-    if (!menuOpen.value) return;
-    const menu = document.getElementById('bdrrm-action-menu');
-    if (menu?.contains(event.target) || menuButton.value?.contains(event.target)) return;
-    closeActions(false);
-}
-
-function onDocumentKey(event) {
-    if (event.key === 'Escape' && menuOpen.value) closeActions();
-}
-
-watch(submissionId, () => {
-    menuOpen.value = false;
-    load();
-}, { immediate: true });
-
-
-onMounted(() => {
-    const media = window.matchMedia('(min-width: 1024px)');
-    const sync = () => {
-        wideReview.value = media.matches;
-    };
-    sync();
-    media.addEventListener('change', sync);
-    stopReviewMedia = () => media.removeEventListener('change', sync);
-    document.addEventListener('pointerdown', onDocumentPointer);
-    document.addEventListener('keydown', onDocumentKey);
-});
+watch(submissionId, load, { immediate: true });
 
 onBeforeUnmount(() => {
-    stopReviewMedia();
-    document.removeEventListener('pointerdown', onDocumentPointer);
-    document.removeEventListener('keydown', onDocumentKey);
     if (signPreviewUrl) URL.revokeObjectURL(signPreviewUrl);
     if (savedPreview.value) URL.revokeObjectURL(savedPreview.value);
 });
 </script>
 
 <template>
-    <section class="bdrrm-submissions bdrrm-submission-detail">
-        <p v-if="phase === 'loading'" class="submission-status">Loading submission…</p>
-        <div v-else-if="phase === 'error'" class="submission-status" role="alert">
+    <section class="bdrrm-submissions submission-detail">
+        <nav class="submission-links" aria-label="Submission navigation">
+            <RouterLink class="submission-back-link" :to="{ path: '/submissions', query: backQuery }">
+                <MapIcon name="chevron" /> {{ backLabel }}
+            </RouterLink>
+            <a v-if="phase === 'ready'" href="#submission-review-title" class="submission-review-link">Go to review</a>
+        </nav>
+        <div v-if="phase === 'loading'" class="submission-state" role="status">Loading submission…</div>
+        <div v-else-if="phase === 'error'" class="submission-state" role="alert">
+            <MapIcon name="file-text" />
+            <h2>Submission unavailable</h2>
             <p>{{ error }}</p>
-            <RouterLink class="submission-back" :to="{ path: '/submissions', query: backQuery }">Back to submissions</RouterLink>
         </div>
         <template v-else-if="report">
-            <header class="bdrrm-detail-toolbar">
-                <RouterLink class="submission-back" :to="{ path: '/submissions', query: backQuery }">
-                    <MapIcon name="chevron" />
-                    {{ backLabel }}
-                </RouterLink>
-                <div class="bdrrm-detail-identity">
+            <header class="submission-overview">
+                <div class="submission-identity">
                     <h2>{{ report.reference }}</h2>
-                    <span class="submission-badge" :data-status="report.status">{{ report.label }}</span>
+                    <Tag :value="report.label" :severity="statusSeverity" />
                 </div>
-                <div class="bdrrm-detail-actions">
-                    <button v-if="canStartReview" type="button" class="submission-primary" :disabled="busy" @click="startReview">
-                        <MapIcon name="clipboard" /> Start review
-                    </button>
-                    <button v-if="canCheck" type="button" class="submission-primary" :disabled="busy" @click="openSign('secretary')">
-                        <MapIcon name="pen-line" /> Check and Sign
-                    </button>
-                    <button v-if="canEndorse" type="button" class="submission-primary" :disabled="busy" @click="openSign('captain')">
-                        <MapIcon name="file-check-2" /> Endorse and Sign
-                    </button>
-                    <button v-if="canCheck" type="button" class="submission-quiet" :disabled="busy" @click="returnDialog?.showModal()">
-                        <MapIcon name="rotate-ccw" /> Return for correction
-                    </button>
-                    <button type="button" class="submission-quiet" :disabled="busy" @click="downloadPdf">
-                        <MapIcon name="download" /> {{ busy ? 'Preparing PDF…' : 'Download PDF' }}
-                    </button>
-                    <div class="submission-overflow">
-                        <button
-                            ref="menuButton"
-                            type="button"
-                            class="submission-quiet"
-                            aria-haspopup="menu"
-                            :aria-expanded="menuOpen"
-                            aria-controls="bdrrm-action-menu"
-                            @click="toggleActions"
-                        >
-                            Actions <MapIcon name="chevron" class="submission-chevron-down" />
-                        </button>
-                        <div v-if="menuOpen" id="bdrrm-action-menu" class="submission-menu" role="menu" @keydown="onActionMenuKey">
-                            <button v-if="canStartReview" type="button" role="menuitem" :disabled="busy" @click="startReview(); closeActions(false)">
-                                <MapIcon name="clipboard" /> Start review
-                            </button>
-                            <button type="button" role="menuitem" :disabled="!canSign || openFlags > 0" :title="!canSign ? 'Start the review before signing.' : (openFlags > 0 ? 'Resolve open flags before accepting.' : '')" @click="openSign('bdrrm'); closeActions(false)">
-                                <MapIcon name="clipboard" /> Sign and Accept
-                            </button>
-                            <button v-if="canCheck" type="button" role="menuitem" :disabled="busy" @click="openSign('secretary'); closeActions(false)">
-                                <MapIcon name="pen-line" /> Check and Sign
-                            </button>
-                            <button v-if="canEndorse" type="button" role="menuitem" :disabled="busy" @click="openSign('captain'); closeActions(false)">
-                                <MapIcon name="file-check-2" /> Endorse and Sign
-                            </button>
-                            <button type="button" role="menuitem" @click="flagDialog?.showModal(); closeActions(false)">
-                                <MapIcon name="flag" /> Flag an Issue
-                            </button>
-                            <button type="button" role="menuitem" :disabled="!canReturn" :title="canReturn ? undefined : 'This report is not waiting for a return.'" @click="returnDialog?.showModal(); closeActions(false)">
-                                <MapIcon name="undo" /> Return for Correction
-                            </button>
-                            <RouterLink v-if="mapLink" role="menuitem" :to="mapLink" @click="closeActions(false)">
-                                <MapIcon name="pin" /> View reported location
-                            </RouterLink>
-                            <button v-else type="button" role="menuitem" disabled>No reported map point</button>
-                            <button type="button" role="menuitem" @click="showHistory">
-                                <MapIcon name="history" /> Review history
-                            </button>
-                        </div>
+                <dl class="submission-facts">
+                    <div>
+                        <dt>Incident</dt>
+                        <dd>{{ report.incident_name || 'Incident unavailable' }}</dd>
                     </div>
-                </div>
+                    <div>
+                        <dt>Reported by</dt>
+                        <dd>{{ report.resident_name || 'Name unavailable' }}</dd>
+                    </div>
+                    <div>
+                        <dt>Barangay</dt>
+                        <dd>{{ report.barangay_name || 'Barangay unavailable' }}</dd>
+                    </div>
+                    <div v-if="report.submitted_at">
+                        <dt>Submitted</dt>
+                        <dd>{{ formatWhen(report.submitted_at) }}</dd>
+                    </div>
+                </dl>
             </header>
-            <p v-if="downloadError" class="submission-alert" role="alert">{{ downloadError }}</p>
-            <div class="bdrrm-review-layout">
-                <ReportPdfViewer ref="viewer" presentation="review" :document-url="documentUrl" />
-                <details class="bdrrm-review-disclosure" :open="panelOpen" @toggle="onPanelToggle">
-                    <summary>
-                        <span>Review</span>
-                        <span class="submission-badge" :data-status="report.status">{{ report.label }}</span>
-                        <span>{{ report.bdrrm_endorsement ? (report.bdrrm_endorsement.signer_name || 'Signed') : 'Not signed yet' }}</span>
-                        <span>{{ openFlags }} open {{ openFlags === 1 ? 'flag' : 'flags' }}</span>
-                    </summary>
-                    <div class="bdrrm-review-body">
-                        <section class="bdrrm-review-section">
-                            <h3><MapIcon name="clipboard" /> Review status</h3>
-                            <span class="submission-badge" :data-status="report.status">{{ report.label }}</span>
-                            <p v-if="report.return_reason">{{ report.return_reason }}</p>
-                            <p v-else-if="openFlags > 0" class="submission-note">Resolve open flags before accepting this report.</p>
-                        </section>
-                        <section class="bdrrm-review-section">
-                            <h3><MapIcon name="check" /> BDRRM signature</h3>
-                            <p v-if="report.bdrrm_endorsement">
-                                {{ report.bdrrm_endorsement.signer_name || 'Officer' }}
-                                <span class="submission-note">{{ formatWhen(report.bdrrm_endorsement.signed_at) }}</span>
-                            </p>
-                            <img
-                                v-if="report.bdrrm_endorsement?.has_image"
-                                class="bdrrm-signature-image"
-                                :src="`${apiBase}/submissions/${report.id}/review-signature`"
-                                alt="BDRRM reviewer signature"
-                            >
-                            <p v-else class="submission-note">Not signed yet.</p>
-                        </section>
-                        <section class="bdrrm-review-section">
-                            <h3><MapIcon name="flag" /> Flags</h3>
-                            <p>{{ openFlags }} open {{ openFlags === 1 ? 'flag' : 'flags' }}</p>
-                            <ul v-if="openFlags > 0" class="submission-timeline">
-                                <li v-for="flag in (report.flags || []).filter((item) => item.status === 'open')" :key="flag.id">
-                                    <span class="submission-dot" aria-hidden="true"></span>
-                                    <strong>{{ flag.category }}</strong>
-                                    <p>{{ flag.reason }}</p>
-                                    <button type="button" class="submission-quiet" :disabled="busy" @click="openResolve(flag)">Resolve</button>
-                                </li>
-                            </ul>
-                            <p v-else class="submission-note">No open flags</p>
-                        </section>
-                        <section id="bdrrm-review-history" class="bdrrm-review-section">
-                            <h3><MapIcon name="history" /> History</h3>
-                            <ol class="submission-timeline">
-                                <li v-for="(event, index) in historyVisible" :key="`${event.at}-${index}`">
-                                    <span class="submission-dot" aria-hidden="true"></span>
-                                    <strong>{{ event.title }}</strong>
-                                    <span>{{ formatWhen(event.at) }}</span>
-                                    <p v-if="event.detail">{{ event.detail }}</p>
-                                </li>
-                            </ol>
-                            <button v-if="hiddenHistory > 0" type="button" class="submission-quiet" @click="historyOpen = !historyOpen">
-                                {{ historyOpen ? 'Hide earlier events' : `Show earlier events (${hiddenHistory})` }}
-                            </button>
-                        </section>
-                        <section class="bdrrm-review-section">
-                            <h3><MapIcon name="pin" /> Location</h3>
-                            <RouterLink v-if="mapLink" class="submission-quiet" :to="mapLink">
-                                <MapIcon name="pin" /> View reported location
-                            </RouterLink>
-                            <p v-else class="submission-note">No reported map point</p>
-                        </section>
+            <div class="submission-workbench">
+                <section class="submission-surface submission-document" aria-labelledby="submission-document-title">
+                    <div class="submission-section-heading">
+                        <h3 id="submission-document-title"><MapIcon name="file-text" /> Report preview</h3>
+                        <Button size="small" severity="secondary" outlined label="Download PDF" :loading="downloading" @click="downloadPdf">
+                            <template #icon><MapIcon name="download" /></template>
+                        </Button>
                     </div>
-                </details>
+                    <Message v-if="downloadError" severity="error" size="small" class="submission-download-error">{{ downloadError }}</Message>
+                    <ReportPdfViewer ref="viewer" presentation="review" :document-url="documentUrl" />
+                </section>
+
+                <aside class="submission-surface submission-review" aria-labelledby="submission-review-title">
+                    <div class="submission-section-heading">
+                        <h3 id="submission-review-title" tabindex="-1"><MapIcon name="clipboard" /> Review</h3>
+                    </div>
+                    <div v-if="canStartReview || canSign || canCheck || canEndorse || report.return_reason" class="submission-decision">
+                        <p v-if="report.return_reason"><strong>Correction requested</strong><br>{{ report.return_reason }}</p>
+                        <p v-if="canSign && openFlags > 0" id="submission-sign-blocked" class="submission-sign-blocked">
+                            Resolve all open flags before signing.
+                        </p>
+                        <div v-if="canStartReview || canSign || canCheck || canEndorse" class="submission-decision-actions">
+                            <Button v-if="canStartReview" size="small" label="Start review" :loading="busy" @click="startReview">
+                                <template #icon><MapIcon name="clipboard" /></template>
+                            </Button>
+                            <Button v-else-if="canSign" size="small" label="Sign and accept" :disabled="busy || openFlags > 0"
+                                :aria-describedby="openFlags > 0 ? 'submission-sign-blocked' : undefined" @click="openSign('bdrrm')">
+                                <template #icon><MapIcon name="pen-line" /></template>
+                            </Button>
+                            <Button v-else-if="canCheck" size="small" label="Check and sign" :disabled="busy" @click="openSign('secretary')">
+                                <template #icon><MapIcon name="pen-line" /></template>
+                            </Button>
+                            <Button v-else-if="canEndorse" size="small" label="Endorse and sign" :disabled="busy" @click="openSign('captain')">
+                                <template #icon><MapIcon name="file-check-2" /></template>
+                            </Button>
+                            <Button v-if="canReturn" size="small" severity="secondary" outlined label="Return for correction" :disabled="busy" @click="openReturn" />
+                        </div>
+                        <Message v-if="reviewError" size="small" severity="error">{{ reviewError }}</Message>
+                    </div>
+                    <section class="submission-review-group" aria-labelledby="submission-flags-title">
+                        <div class="submission-review-heading">
+                            <h4 id="submission-flags-title">Flags</h4>
+                            <Tag v-if="openFlags" :value="`${openFlags} open`" severity="warn" />
+                            <Button size="small" text label="Flag an issue" severity="secondary" :disabled="busy" @click="openFlag">
+                                <template #icon><MapIcon name="flag" /></template>
+                            </Button>
+                        </div>
+                        <ul v-if="openFlagList.length" class="submission-flags">
+                            <li v-for="flag in openFlagList" :key="flag.id">
+                                <strong>{{ flag.category }}</strong>
+                                <span v-if="flag.section" class="submission-muted">{{ flag.section }}</span>
+                                <p>{{ flag.reason }}</p>
+                                <Button size="small" label="Resolve" severity="secondary" outlined :disabled="busy"
+                                    :aria-label="`Resolve ${flag.category.toLowerCase()} flag`" @click="openResolve(flag)" />
+                            </li>
+                        </ul>
+                        <p v-else class="submission-muted">No open flags</p>
+                    </section>
+                    <section class="submission-review-group" aria-labelledby="submission-location-title">
+                        <div class="submission-review-heading">
+                            <h4 id="submission-location-title">Reported location</h4>
+                            <Button v-if="mapLink" :as="RouterLink" :to="mapLink" size="small" label="View on map" severity="secondary" text>
+                                <template #icon><MapIcon name="pin" /></template>
+                            </Button>
+                        </div>
+                        <p v-if="report.reported_location">{{ report.reported_location }}</p>
+                        <p v-if="!mapLink" class="submission-muted">No map point recorded</p>
+                    </section>
+                    <section class="submission-review-group" aria-labelledby="submission-signature-title">
+                        <h4 id="submission-signature-title">BDRRM signature</h4>
+                        <template v-if="report.bdrrm_endorsement">
+                            <div>
+                                <p>{{ report.bdrrm_endorsement.signer_name || 'Officer' }}</p>
+                                <p class="submission-muted">{{ formatWhen(report.bdrrm_endorsement.signed_at) }}</p>
+                            </div>
+                            <img v-if="report.bdrrm_endorsement.has_image" class="bdrrm-signature-image"
+                                :src="`${apiBase}/submissions/${report.id}/review-signature`" alt="BDRRM reviewer signature">
+                        </template>
+                        <p v-else class="submission-muted">Not signed yet</p>
+                    </section>
+                    <section class="submission-review-group" aria-labelledby="submission-history-title">
+                        <h4 id="submission-history-title">Review history</h4>
+                        <ol v-if="historyVisible.length" id="submission-history-events" class="submission-history">
+                            <li v-for="(event, index) in historyVisible" :key="`${event.at}-${index}`">
+                                <strong>{{ event.title }}</strong>
+                                <time class="submission-muted">{{ formatWhen(event.at) }}</time>
+                                <p v-if="event.detail">{{ event.detail }}</p>
+                            </li>
+                        </ol>
+                        <p v-else class="submission-muted">No review events yet</p>
+                        <Button v-if="hiddenHistory > 0" size="small" severity="secondary" text
+                            :label="historyOpen ? 'Hide earlier events' : `Show earlier events (${hiddenHistory})`"
+                            :aria-expanded="historyOpen" aria-controls="submission-history-events" @click="historyOpen = !historyOpen" />
+                    </section>
+                </aside>
             </div>
-            <dialog ref="flagDialog" class="bdrrm-dialog" @close="actionError = ''">
-                <form @submit.prevent="submitFlag">
-                    <h3>Flag an issue</h3>
-                    <p class="submission-note">{{ report.reference }}</p>
-                    <p v-if="actionError" class="submission-alert" role="alert">{{ actionError }}</p>
-                    <label>
-                        <span>Category</span>
-                        <select v-model="flagCategory">
-                            <option>Photographs</option>
-                            <option>Description</option>
-                            <option>Location</option>
-                            <option>Other</option>
-                        </select>
-                    </label>
-                    <label>
-                        <span>Section or photo, if useful</span>
-                        <input v-model="flagSection" maxlength="120" autocomplete="off">
-                    </label>
-                    <label>
-                        <span>What needs attention?</span>
-                        <textarea v-model="flagReason" rows="4" maxlength="2000" required />
-                    </label>
-                    <div class="bdrrm-dialog-actions">
-                        <button type="submit" class="submission-primary" :disabled="busy" :aria-busy="busy">{{ busy ? 'Saving…' : 'Save flag' }}</button>
-                        <button type="button" class="submission-quiet" @click="flagDialog?.close()">Cancel</button>
+            <Dialog v-model:visible="flagOpen" header="Flag an issue" class="submission-review-dialog"
+                modal block-scroll :closable="!busy" :close-on-escape="!busy">
+                <form class="submission-dialog-form" @submit.prevent="submitFlag">
+                    <p class="submission-muted">{{ report.reference }}</p>
+                    <Message v-if="actionError" size="small" severity="error">{{ actionError }}</Message>
+                    <div class="submission-dialog-field">
+                        <label id="submission-flag-category-label" for="submission-flag-category">Category</label>
+                        <Select v-model="flagCategory" input-id="submission-flag-category" aria-labelledby="submission-flag-category-label"
+                            size="small" :options="flagCategories" />
+                    </div>
+                    <div class="submission-dialog-field">
+                        <label for="submission-flag-section">Section or photo (optional)</label>
+                        <InputText id="submission-flag-section" v-model="flagSection" size="small" maxlength="120" autocomplete="off" />
+                    </div>
+                    <div class="submission-dialog-field">
+                        <label for="submission-flag-reason">What needs attention?</label>
+                        <Textarea id="submission-flag-reason" v-model="flagReason" size="small" rows="4" maxlength="2000" required />
+                    </div>
+                    <div class="submission-dialog-actions">
+                        <Button type="button" size="small" label="Cancel" severity="secondary" outlined :disabled="busy" @click="flagOpen = false" />
+                        <Button type="submit" size="small" label="Save flag" :loading="busy" />
                     </div>
                 </form>
-            </dialog>
-            <dialog ref="resolveDialog" class="bdrrm-dialog">
-                <form @submit.prevent="resolveFlag">
-                    <h3>Resolve flag</h3>
-                    <p class="submission-note">{{ report.reference }}</p>
-                    <p v-if="actionError" class="submission-alert" role="alert">{{ actionError }}</p>
-                    <label>
-                        <span>Resolution</span>
-                        <textarea v-model="resolution" rows="4" maxlength="2000" required />
-                    </label>
-                    <div class="bdrrm-dialog-actions">
-                        <button type="submit" class="submission-primary" :disabled="busy" :aria-busy="busy">{{ busy ? 'Saving…' : 'Save resolution' }}</button>
-                        <button type="button" class="submission-quiet" @click="resolveDialog?.close()">Cancel</button>
+            </Dialog>
+            <Dialog v-model:visible="resolveOpen" header="Resolve flag" class="submission-review-dialog"
+                modal block-scroll :closable="!busy" :close-on-escape="!busy">
+                <form class="submission-dialog-form" @submit.prevent="resolveFlag">
+                    <div>
+                        <p class="submission-muted">{{ report.reference }}</p>
+                        <p class="mt-1"><strong>{{ resolveTarget?.category }}</strong></p>
+                        <p>{{ resolveTarget?.reason }}</p>
+                    </div>
+                    <Message v-if="actionError" size="small" severity="error">{{ actionError }}</Message>
+                    <div class="submission-dialog-field">
+                        <label for="submission-flag-resolution">Resolution</label>
+                        <Textarea id="submission-flag-resolution" v-model="resolution" size="small" rows="4" maxlength="2000" required />
+                    </div>
+                    <div class="submission-dialog-actions">
+                        <Button type="button" size="small" label="Cancel" severity="secondary" outlined :disabled="busy" @click="resolveOpen = false" />
+                        <Button type="submit" size="small" label="Save resolution" :loading="busy" />
                     </div>
                 </form>
-            </dialog>
-            <dialog ref="returnDialog" class="bdrrm-dialog">
-                <form @submit.prevent="returnReport">
-                    <h3>Return Report for Correction</h3>
-                    <p class="submission-note">{{ report.reference }}</p>
-                    <p v-if="actionError" class="submission-alert" role="alert">{{ actionError }}</p>
-                    <label>
-                        <span>What needs to be corrected?</span>
-                        <textarea v-model="returnReason" rows="5" maxlength="5000" required />
-                    </label>
-                    <div class="bdrrm-dialog-actions">
-                        <button type="submit" class="submission-primary" :disabled="busy || !canReturn" :aria-busy="busy">{{ busy ? 'Returning…' : 'Return report' }}</button>
-                        <button type="button" class="submission-quiet" @click="returnDialog?.close()">Cancel</button>
+            </Dialog>
+            <Dialog v-model:visible="returnOpen" header="Return report for correction" class="submission-review-dialog"
+                modal block-scroll :closable="!busy" :close-on-escape="!busy">
+                <form class="submission-dialog-form" @submit.prevent="returnReport">
+                    <div>
+                        <p class="submission-muted">{{ report.reference }}</p>
+                        <p class="mt-1">The resident will see your reason and can resubmit after making corrections.</p>
+                    </div>
+                    <Message v-if="actionError" size="small" severity="error">{{ actionError }}</Message>
+                    <div class="submission-dialog-field">
+                        <label for="submission-return-reason">What needs to be corrected?</label>
+                        <Textarea id="submission-return-reason" v-model="returnReason" size="small" rows="5" maxlength="5000" required />
+                    </div>
+                    <div class="submission-dialog-actions">
+                        <Button type="button" size="small" label="Cancel" severity="secondary" outlined :disabled="busy" @click="returnOpen = false" />
+                        <Button type="submit" size="small" label="Return report" severity="danger" :disabled="!canReturn" :loading="busy" />
                     </div>
                 </form>
-            </dialog>
-            <dialog ref="signDialog" class="bdrrm-dialog" @close="signOpen = false">
-                <form @submit.prevent="signAndAccept">
-                    <h3>{{ signTitle }}</h3>
-                    <p class="submission-note">{{ report.reference }} · {{ report.resident_name || 'Resident' }} · {{ report.incident_name || 'Incident' }}</p>
-                    <p v-if="actionError" class="submission-alert" role="alert">{{ actionError }}</p>
+            </Dialog>
+            <Dialog v-model:visible="signOpen" :header="signTitle" class="submission-review-dialog"
+                modal block-scroll :closable="!busy" :close-on-escape="!busy">
+                <form class="submission-dialog-form" @submit.prevent="signAndAccept">
+                    <p class="submission-muted">{{ report.reference }} · {{ report.resident_name || 'Resident' }} · {{ report.incident_name || 'Incident' }}</p>
+                    <Message v-if="actionError" size="small" severity="error">{{ actionError }}</Message>
                     <p>{{ officerName }} · {{ officerRole }} · {{ assignment }}</p>
                     <p v-if="signMode === 'secretary'">I have checked this BDRRM-reviewed resident report and forward it to the Barangay Captain for endorsement.</p>
                     <p v-else-if="signMode === 'captain'">I endorse this secretary-checked resident report for handoff to RDANA assessment.</p>
@@ -678,22 +630,395 @@ onBeforeUnmount(() => {
                         lead="Draw your signature. It is saved with this report and does not replace your profile signature."
                         @pointerup="refreshPreview"
                     />
-                    <div class="bdrrm-dialog-actions">
-                        <button type="button" class="submission-quiet" @click="clearSignature">Clear</button>
-                        <button type="button" class="submission-quiet" @click="chooseSaved">Use saved signature</button>
+                    <div class="submission-signature-actions">
+                        <Button type="button" size="small" label="Clear signature" severity="secondary" outlined @click="clearSignature" />
+                        <Button type="button" size="small" label="Use saved signature" severity="secondary" outlined @click="chooseSaved" />
                     </div>
                     <img v-if="useSaved && savedPreview" :src="savedPreview" alt="Saved signature preview" class="bdrrm-sign-preview">
                     <img v-else-if="signPreview" :src="signPreview" alt="Signature preview" class="bdrrm-sign-preview">
-                    <label class="bdrrm-confirm">
-                        <input v-model="signConfirmed" type="checkbox">
-                        <span>{{ signMode === 'secretary' ? 'I confirm this checking decision.' : (signMode === 'captain' ? 'I confirm this endorsement.' : 'I confirm this review and acceptance.') }}</span>
-                    </label>
-                    <div class="bdrrm-dialog-actions">
-                        <button type="submit" class="submission-primary" :disabled="busy || !signConfirmed" :aria-busy="busy">{{ busy ? 'Signing…' : signSubmitLabel }}</button>
-                        <button type="button" class="submission-quiet" @click="signDialog?.close()">Cancel</button>
+                    <div class="submission-confirm">
+                        <Checkbox v-model="signConfirmed" input-id="submission-sign-confirm" binary />
+                        <label for="submission-sign-confirm">{{ signMode === 'secretary' ? 'I confirm this checking decision.' : (signMode === 'captain' ? 'I confirm this endorsement.' : 'I confirm this review and acceptance.') }}</label>
+                    </div>
+                    <div class="submission-dialog-actions">
+                        <Button type="button" size="small" label="Cancel" severity="secondary" outlined :disabled="busy" @click="signOpen = false" />
+                        <Button type="submit" size="small" :label="signSubmitLabel" :disabled="!signConfirmed" :loading="busy" />
                     </div>
                 </form>
-            </dialog>
+            </Dialog>
         </template>
     </section>
 </template>
+
+<style scoped>
+.submission-detail {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.submission-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.25rem 1rem;
+}
+
+.submission-links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-height: var(--submission-control);
+    color: var(--resident-navy);
+    font-weight: 600;
+}
+
+.submission-back-link :deep(svg) {
+    transform: rotate(180deg);
+}
+
+.submission-links a:hover {
+    text-decoration: underline;
+}
+
+.submission-overview,
+.submission-surface {
+    min-width: 0;
+    border: 1px solid var(--submission-line);
+    border-radius: var(--submission-radius);
+    background: var(--resident-card);
+}
+
+.submission-overview {
+    padding: 1rem 1.25rem;
+}
+
+.submission-identity {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+}
+
+.submission-detail h2 {
+    color: var(--resident-ink);
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.submission-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem 1rem;
+    margin-block-start: 0.75rem;
+}
+
+.submission-facts dt,
+.submission-muted {
+    color: var(--p-surface-600);
+    font-size: 0.75rem;
+}
+
+.submission-facts dd {
+    font-weight: 500;
+}
+
+.submission-facts dd,
+.submission-review p,
+.submission-dialog-form p {
+    overflow-wrap: anywhere;
+}
+
+.submission-workbench {
+    display: grid;
+    gap: 1rem;
+    align-items: start;
+    min-width: 0;
+}
+
+.submission-section-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-height: 3.25rem;
+    padding: 0.625rem 1rem;
+    border-bottom: 1px solid var(--submission-line);
+}
+
+.submission-section-heading h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    scroll-margin-block-start: 6rem;
+}
+
+.submission-section-heading h3 :deep(svg) {
+    color: var(--resident-navy);
+}
+
+.submission-document :deep(.resident-report-view) {
+    min-width: 0;
+}
+
+.submission-document :deep(.resident-report-zoom) {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    min-height: 2.75rem;
+    padding: 0.25rem 1rem;
+    border-bottom: 1px solid var(--submission-line);
+    color: var(--p-surface-700);
+    font-variant-numeric: tabular-nums;
+}
+
+.submission-document :deep(.resident-report-zoom button) {
+    display: inline-grid;
+    place-items: center;
+    min-width: var(--submission-control);
+    min-height: var(--submission-control);
+    padding-inline: 0.5rem;
+    border-radius: var(--submission-radius);
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.submission-document :deep(.resident-report-zoom button:hover) {
+    background: var(--resident-wash);
+    color: var(--resident-navy);
+}
+
+.submission-document :deep(.resident-report-zoom span:first-of-type) {
+    min-width: 3ch;
+    text-align: center;
+}
+
+.submission-document :deep(.resident-report-zoom span:nth-of-type(2)) {
+    margin-inline-start: auto;
+}
+
+.submission-document :deep(.resident-report-host) {
+    min-height: 14rem;
+    max-height: clamp(17rem, 63dvh, 51rem);
+    overflow: auto;
+    scrollbar-gutter: stable;
+    overscroll-behavior-inline: contain;
+    padding: 0.875rem 0.5rem 1rem;
+    border-radius: 0 0 var(--submission-radius) var(--submission-radius);
+    background: var(--p-surface-100);
+}
+
+.submission-document :deep(.resident-report-stage) {
+    display: grid;
+    justify-items: center;
+    gap: 0.875rem;
+    width: max-content;
+    min-width: 100%;
+}
+
+.submission-document :deep(.resident-report-sheet) {
+    display: block;
+    max-width: none;
+    background: var(--resident-card);
+    box-shadow: 0 2px 8px rgb(15 23 42 / 12%);
+}
+
+.submission-download-error,
+.submission-document :deep(.resident-error) {
+    margin: 0.75rem 1rem;
+}
+
+.submission-document :deep(.resident-error) {
+    color: var(--p-red-800);
+}
+
+.submission-decision,
+.submission-review-group {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+}
+
+.submission-review-group + .submission-review-group {
+    border-top: 1px solid var(--submission-line);
+}
+
+.submission-decision {
+    gap: 0.75rem;
+    border-bottom: 1px solid var(--submission-line);
+    background: var(--resident-wash);
+}
+
+.submission-decision-actions,
+.submission-review-heading,
+.submission-signature-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.submission-sign-blocked {
+    color: var(--p-amber-900);
+}
+
+.submission-review-heading h4 {
+    margin-inline-end: auto;
+}
+
+.submission-review-group h4,
+.submission-dialog-form :deep(.resident-signature h3) {
+    font-size: 0.875rem;
+    font-weight: 700;
+}
+
+.submission-flags,
+.submission-history {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0;
+    list-style: none;
+}
+
+.submission-flags li {
+    display: grid;
+    justify-items: start;
+    gap: 0.25rem;
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--p-amber-200);
+    border-radius: var(--submission-radius);
+    background: var(--p-amber-50);
+}
+
+.submission-flags li .p-button {
+    margin-top: 0.25rem;
+    background: var(--resident-card);
+}
+
+.submission-history li {
+    display: grid;
+    gap: 0.125rem;
+    padding-inline-start: 0.75rem;
+    border-inline-start: 2px solid var(--p-indigo-200);
+}
+
+.submission-history strong {
+    overflow-wrap: anywhere;
+}
+
+.submission-review-group > .p-button {
+    justify-self: start;
+}
+
+:global(.submission-review-dialog.p-dialog) {
+    width: min(32rem, calc(100% - 2rem));
+}
+
+.submission-dialog-form,
+.submission-dialog-field {
+    display: grid;
+    gap: 0.375rem;
+}
+
+.submission-dialog-form {
+    gap: 0.875rem;
+    color: var(--p-surface-800);
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.submission-dialog-field label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.submission-dialog-form :is(.p-button, .p-select, .p-inputtext, .p-textarea) {
+    border-radius: var(--p-border-radius-sm);
+}
+
+.submission-dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+.submission-confirm {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.submission-dialog-form :deep(.resident-signature) {
+    display: grid;
+    gap: 0.375rem;
+}
+
+.submission-dialog-form :deep(.resident-signature canvas) {
+    width: 100%;
+    height: 9rem;
+    border: 1px solid var(--p-surface-300);
+    border-radius: var(--p-border-radius-sm);
+    background: var(--p-surface-0);
+    touch-action: none;
+}
+
+.submission-dialog-form :deep(.resident-signature-actions) {
+    display: none;
+}
+
+.submission-links a:focus-visible,
+.submission-section-heading h3:focus-visible,
+.submission-document :deep(.resident-report-zoom button:focus-visible) {
+    outline: 2px solid var(--resident-blue);
+    outline-offset: 2px;
+}
+
+@container (min-width: 850px) {
+    .submission-links .submission-review-link {
+        display: none;
+    }
+
+    .submission-facts {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .submission-workbench {
+        grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
+    }
+}
+
+@media (max-width: 479px) {
+    .submission-overview {
+        padding-inline: 0.875rem;
+    }
+
+    .submission-detail h2 {
+        font-size: 1.25rem;
+    }
+
+    .submission-section-heading,
+    .submission-review-group,
+    .submission-decision {
+        padding-inline: 0.75rem;
+    }
+}
+
+@media (pointer: coarse) {
+    .submission-dialog-form :is(.p-button, .p-inputtext, .p-select) {
+        min-height: 2.75rem;
+    }
+
+    .submission-dialog-form :is(.p-inputtext, .p-textarea) {
+        font-size: 1rem;
+    }
+}
+</style>

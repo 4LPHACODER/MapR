@@ -1,75 +1,41 @@
 <script setup>
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, inject, nextTick, ref, watch } from 'vue';
+import { RouterLink, useRoute } from 'vue-router';
+import Button from 'primevue/button';
+import Message from 'primevue/message';
+import Tag from 'primevue/tag';
 import MapIcon from '../../shared/components/MapIcon.vue';
-import ReportPdfViewer from '../../shared/components/ReportPdfViewer.vue';
+import BarangayReportPreview from '../components/BarangayReportPreview.vue';
 
 const apiBase = inject('apiBase');
 const route = useRoute();
 const report = ref(null);
-const phase = ref('loading');
 const error = ref('');
 const downloadError = ref('');
+const loadingAttempt = ref(0);
 const busy = ref(false);
-const menuOpen = ref(false);
-const viewer = ref(null);
-const menuButton = ref(null);
-const wideReview = ref(typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches);
-const reviewOpen = ref(false);
+const historyHeading = ref(null);
+const signaturesOpen = ref(false);
 const historyOpen = ref(false);
-let stopReviewMedia = () => {};
 
-const reportId = computed(() => (route.params.id ? String(route.params.id) : ''));
-
+const reportId = computed(() => String(route.params.id || ''));
 const backTarget = computed(() => {
     const from = typeof route.query.from === 'string' ? route.query.from : '';
-    if (from.startsWith('/reports')) return from;
-    return '/reports/submitted';
+    return from.startsWith('/reports') ? from : '/reports/submitted';
 });
-
-const documentUrl = computed(() => (
-    reportId.value
-        ? `/bdrrm/reports/${reportId.value}/preview?format=pdf&inline=1`
-        : ''
-));
-
-const downloadUrl = computed(() => (
-    reportId.value
-        ? `/bdrrm/reports/${reportId.value}/preview?format=pdf`
-        : ''
-));
-
-const openFlags = computed(() => Number(report.value?.open_flags || 0));
-const panelOpen = computed(() => wideReview.value || reviewOpen.value);
+const downloadUrl = computed(() => `/bdrrm/reports/${reportId.value}/preview?format=pdf`);
+const documentUrl = computed(() => `${downloadUrl.value}&inline=1`);
+const statusSeverity = computed(() => {
+    if (report.value?.status === 'returned') return 'warn';
+    if (report.value?.status === 'signed') return 'secondary';
+    return 'info';
+});
 
 const signatureSlots = computed(() => report.value?.signature_slots || []);
-const signaturePreview = computed(() => signatureSlots.value.slice(0, 4));
-const signatureExtra = computed(() => Math.max(0, signatureSlots.value.length - 4));
-const signaturesOpen = ref(false);
-const visibleSignatures = computed(() => (signaturesOpen.value ? signatureSlots.value : signaturePreview.value));
-const captainSigned = computed(() => signatureSlots.value.some((slot) => slot.role === 'barangay_signer' && slot.signed));
-const signedCount = computed(() => Number(report.value?.signature_signed_count ?? signatureSlots.value.filter((slot) => slot.signed).length));
-
-watch(captainSigned, (signed) => {
-    if (signed && signatureSlots.value.length > 4) {
-        signaturesOpen.value = true;
-    }
-}, { immediate: true });
-watch(signatureSlots, (slots) => {
-    if (captainSigned.value && slots.length > 4) {
-        signaturesOpen.value = true;
-    }
-});
-
-const historyNewest = computed(() => [...(report.value?.timeline || [])]
-    .map((event) => ({
-        title: event.summary || event.action_type || 'Activity',
-        at: event.created_at,
-        detail: event.summary && event.action_type && event.summary !== event.action_type
-            ? event.action_type
-            : null,
-    }))
-    .reverse());
+const visibleSignatures = computed(() => (signaturesOpen.value ? signatureSlots.value : signatureSlots.value.slice(0, 4)));
+const signedCount = computed(() => report.value?.signature_signed_count ?? signatureSlots.value.filter((slot) => slot.signed).length);
+const openFlags = computed(() => Number(report.value?.open_flags || 0));
+const historyNewest = computed(() => [...(report.value?.timeline || [])].reverse());
 const historyVisible = computed(() => (historyOpen.value ? historyNewest.value : historyNewest.value.slice(0, 3)));
 const hiddenHistory = computed(() => Math.max(0, historyNewest.value.length - 3));
 
@@ -77,9 +43,7 @@ const mapLink = computed(() => {
     if (!report.value?.disaster_incident_id) return null;
     return {
         path: '/map',
-        query: {
-            incident_id: String(report.value.disaster_incident_id),
-        },
+        query: { incident_id: String(report.value.disaster_incident_id) },
     };
 });
 
@@ -97,272 +61,366 @@ function formatWhen(value) {
     }).format(date)} PHT`;
 }
 
-async function load() {
-    phase.value = 'loading';
+watch([reportId, loadingAttempt], async ([id], _, onCleanup) => {
+    const request = new AbortController();
+    onCleanup(() => request.abort());
     error.value = '';
     report.value = null;
+    downloadError.value = '';
+    historyOpen.value = false;
     try {
-        if (!reportId.value) {
-            phase.value = 'error';
-            error.value = 'This barangay report could not be found.';
-            return;
-        }
-        const { data } = await window.axios.get(`${apiBase}/reports/${reportId.value}`);
+        const { data } = await window.axios.get(`${apiBase}/reports/${id}`, { signal: request.signal });
         report.value = data.data;
-        phase.value = 'ready';
+        signaturesOpen.value = signatureSlots.value.some((slot) => slot.role === 'barangay_signer' && slot.signed);
         await nextTick();
-        if (route.query.panel === 'history') showHistory();
+        if (!request.signal.aborted && route.query.panel === 'history') showHistory();
     } catch (exception) {
-        phase.value = 'error';
-        error.value = exception.response?.status === 403
-            ? 'This barangay report is outside your assignment.'
-            : exception.response?.status === 404
-                ? 'This barangay report could not be found.'
-                : 'This barangay report could not be loaded.';
+        if (request.signal.aborted) return;
+        const status = exception.response?.status;
+        if (status === 403) error.value = 'This barangay report is outside your assignment.';
+        else if (status === 404) error.value = 'This barangay report could not be found.';
+        else error.value = 'This barangay report could not be loaded.';
     }
-}
+}, { immediate: true });
 
 async function downloadPdf() {
     if (busy.value || !report.value) return;
+    const currentReport = report.value;
     busy.value = true;
     downloadError.value = '';
     try {
         const response = await window.axios.get(downloadUrl.value, { responseType: 'blob' });
-        const type = response.headers['content-type'] || '';
-        if (!type.includes('pdf')) throw new Error('The download was not a PDF.');
-        const blob = new Blob([response.data], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
+        if (!(response.headers['content-type'] || '').includes('pdf')) throw new Error('The download was not a PDF.');
+        const url = URL.createObjectURL(response.data);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `MapR_Barangay_Report_${report.value.reference}.pdf`;
+        link.download = `MapR_Barangay_Report_${currentReport.reference}.pdf`;
         document.body.appendChild(link);
         link.click();
         link.remove();
         URL.revokeObjectURL(url);
-    } catch (exception) {
-        downloadError.value = exception.response?.data?.message || 'The PDF could not be downloaded.';
+    } catch {
+        if (report.value === currentReport) downloadError.value = 'The PDF could not be downloaded.';
     } finally {
         busy.value = false;
     }
 }
 
-function printReport() {
-    window.open(downloadUrl.value, '_blank', 'noopener');
-}
-
 function showHistory() {
-    menuOpen.value = false;
-    reviewOpen.value = true;
-    nextTick(() => document.getElementById('bdrrm-barangay-review-history')?.scrollIntoView({ block: 'start' }));
+    historyHeading.value?.focus({ preventScroll: true });
+    historyHeading.value?.scrollIntoView({ block: 'start' });
 }
-
-function onPanelToggle(event) {
-    if (!wideReview.value) reviewOpen.value = event.target.open;
-}
-
-async function toggleActions() {
-    menuOpen.value = !menuOpen.value;
-    if (!menuOpen.value) return;
-    await nextTick();
-    document.querySelector('#bdrrm-barangay-action-menu [role="menuitem"]:not(:disabled)')?.focus();
-}
-
-function closeActions(restore = true) {
-    menuOpen.value = false;
-    if (restore) menuButton.value?.focus();
-}
-
-function onActionMenuKey(event) {
-    const items = [...event.currentTarget.querySelectorAll('[role="menuitem"]:not(:disabled)')];
-    const index = items.indexOf(document.activeElement);
-    if (event.key === 'Escape') {
-        event.preventDefault();
-        closeActions();
-        return;
-    }
-    if ((event.key !== 'ArrowDown' && event.key !== 'ArrowUp') || !items.length) return;
-    event.preventDefault();
-    const next = event.key === 'ArrowDown' ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
-    items[next]?.focus();
-}
-
-function onDocumentPointer(event) {
-    if (!menuOpen.value) return;
-    const menu = document.getElementById('bdrrm-barangay-action-menu');
-    if (menu?.contains(event.target) || menuButton.value?.contains(event.target)) return;
-    closeActions(false);
-}
-
-function onDocumentKey(event) {
-    if (event.key === 'Escape' && menuOpen.value) closeActions();
-}
-
-watch(reportId, () => {
-    menuOpen.value = false;
-    load();
-}, { immediate: true });
-
-onMounted(() => {
-    const media = window.matchMedia('(min-width: 1024px)');
-    const sync = () => {
-        wideReview.value = media.matches;
-    };
-    sync();
-    media.addEventListener('change', sync);
-    stopReviewMedia = () => media.removeEventListener('change', sync);
-    document.addEventListener('pointerdown', onDocumentPointer);
-    document.addEventListener('keydown', onDocumentKey);
-});
-
-onBeforeUnmount(() => {
-    stopReviewMedia();
-    document.removeEventListener('pointerdown', onDocumentPointer);
-    document.removeEventListener('keydown', onDocumentKey);
-});
 </script>
 
 <template>
-    <section class="bdrrm-submissions bdrrm-submission-detail">
-        <p v-if="phase === 'loading'" class="submission-status">Loading barangay report…</p>
-        <div v-else-if="phase === 'error'" class="submission-status" role="alert">
-            <p>{{ error }}</p>
-            <RouterLink class="submission-back" :to="backTarget">Back to Submitted Reports</RouterLink>
+    <article class="barangay-view">
+        <Button :as="RouterLink" :to="backTarget" size="small" text class="barangay-view-back">
+            <MapIcon name="chevron" /> Back to Submitted Reports
+        </Button>
+
+        <div v-if="error" class="barangay-view-card barangay-view-state">
+            <Message severity="error" role="alert">{{ error }}</Message>
+            <Button size="small" outlined label="Try again" @click="loadingAttempt++" />
         </div>
-        <template v-else-if="report">
-            <header class="bdrrm-detail-toolbar">
-                <RouterLink class="submission-back" :to="backTarget">
-                    <MapIcon name="chevron" />
-                    Back to Submitted Reports
-                </RouterLink>
-                <div class="bdrrm-detail-identity">
-                    <h2>{{ report.reference }}</h2>
-                    <span class="submission-badge" :data-status="report.status">{{ report.label }}</span>
+        <p v-else-if="!report" class="barangay-view-card barangay-view-state" role="status">Loading barangay report…</p>
+
+        <template v-else>
+            <header class="barangay-view-header">
+                <div class="barangay-view-title">
+                    <p>{{ report.reference }}</p>
+                    <Tag :value="report.label" :severity="statusSeverity" />
+                    <h2>{{ report.incident_name || 'Barangay incident report' }}</h2>
                 </div>
-                <div class="bdrrm-detail-actions">
-                    <button type="button" class="submission-quiet" :disabled="busy" @click="downloadPdf">
-                        <MapIcon name="download" /> {{ busy ? 'Preparing PDF…' : 'Download PDF' }}
-                    </button>
-                    <button type="button" class="submission-quiet" @click="printReport">
-                        <MapIcon name="printer" /> Print
-                    </button>
-                    <div class="submission-overflow">
-                        <button
-                            ref="menuButton"
-                            type="button"
-                            class="submission-quiet"
-                            aria-haspopup="menu"
-                            :aria-expanded="menuOpen"
-                            aria-controls="bdrrm-barangay-action-menu"
-                            @click="toggleActions"
-                        >
-                            Actions <MapIcon name="chevron" class="submission-chevron-down" />
-                        </button>
-                        <div v-if="menuOpen" id="bdrrm-barangay-action-menu" class="submission-menu" role="menu" @keydown="onActionMenuKey">
-                            <button type="button" role="menuitem" :disabled="busy" @click="downloadPdf(); closeActions(false)">
-                                <MapIcon name="download" /> Download PDF
-                            </button>
-                            <button type="button" role="menuitem" @click="printReport(); closeActions(false)">
-                                <MapIcon name="printer" /> Print
-                            </button>
-                            <RouterLink v-if="mapLink" role="menuitem" :to="mapLink" @click="closeActions(false)">
-                                <MapIcon name="pin" /> View linked location
-                            </RouterLink>
-                            <button v-else type="button" role="menuitem" disabled>No linked incident map</button>
-                            <button type="button" role="menuitem" @click="showHistory">
-                                <MapIcon name="history" /> Review history
-                            </button>
-                        </div>
-                    </div>
+                <div class="barangay-view-actions">
+                    <Button size="small" label="Download PDF" :loading="busy" @click="downloadPdf">
+                        <template v-if="!busy" #icon><MapIcon name="download" /></template>
+                    </Button>
+                    <Button as="a" :href="documentUrl" target="_blank" rel="noopener" size="small" severity="secondary" outlined>
+                        <MapIcon name="printer" /> Print<span class="visually-hidden"> PDF (opens in a new tab)</span>
+                    </Button>
+                    <Button size="small" severity="secondary" text aria-label="Review history" @click="showHistory">
+                        <MapIcon name="history" /> History
+                    </Button>
                 </div>
             </header>
-            <p v-if="downloadError" class="submission-alert" role="alert">{{ downloadError }}</p>
-            <div class="bdrrm-review-layout">
-                <ReportPdfViewer ref="viewer" presentation="review" :document-url="documentUrl" />
-                <details class="bdrrm-review-disclosure" :open="panelOpen" @toggle="onPanelToggle">
-                    <summary>
-                        <span>Review</span>
-                        <span class="submission-badge" :data-status="report.status">{{ report.label }}</span>
-                        <span>{{ captainSigned ? 'Captain endorsed' : 'Awaiting captain endorsement' }}</span>
-                        <span>{{ openFlags }} open {{ openFlags === 1 ? 'flag' : 'flags' }}</span>
-                    </summary>
-                    <div class="bdrrm-review-body">
-                        <section class="bdrrm-review-section">
-                            <h3><MapIcon name="clipboard" /> Review status</h3>
-                            <span class="submission-badge" :data-status="report.status">{{ report.label }}</span>
-                            <p v-if="report.barangay_name || report.incident_name" class="submission-note">
-                                {{ [report.barangay_name, report.incident_name].filter(Boolean).join(' · ') }}
-                            </p>
-                            <p v-if="report.lineage?.resident_report_reference || report.resident_reference" class="submission-note">
-                                Source {{ report.lineage?.resident_report_reference || report.resident_reference }}
-                            </p>
-                            <p v-if="report.lineage?.resident_reference && report.lineage.resident_reference !== 'Not recorded'" class="submission-note">
-                                Resident {{ report.lineage.resident_reference }}
-                            </p>
-                            <p v-if="report.lineage?.building_reference && report.lineage.building_reference !== 'Not recorded'" class="submission-note">
-                                Building {{ report.lineage.building_reference }}
-                            </p>
-                            <p v-if="report.submitted_at" class="submission-note">Forwarded {{ formatWhen(report.submitted_at) }}</p>
-                            <p v-if="report.return_reason">{{ report.return_reason }}</p>
-                        </section>
-                        <section class="bdrrm-review-section">
-                            <h3><MapIcon name="check" /> Signatures</h3>
-                            <p class="submission-note">{{ signedCount }} completed</p>
-                            <ul v-if="visibleSignatures.length" class="submission-timeline">
-                                <li v-for="slot in visibleSignatures" :key="`${slot.role}-${slot.title}`">
-                                    <span class="submission-dot" aria-hidden="true"></span>
-                                    <strong>{{ slot.label }}</strong>
-                                    <span>{{ slot.status }}</span>
-                                    <p v-if="slot.name">{{ slot.name }}</p>
-                                    <p v-if="slot.caption" class="submission-note">{{ slot.caption }}</p>
-                                </li>
-                            </ul>
-                            <p v-else class="submission-note">No signatures recorded yet.</p>
-                            <button
-                                v-if="signatureExtra > 0"
-                                type="button"
-                                class="submission-quiet"
-                                @click="signaturesOpen = !signaturesOpen"
-                            >
-                                {{ signaturesOpen ? 'Show fewer signatures' : `View all signatures (${signatureSlots.length})` }}
-                            </button>
-                        </section>
-                        <section class="bdrrm-review-section">
-                            <h3><MapIcon name="flag" /> Flags</h3>
-                            <p>{{ openFlags }} open {{ openFlags === 1 ? 'flag' : 'flags' }}</p>
-                            <ul v-if="openFlags > 0" class="submission-timeline">
-                                <li v-for="flag in (report.flags || []).filter((item) => item.status === 'open')" :key="flag.id">
-                                    <span class="submission-dot" aria-hidden="true"></span>
-                                    <strong>{{ flag.category }}</strong>
-                                    <p>{{ flag.reason }}</p>
-                                </li>
-                            </ul>
-                            <p v-else class="submission-note">No open flags</p>
-                        </section>
-                        <section id="bdrrm-barangay-review-history" class="bdrrm-review-section">
-                            <h3><MapIcon name="history" /> History</h3>
-                            <ol v-if="historyVisible.length" class="submission-timeline">
-                                <li v-for="(event, index) in historyVisible" :key="`${event.at}-${index}`">
-                                    <span class="submission-dot" aria-hidden="true"></span>
-                                    <strong>{{ event.title }}</strong>
-                                    <span>{{ formatWhen(event.at) }}</span>
-                                    <p v-if="event.detail">{{ event.detail }}</p>
-                                </li>
-                            </ol>
-                            <p v-else class="submission-note">No history events yet.</p>
-                            <button v-if="hiddenHistory > 0" type="button" class="submission-quiet" @click="historyOpen = !historyOpen">
-                                {{ historyOpen ? 'Hide earlier events' : `Show earlier events (${hiddenHistory})` }}
-                            </button>
-                        </section>
-                        <section class="bdrrm-review-section">
-                            <h3><MapIcon name="pin" /> Location</h3>
-                            <RouterLink v-if="mapLink" class="submission-quiet" :to="mapLink">
+
+            <Message v-if="downloadError" severity="error" role="alert">{{ downloadError }}</Message>
+            <div class="barangay-view-layout">
+                <section class="barangay-view-card" aria-labelledby="barangay-view-document">
+                    <h3 id="barangay-view-document" class="barangay-view-card-title"><MapIcon name="file" /> Report preview</h3>
+                    <BarangayReportPreview :document-url="documentUrl" />
+                </section>
+
+                <aside class="barangay-view-review" aria-label="Report review">
+                    <section class="barangay-view-card">
+                        <h3 class="barangay-view-card-title"><MapIcon name="clipboard" /> Report details</h3>
+                        <div class="barangay-view-body">
+                            <dl class="barangay-view-facts">
+                                <div v-if="report.barangay_name">
+                                    <dt>Barangay</dt>
+                                    <dd>{{ report.barangay_name }}</dd>
+                                </div>
+                                <div v-if="report.submitted_at">
+                                    <dt>Forwarded</dt>
+                                    <dd>{{ formatWhen(report.submitted_at) }}</dd>
+                                </div>
+                                <div v-if="report.lineage?.resident_report_reference || report.resident_reference">
+                                    <dt>Source report</dt>
+                                    <dd>{{ report.lineage?.resident_report_reference || report.resident_reference }}</dd>
+                                </div>
+                                <div v-if="report.lineage?.resident_reference && report.lineage.resident_reference !== 'Not recorded'">
+                                    <dt>Resident reference</dt>
+                                    <dd>{{ report.lineage.resident_reference }}</dd>
+                                </div>
+                                <div v-if="report.lineage?.building_reference && report.lineage.building_reference !== 'Not recorded'">
+                                    <dt>Building reference</dt>
+                                    <dd>{{ report.lineage.building_reference }}</dd>
+                                </div>
+                            </dl>
+                            <Message v-if="report.return_reason" size="small" severity="warn">{{ report.return_reason }}</Message>
+                            <Button v-if="mapLink" :as="RouterLink" :to="mapLink" size="small" severity="secondary" outlined>
                                 <MapIcon name="pin" /> View linked incident on map
-                            </RouterLink>
-                            <p v-else class="submission-note">No linked incident for map navigation</p>
-                        </section>
-                    </div>
-                </details>
+                            </Button>
+                            <p v-else class="barangay-view-muted">No linked incident for map navigation.</p>
+                        </div>
+                    </section>
+
+                    <section class="barangay-view-card">
+                        <div class="barangay-view-card-title">
+                            <h3><MapIcon name="check" /> Signatures</h3>
+                            <span v-if="signatureSlots.length" class="barangay-view-muted">{{ signedCount }} of {{ signatureSlots.length }} completed</span>
+                        </div>
+                        <ul v-if="visibleSignatures.length" id="barangay-view-signatures" class="barangay-view-list">
+                            <li v-for="slot in visibleSignatures" :key="`${slot.role}-${slot.title}`">
+                                <div class="barangay-view-row-heading">
+                                    <strong>{{ slot.label }}</strong>
+                                    <Tag :value="slot.status" :severity="slot.signed ? 'success' : 'secondary'" />
+                                </div>
+                                <p v-if="slot.name && slot.name !== slot.label">{{ slot.name }}</p>
+                                <p v-if="slot.caption" class="barangay-view-muted">{{ slot.caption }}</p>
+                            </li>
+                        </ul>
+                        <p v-else class="barangay-view-body barangay-view-muted">No signatures recorded yet.</p>
+                        <div v-if="signatureSlots.length > 4" class="barangay-view-footer">
+                            <Button size="small" text :aria-expanded="signaturesOpen" aria-controls="barangay-view-signatures"
+                                :label="signaturesOpen ? 'Show fewer signatures' : `View all signatures (${signatureSlots.length})`"
+                                @click="signaturesOpen = !signaturesOpen" />
+                        </div>
+                    </section>
+
+                    <section class="barangay-view-card">
+                        <div class="barangay-view-card-title">
+                            <h3><MapIcon name="flag" /> Flags</h3>
+                            <Tag v-if="openFlags" :value="`${openFlags} open`" severity="warn" />
+                        </div>
+                        <ul v-if="openFlags" class="barangay-view-list">
+                            <li v-for="flag in (report.flags || []).filter((item) => item.status === 'open')" :key="flag.id">
+                                <strong>{{ flag.category }}</strong>
+                                <p>{{ flag.reason }}</p>
+                            </li>
+                        </ul>
+                        <p v-else class="barangay-view-body barangay-view-muted">No open flags.</p>
+                    </section>
+
+                    <section class="barangay-view-card">
+                        <h3 ref="historyHeading" tabindex="-1" class="barangay-view-card-title"><MapIcon name="history" /> Review history</h3>
+                        <ol v-if="historyVisible.length" id="barangay-view-history" class="barangay-view-list">
+                            <li v-for="(event, index) in historyVisible" :key="`${event.created_at}-${index}`">
+                                <strong>{{ event.summary || event.action_type || 'Activity' }}</strong>
+                                <p v-if="event.created_at" class="barangay-view-muted">{{ formatWhen(event.created_at) }}</p>
+                                <p v-if="event.summary && event.action_type && event.summary !== event.action_type">{{ event.action_type }}</p>
+                            </li>
+                        </ol>
+                        <p v-else class="barangay-view-body barangay-view-muted">No history events yet.</p>
+                        <div v-if="hiddenHistory" class="barangay-view-footer">
+                            <Button size="small" text :aria-expanded="historyOpen" aria-controls="barangay-view-history"
+                                :label="historyOpen ? 'Hide earlier events' : `Show earlier events (${hiddenHistory})`"
+                                @click="historyOpen = !historyOpen" />
+                        </div>
+                    </section>
+                </aside>
             </div>
         </template>
-    </section>
+    </article>
 </template>
+
+<style scoped>
+.barangay-view {
+    display: grid;
+    gap: 1rem;
+    max-width: 90rem;
+    margin-inline: auto;
+    container: barangay-view / inline-size;
+    color: var(--resident-ink);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+.barangay-view :deep(.p-button) {
+    --p-button-border-radius: var(--resident-control);
+    min-height: 2.25rem;
+}
+
+.barangay-view :deep(.cdrrmo-icon) {
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+}
+
+.barangay-view-back {
+    justify-self: start;
+    margin-inline-start: -0.5rem;
+}
+
+.barangay-view-back :deep(svg) { transform: rotate(180deg); }
+
+.barangay-view-header,
+.barangay-view-actions,
+.barangay-view-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.barangay-view-header {
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 0.75rem 1rem;
+}
+
+.barangay-view-title p {
+    color: var(--resident-navy);
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.barangay-view-title h2 {
+    flex-basis: 100%;
+    color: var(--resident-ink);
+    font-size: clamp(1.375rem, 3cqi, 1.75rem);
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    overflow-wrap: anywhere;
+}
+
+.barangay-view-layout,
+.barangay-view-review {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.barangay-view-card {
+    min-width: 0;
+    border: 1px solid var(--resident-line);
+    border-radius: var(--resident-radius);
+    background: var(--resident-card);
+}
+
+.barangay-view-card-title {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.375rem 0.625rem;
+    min-height: 3rem;
+    padding: 0.625rem 1rem;
+    border-bottom: 1px solid var(--resident-line);
+    color: var(--resident-navy);
+}
+
+.barangay-view-card-title:is(h3),
+.barangay-view-card-title h3 {
+    display: flex;
+    align-items: center;
+    justify-content: start;
+    gap: 0.5rem;
+    font-size: 0.9375rem;
+    font-weight: 700;
+}
+
+.barangay-view-card-title[tabindex] { scroll-margin-block-start: 6rem; }
+
+.barangay-view-body {
+    display: grid;
+    justify-items: start;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+}
+
+.barangay-view-facts {
+    display: grid;
+    gap: 0.625rem;
+    overflow-wrap: anywhere;
+}
+
+.barangay-view-facts dt,
+.barangay-view-muted {
+    color: var(--p-slate-600, #475569);
+    font-size: 0.75rem;
+}
+
+.barangay-view-facts dd {
+    margin: 0.0625rem 0 0;
+    font-weight: 500;
+}
+
+.barangay-view-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.barangay-view-list li {
+    display: grid;
+    gap: 0.1875rem;
+    padding: 0.625rem 1rem;
+    overflow-wrap: anywhere;
+}
+
+.barangay-view-list li + li,
+.barangay-view-footer {
+    border-top: 1px solid var(--resident-line);
+}
+
+.barangay-view-row-heading {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.125rem 0.5rem;
+}
+
+.barangay-view-footer { padding: 0.25rem 0.5rem; }
+
+.barangay-view-state {
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 0.75rem;
+    min-height: 12rem;
+    padding: 1rem;
+}
+
+.barangay-view :deep(:focus-visible) {
+    outline: 2px solid var(--resident-blue);
+    outline-offset: 2px;
+}
+
+@container barangay-view (min-width: 54rem) {
+    .barangay-view-layout {
+        grid-template-columns: minmax(0, 1fr) minmax(18rem, 28%);
+    }
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+    .barangay-view :deep(.p-button) { min-height: 2.75rem; }
+}
+</style>
