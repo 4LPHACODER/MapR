@@ -36,19 +36,14 @@ class AssessmentController extends Controller
     {
         $user = $request->user();
         $user->loadMissing('role');
+        $roleCode = (string) ($user->role?->code ?? '');
         $activeIds = $this->scope->activeBarangayIds($user->id);
-        $isSupervisor = in_array($user->role?->code, ['rdana_admin_officer', 'rdana_city_assessor'], true);
-        $queue = (string) $request->input('queue', '');
-        if (! in_array($queue, ['unassigned', 'pending', 'completed'], true)) {
-            $queue = $isSupervisor ? 'unassigned' : 'pending';
-        }
-        if (! $isSupervisor && $queue === 'unassigned') {
-            $queue = 'pending';
-        }
+        $isSupervisor = in_array($roleCode, ['rdana_admin_officer', 'rdana_city_assessor'], true);
+        $queue = $this->resolveBarangayQueue((string) $request->input('queue', ''), $roleCode, $isSupervisor);
 
         $query = $this->barangayReportsBaseQuery($user);
         $this->applyAssessorQueueVisibility($query, $user, $isSupervisor);
-        $this->applyQueueFilter($query, $queue);
+        $this->applyQueueFilter($query, $queue, $roleCode);
         $this->applyBarangayReportFilters($query, $request, $activeIds, $isSupervisor);
 
         $sort = (string) $request->input('sort', 'updated_at');
@@ -59,20 +54,90 @@ class AssessmentController extends Controller
         }
         $query->orderBy('reports.'.$sort, $direction)->orderByDesc('reports.id');
 
-        $counts = $this->barangayReportCounts($user, $request, $isSupervisor);
+        $counts = $this->barangayReportCounts($user, $request, $isSupervisor, $roleCode);
         $canAssign = $isSupervisor;
-        $payload = $this->page($query, $request, function ($row) use ($user, $canAssign, $queue) {
-            return $this->mapBarangayQueueRow($row, $user, $canAssign, $queue);
+        $assessorSummary = $canAssign
+            ? $this->assignments->assessorSummary($activeIds, 'rdana')
+            : ['total' => 0, 'with_active' => 0, 'without_active' => 0, 'personnel' => []];
+        $payload = $this->page($query, $request, function ($row) use ($user, $canAssign, $queue, $roleCode) {
+            return $this->mapBarangayQueueRow($row, $user, $canAssign, $queue, $roleCode);
         });
         $payload['counts'] = $counts;
+        $payload['assessors'] = [
+            'total' => $assessorSummary['total'],
+            'with_active' => $assessorSummary['with_active'],
+            'without_active' => $assessorSummary['without_active'],
+        ];
         $payload['queue'] = $queue;
         $payload['can_assign'] = $canAssign;
+        $payload['role_code'] = $roleCode;
         $payload['barangays'] = $this->assignedBarangays($activeIds);
         $payload['personnel'] = $canAssign && $activeIds !== []
             ? $this->assignments->candidates($activeIds[0], 'rdana')
             : [];
 
         return response()->json($payload);
+    }
+
+    public function exportBarangayReports(Request $request)
+    {
+        $user = $request->user();
+        $user->loadMissing('role');
+        $roleCode = (string) ($user->role?->code ?? '');
+        $activeIds = $this->scope->activeBarangayIds($user->id);
+        $isSupervisor = in_array($roleCode, ['rdana_admin_officer', 'rdana_city_assessor'], true);
+        if (! $isSupervisor) {
+            abort(403, 'You cannot export barangay report lists.');
+        }
+        $queue = $this->resolveBarangayQueue((string) $request->input('queue', ''), $roleCode, $isSupervisor);
+
+        $query = $this->barangayReportsBaseQuery($user);
+        $this->applyAssessorQueueVisibility($query, $user, $isSupervisor);
+        $this->applyQueueFilter($query, $queue, $roleCode);
+        $this->applyBarangayReportFilters($query, $request, $activeIds, $isSupervisor);
+        $query->orderByDesc('reports.updated_at')->orderByDesc('reports.id')->limit(2000);
+
+        $filename = 'barangay-reports-'.$queue.'-'.now()->format('Ymd-His').'.csv';
+
+        return response()->streamDownload(function () use ($query, $user, $isSupervisor, $queue, $roleCode) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['Reference', 'Barangay', 'Incident', 'Assignee', 'Submitted At', 'Updated At', 'Status', 'Queue']);
+            foreach ($query->get() as $row) {
+                $mapped = $this->mapBarangayQueueRow($row, $user, $isSupervisor, $queue, $roleCode);
+                fputcsv($out, [
+                    $mapped['reference'],
+                    $mapped['barangay_name'] ?? '',
+                    $mapped['incident_name'] ?? '',
+                    $mapped['assignee_name'] ?? '',
+                    $mapped['submitted_at'] ?? '',
+                    $mapped['updated_at'] ?? '',
+                    $mapped['verification_label'] ?? $mapped['label'],
+                    $mapped['queue'],
+                ]);
+            }
+            fclose($out);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    private function resolveBarangayQueue(string $queue, string $roleCode, bool $isSupervisor): string
+    {
+        $allowed = ['unassigned', 'pending', 'completed', 'verified'];
+        if (! in_array($queue, $allowed, true)) {
+            return $isSupervisor ? 'unassigned' : 'pending';
+        }
+        if (! $isSupervisor && $queue === 'unassigned') {
+            return 'pending';
+        }
+        if ($queue === 'verified' && $roleCode !== 'rdana_city_assessor') {
+            return $isSupervisor ? 'completed' : 'pending';
+        }
+        if ($queue === 'completed' && $roleCode === 'rdana_city_assessor') {
+            return 'verified';
+        }
+
+        return $queue;
     }
 
     private function barangayReportsBaseQuery(object $user)
@@ -128,7 +193,7 @@ class AssessmentController extends Controller
         });
     }
 
-    private function applyQueueFilter($query, string $queue): void
+    private function applyQueueFilter($query, string $queue, string $roleCode = ''): void
     {
         if (! Schema::hasTable('report_assignments')) {
             if ($queue === 'unassigned') {
@@ -185,6 +250,7 @@ class AssessmentController extends Controller
                                 $status->orWhereIn('field_assessments.workflow_stage', [
                                     'pending_admin_verification',
                                     'pending_city_assessor',
+                                    'ready_for_consolidation',
                                     'forwarded_cdrrmo',
                                 ]);
                             }
@@ -195,22 +261,57 @@ class AssessmentController extends Controller
             return;
         }
 
-        // completed
-        $query->whereExists(function ($done) {
-            $done->selectRaw('1')
-                ->from('field_assessments')
-                ->whereColumn('field_assessments.barangay_report_id', 'reports.id')
-                ->where(function ($status) {
-                    $status->whereIn('field_assessments.assessment_status', ['signed', 'submitted']);
-                    if (Schema::hasColumn('field_assessments', 'workflow_stage')) {
-                        $status->orWhereIn('field_assessments.workflow_stage', [
-                            'pending_admin_verification',
-                            'pending_city_assessor',
-                            'forwarded_cdrrmo',
-                        ]);
-                    }
+        // Admin completed queue: awaiting administrative verification only.
+        if ($queue === 'completed') {
+            if ($roleCode === 'rdana_admin_officer' && Schema::hasColumn('field_assessments', 'workflow_stage')) {
+                $query->whereExists(function ($done) {
+                    $done->selectRaw('1')
+                        ->from('field_assessments')
+                        ->whereColumn('field_assessments.barangay_report_id', 'reports.id')
+                        ->where('field_assessments.workflow_stage', 'pending_admin_verification');
                 });
-        });
+
+                return;
+            }
+
+            // Assessors / fallback: any terminal or supervisor-stage assessment.
+            $query->whereExists(function ($done) {
+                $done->selectRaw('1')
+                    ->from('field_assessments')
+                    ->whereColumn('field_assessments.barangay_report_id', 'reports.id')
+                    ->where(function ($status) {
+                        $status->whereIn('field_assessments.assessment_status', ['signed', 'submitted']);
+                        if (Schema::hasColumn('field_assessments', 'workflow_stage')) {
+                            $status->orWhereIn('field_assessments.workflow_stage', [
+                                'pending_admin_verification',
+                                'pending_city_assessor',
+                                'ready_for_consolidation',
+                                'forwarded_cdrrmo',
+                            ]);
+                        }
+                    });
+            });
+
+            return;
+        }
+
+        // City assessor verified queue: awaiting review, plus reviewed/forwarded for read-only history.
+        if ($queue === 'verified') {
+            $query->whereExists(function ($done) {
+                $done->selectRaw('1')
+                    ->from('field_assessments')
+                    ->whereColumn('field_assessments.barangay_report_id', 'reports.id');
+                if (Schema::hasColumn('field_assessments', 'workflow_stage')) {
+                    $done->whereIn('field_assessments.workflow_stage', [
+                        'pending_city_assessor',
+                        'ready_for_consolidation',
+                        'forwarded_cdrrmo',
+                    ]);
+                } else {
+                    $done->whereRaw('1 = 0');
+                }
+            });
+        }
     }
 
     private function applyBarangayReportFilters($query, Request $request, array $activeIds, bool $isSupervisor): void
@@ -272,12 +373,27 @@ class AssessmentController extends Controller
                     if (Schema::hasTable('disaster_incidents')) {
                         $inner->orWhereRaw('disaster_incidents.incident_name LIKE ? ESCAPE ?', [$like, '\\']);
                     }
+                    if (Schema::hasTable('users')) {
+                        $inner->orWhereRaw("CONCAT(COALESCE(preparer.first_name, ''), ' ', COALESCE(preparer.last_name, '')) LIKE ? ESCAPE ?", [$like, '\\']);
+                    }
+                    if (Schema::hasTable('report_assignments') && Schema::hasTable('users')) {
+                        $inner->orWhereExists(function ($assigned) use ($like) {
+                            $assigned->selectRaw('1')
+                                ->from('report_assignments')
+                                ->join('users as assignees', 'assignees.id', '=', 'report_assignments.assignee_user_id')
+                                ->whereColumn('report_assignments.subject_id', 'reports.id')
+                                ->where('report_assignments.subject_type', 'barangay_report')
+                                ->where('report_assignments.assignment_role', 'rdana')
+                                ->where('report_assignments.is_active', true)
+                                ->whereRaw("CONCAT(COALESCE(assignees.first_name, ''), ' ', COALESCE(assignees.last_name, '')) LIKE ? ESCAPE ?", [$like, '\\']);
+                        });
+                    }
                 });
             }
         }
     }
 
-    private function mapBarangayQueueRow(object $row, object $user, bool $canAssign, string $queue): array
+    private function mapBarangayQueueRow(object $row, object $user, bool $canAssign, string $queue, string $roleCode = ''): array
     {
         $name = trim(implode(' ', array_filter([
             $row->preparer_first_name ?? null,
@@ -371,6 +487,7 @@ class AssessmentController extends Controller
         $verificationLabel = match ($faStage) {
             'pending_admin_verification' => 'Awaiting Administrative Verification',
             'pending_city_assessor' => 'Awaiting City Assessor Notation',
+            'ready_for_consolidation' => 'Ready for Field Consolidation',
             'forwarded_cdrrmo' => 'Forwarded to CDRRMO',
             default => $progressLabel,
         };
@@ -405,7 +522,16 @@ class AssessmentController extends Controller
             'building_status_label' => $buildingStatusLabel,
             'estimated_cost_php' => $estimatedCost,
             'can_assign' => $canAssign && $queue === 'unassigned',
-            'can_open_assessment' => $assessmentId !== null || ($assignment && (int) ($assignment->assignee_user_id ?? 0) === (int) $user->id),
+            'can_reassign' => $canAssign && $queue === 'pending' && $assignment !== null,
+            'can_verify_report' => $roleCode === 'rdana_admin_officer'
+                && $queue === 'completed'
+                && $faStage === 'pending_admin_verification',
+            'can_review_report' => $roleCode === 'rdana_city_assessor'
+                && $queue === 'verified'
+                && $faStage === 'pending_city_assessor',
+            'can_open_assessment' => ! $canAssign
+                && $queue === 'pending'
+                && ($assessmentId !== null || ($assignment && (int) ($assignment->assignee_user_id ?? 0) === (int) $user->id)),
             'can_view' => true,
             'can_download' => true,
         ];
@@ -422,32 +548,38 @@ class AssessmentController extends Controller
         };
     }
 
-    private function barangayReportCounts(object $user, Request $request, bool $isSupervisor): array
+    private function barangayReportCounts(object $user, Request $request, bool $isSupervisor, string $roleCode = ''): array
     {
-        $unassigned = $this->countQueue($user, $request, 'unassigned', $isSupervisor);
-        $pending = $this->countQueue($user, $request, 'pending', $isSupervisor);
-        $completed = $this->countQueue($user, $request, 'completed', $isSupervisor);
+        $unassigned = $this->countQueue($user, $request, 'unassigned', $isSupervisor, $roleCode);
+        $pending = $this->countQueue($user, $request, 'pending', $isSupervisor, $roleCode);
+        $completed = $this->countQueue($user, $request, 'completed', $isSupervisor, $roleCode);
+        $verified = $roleCode === 'rdana_city_assessor'
+            ? $this->countQueue($user, $request, 'verified', $isSupervisor, $roleCode)
+            : 0;
+
+        $third = $roleCode === 'rdana_city_assessor' ? $verified : $completed;
 
         return [
             'unassigned' => $isSupervisor ? $unassigned : 0,
             'pending' => $pending,
             'completed' => $completed,
-            'total' => ($isSupervisor ? $unassigned : 0) + $pending + $completed,
+            'verified' => $verified,
+            'total' => ($isSupervisor ? $unassigned : 0) + $pending + $third,
             // Legacy keys for older UI / tests during transition
             'awaiting' => $isSupervisor ? $unassigned + $pending : $pending,
             'returned' => 0,
-            'processed' => $completed,
+            'processed' => $third,
         ];
     }
 
-    private function countQueue(object $user, Request $request, string $queue, bool $isSupervisor): int
+    private function countQueue(object $user, Request $request, string $queue, bool $isSupervisor, string $roleCode = ''): int
     {
         if (! $isSupervisor && $queue === 'unassigned') {
             return 0;
         }
         $query = $this->barangayReportsBaseQuery($user);
         $this->applyAssessorQueueVisibility($query, $user, $isSupervisor);
-        $this->applyQueueFilter($query, $queue);
+        $this->applyQueueFilter($query, $queue, $roleCode);
         if ($request->filled('barangay_id')) {
             $query->where('reports.barangay_id', $request->integer('barangay_id'));
         }
@@ -661,7 +793,7 @@ class AssessmentController extends Controller
         $user?->loadMissing('role');
         $role = $user?->role?->code;
         $canSubmitAssessed = in_array((string) $row->assessment_status, ['draft', 'returned'], true)
-            && ! in_array((string) ($row->workflow_stage ?? ''), ['pending_admin_verification', 'pending_city_assessor', 'forwarded_cdrrmo'], true)
+            && ! in_array((string) ($row->workflow_stage ?? ''), ['pending_admin_verification', 'pending_city_assessor', 'ready_for_consolidation', 'forwarded_cdrrmo'], true)
             && $role === 'rdana'
             && (int) $row->assigned_assessor_id === (int) ($user?->id ?? 0);
         $canVerifyOfficer = $role === 'rdana_admin_officer'
@@ -788,7 +920,7 @@ class AssessmentController extends Controller
             'supersedes_id' => property_exists($row, 'supersedes_id') ? $row->supersedes_id : null,
             'updated_at' => $row->updated_at,
             'can_submit_assessed' => in_array((string) $row->assessment_status, ['draft', 'returned'], true)
-                && ! in_array((string) ($row->workflow_stage ?? ''), ['pending_admin_verification', 'pending_city_assessor', 'forwarded_cdrrmo'], true),
+                && ! in_array((string) ($row->workflow_stage ?? ''), ['pending_admin_verification', 'pending_city_assessor', 'ready_for_consolidation', 'forwarded_cdrrmo'], true),
             'can_verify_officer' => (string) ($row->workflow_stage ?? '') === 'pending_admin_verification',
             'can_forward_city' => (string) ($row->workflow_stage ?? '') === 'pending_city_assessor',
         ];

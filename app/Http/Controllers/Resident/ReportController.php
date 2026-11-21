@@ -109,7 +109,7 @@ class ReportController extends Controller
         $row = $this->find($report);
         abort_unless($this->policy->update($request->user(), $row), 403);
         $data = $request->validate([
-            'disaster_incident_id' => ['sometimes', 'integer'],
+            'disaster_incident_id' => ['sometimes', 'nullable', 'integer'],
             'reported_incident_type' => ['nullable', 'string', 'max:120'],
             'incident_description' => ['nullable', 'string', 'max:5000'],
             'reported_location' => ['nullable', 'string', 'max:2000'],

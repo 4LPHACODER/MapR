@@ -146,9 +146,12 @@ function toLocalInput(value) {
 }
 
 function payload() {
+    const incidentId = form.disaster_incident_id === '' || form.disaster_incident_id == null
+        ? null
+        : Number(form.disaster_incident_id);
     return {
-        disaster_incident_id: form.disaster_incident_id || null,
-        reported_incident_type: form.disaster_incident_id
+        disaster_incident_id: Number.isFinite(incidentId) ? incidentId : null,
+        reported_incident_type: incidentId
             ? null
             : form.reported_incident_type.trim() || form.incident_text.trim() || null,
         incident_description: form.incident_description,

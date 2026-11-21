@@ -396,6 +396,7 @@ class ContextController extends Controller
                             $status->orWhereIn('field_assessments.workflow_stage', [
                                 'pending_admin_verification',
                                 'pending_city_assessor',
+                                'ready_for_consolidation',
                                 'forwarded_cdrrmo',
                             ]);
                         }
@@ -413,6 +414,7 @@ class ContextController extends Controller
                             $status->orWhereIn('field_assessments.workflow_stage', [
                                 'pending_admin_verification',
                                 'pending_city_assessor',
+                                'ready_for_consolidation',
                                 'forwarded_cdrrmo',
                             ]);
                         }

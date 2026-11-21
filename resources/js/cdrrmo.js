@@ -8,6 +8,7 @@ import MapWorkspace from './shared/components/MapWorkspace.vue';
 import ResidentsPage from './cdrrmo/pages/ResidentsPage.vue';
 import IncidentsPage from './cdrrmo/pages/IncidentsPage.vue';
 import ReportListPage from './cdrrmo/pages/ReportListPage.vue';
+import FieldPackagesPage from './cdrrmo/pages/FieldPackagesPage.vue';
 import ReportDocumentPage from './cdrrmo/pages/ReportDocumentPage.vue';
 import UsersPage from './cdrrmo/pages/UsersPage.vue';
 import ActivityLogPage from './cdrrmo/pages/ActivityLogPage.vue';
@@ -40,6 +41,7 @@ if (root) {
             { path: '/incidents', name: 'incidents', component: IncidentsPage, meta: { title: 'Disaster Incidents' } },
             { path: '/reports/barangay', name: 'reports-barangay', component: ReportListPage, meta: { title: 'Barangay Reports', reportType: 'barangay' } },
             { path: '/reports/field', name: 'reports-field', component: ReportListPage, meta: { title: 'Field Assessment Reports', reportType: 'field' } },
+            { path: '/reports/field-packages', name: 'reports-field-packages', component: FieldPackagesPage, meta: { title: 'Field Packages' } },
             { path: '/reports/consolidated', name: 'reports-consolidated', component: ReportListPage, meta: { title: 'Consolidated Reports', reportType: 'consolidated' } },
             { path: '/reports/document/:kind/:id', name: 'reports-document', component: ReportDocumentPage, meta: { title: 'Report' } },
             { path: '/users', name: 'users', component: UsersPage, meta: { title: 'User Management' } },

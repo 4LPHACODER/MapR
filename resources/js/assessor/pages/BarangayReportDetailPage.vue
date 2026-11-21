@@ -38,6 +38,7 @@ const reviseReason = ref('');
 const damageClasses = ref([]);
 const signOpen = ref(false);
 const signMode = ref('verify-officer');
+const documentNonce = ref(0);
 const profile = ref(null);
 const menuButton = ref(null);
 const wideReview = ref(typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches);
@@ -51,13 +52,13 @@ const fromCompleted = computed(() => route.query.from === 'completed');
 
 const documentUrl = computed(() => (
     reportId.value
-        ? `/rdana/reports/barangay/${reportId.value}/preview?format=pdf&inline=1`
+        ? `/rdana/reports/barangay/${reportId.value}/preview?format=pdf&inline=1&v=${documentNonce.value}`
         : ''
 ));
 
 const downloadUrl = computed(() => (
     reportId.value
-        ? `/rdana/reports/barangay/${reportId.value}/preview?format=pdf`
+        ? `/rdana/reports/barangay/${reportId.value}/preview?format=pdf&v=${documentNonce.value}`
         : ''
 ));
 
@@ -218,6 +219,12 @@ async function reloadReport() {
 function openRequestedPanel() {
     if (route.query.panel === 'flag') flagDialog.value?.showModal();
     if (route.query.panel === 'return' && canReturn.value) returnDialog.value?.showModal();
+    if (route.query.sign === 'verify-officer' && canVerifyOfficer.value) {
+        openSign('verify-officer');
+        const nextQuery = { ...route.query };
+        delete nextQuery.sign;
+        router.replace({ path: route.path, query: nextQuery });
+    }
 }
 
 async function downloadPdf() {
@@ -367,7 +374,17 @@ async function confirmSign(payload) {
         const path = signMode.value === 'forward'
             ? `${apiBase}/assessments/${report.value.assessment_id}/forward`
             : `${apiBase}/assessments/${report.value.assessment_id}/verify-officer`;
-        await window.axios.post(path, payload);
+        const body = new FormData();
+        body.append('confirmed', payload?.confirmed ? '1' : '0');
+        body.append('password', payload?.password || '');
+        if (payload?.use_saved_signature) {
+            body.append('use_saved_signature', '1');
+        } else if (payload?.signatureFile) {
+            body.append('signature', payload.signatureFile, payload.signatureFile.name || 'signature.png');
+            body.append('use_saved_signature', '0');
+        }
+        await window.axios.post(path, body);
+        documentNonce.value += 1;
         await reloadReport();
         await loadDamageSummary();
         viewer.value?.reload();
@@ -570,7 +587,7 @@ onBeforeUnmount(() => {
                         :disabled="busy"
                         @click="openSign('forward')"
                     >
-                        <MapIcon name="pen-line" /> Note and Sign
+                        <MapIcon name="pen-line" /> Review Report
                     </button>
                     <div class="submission-overflow">
                         <button
@@ -609,7 +626,7 @@ onBeforeUnmount(() => {
                                 :disabled="busy"
                                 @click="openSign('forward')"
                             >
-                                <MapIcon name="pen-line" /> Note and Sign
+                                <MapIcon name="pen-line" /> Review Report
                             </button>
                             <button type="button" role="menuitem" @click="flagDialog?.showModal(); closeActions(false)">
                                 <MapIcon name="flag" /> Flag Report
@@ -874,6 +891,7 @@ onBeforeUnmount(() => {
             </dialog>
             <ReviewSignDialog
                 :open="signOpen"
+                capture-signature
                 :reference="report.reference || ''"
                 :name="profile?.name || ''"
                 :position="profile?.job_title || profile?.role || ''"

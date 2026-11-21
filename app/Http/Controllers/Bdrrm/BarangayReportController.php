@@ -411,20 +411,20 @@ class BarangayReportController extends Controller
         if ($request->exists('estimated_repair_cost')) {
             abort(422, 'BDRRM cannot record the estimated repair cost.');
         }
-        $request->validate([
-            'confirmed' => ['accepted'],
-            'content_revision' => ['required', 'string', 'size:64'],
-            'use_saved_signature' => ['sometimes', 'boolean'],
-            'signature' => ['nullable', 'file'],
-        ]);
+            $request->validate([
+                'confirmed' => ['accepted'],
+                'content_revision' => ['required', 'string', 'size:64'],
+                'use_saved_signature' => ['sometimes', 'boolean'],
+                'signature' => ['nullable', 'file'],
+            ]);
         if (! $request->hasFile('signature') && ! $request->boolean('use_saved_signature')) {
             abort(422, 'Draw a signature or choose your saved signature before accepting.');
         }
-        $endorsement = [
-            'revision' => $request->string('content_revision')->toString(),
-            'use_saved' => $request->boolean('use_saved_signature'),
-            'file' => $request->file('signature'),
-        ];
+            $endorsement = [
+                'revision' => $request->string('content_revision')->toString(),
+                'use_saved' => $request->boolean('use_saved_signature'),
+                'file' => $request->file('signature'),
+            ];
         $barangayReportId = $this->residentReports->acceptSubmission($request->user(), $row, $this->workflow, $endorsement);
 
         return response()->json([

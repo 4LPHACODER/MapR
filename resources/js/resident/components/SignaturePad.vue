@@ -16,11 +16,16 @@ const canvas = ref(null);
 const saving = ref(false);
 const status = ref('');
 const error = ref('');
+const strokeCount = ref(0);
 let strokes = [];
 let current = null;
 let drawing = false;
 let loaded = null;
 let observer = null;
+
+function syncStrokeCount() {
+    strokeCount.value = strokes.length;
+}
 
 function hasInk() {
     return strokes.some((stroke) => stroke.length > 1);
@@ -71,6 +76,7 @@ function start(event) {
     loaded = null;
     current = [point(event)];
     strokes.push(current);
+    syncStrokeCount();
     paint();
 }
 
@@ -92,6 +98,7 @@ async function drawPreview(url) {
     const bitmap = await createImageBitmap(response.data);
     loaded = bitmap;
     strokes = [];
+    syncStrokeCount();
     paint();
 }
 
@@ -124,7 +131,18 @@ function clearDrawing() {
     loaded = null;
     status.value = '';
     error.value = '';
+    syncStrokeCount();
     emit('ready', false);
+    paint();
+}
+
+function undoLastStroke() {
+    if (!strokes.length) return;
+    strokes.pop();
+    current = null;
+    drawing = false;
+    syncStrokeCount();
+    if (!hasInk()) emit('ready', false);
     paint();
 }
 
@@ -152,6 +170,7 @@ defineExpose({
     hasInk: () => hasInk(),
     exportPng,
     clearDrawing,
+    undoLastStroke,
 });
 
 onMounted(async () => {
@@ -194,6 +213,7 @@ onBeforeUnmount(() => {
             @pointercancel="end"
         ></canvas>
         <div class="resident-signature-actions">
+            <Button size="small" type="button" label="Undo" severity="secondary" variant="outlined" class="resident-secondary" :disabled="saving || strokeCount < 1" @click="undoLastStroke" />
             <Button size="small" type="button" label="Clear signature" severity="secondary" variant="outlined" class="resident-secondary" :disabled="saving" @click="clearPad" />
             <Button size="small" v-if="error" type="button" label="Retry" class="resident-primary" :disabled="saving" @click="save" />
         </div>

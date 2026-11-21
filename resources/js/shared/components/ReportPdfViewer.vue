@@ -108,7 +108,7 @@ async function renderPages(token, followUp = false) {
                 if (!reviewReady && measured >= 64) {
                     const narrow = window.matchMedia('(max-width: 1023px)').matches;
                     fitting.value = narrow;
-                    absoluteScale.value = narrow ? fitted : Math.min(1, fitted);
+                    absoluteScale.value = fitted;
                     reviewReady = true;
                 }
                 if (reviewReady && fitting.value) absoluteScale.value = fitted;
