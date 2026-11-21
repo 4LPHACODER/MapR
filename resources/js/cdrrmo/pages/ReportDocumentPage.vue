@@ -1,8 +1,16 @@
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import Button from 'primevue/button';
+import Menu from 'primevue/menu';
+import Message from 'primevue/message';
+import Skeleton from 'primevue/skeleton';
+import Tag from 'primevue/tag';
 import MapIcon from '../../shared/components/MapIcon.vue';
+import BarangayDocumentDetails from '../components/BarangayDocumentDetails.vue';
 import ReportDocumentViewer from '../components/ReportDocumentViewer.vue';
+import 'primeicons/primeicons.css';
+import '../../../css/cdrrmo/barangay-document.css';
 
 const route = useRoute();
 const router = useRouter();
@@ -14,8 +22,12 @@ const menuOpen = ref(false);
 const flagForm = reactive({ category: 'Review', reason: '' });
 const resolution = ref('');
 const viewer = ref(null);
+const actions = ref(null);
+const actionsOpen = ref(false);
+let recordRequest = 0;
 
 const kind = computed(() => route.params.kind);
+const barangay = computed(() => kind.value === 'barangay');
 const listPath = computed(() => `/reports/${kind.value === 'field' ? 'field' : (kind.value === 'consolidated' ? 'consolidated' : 'barangay')}`);
 const title = computed(() => {
     if (kind.value === 'field') return 'Field Assessment Report';
@@ -37,6 +49,12 @@ const generatedUrl = computed(() => {
 });
 const sourceUrl = computed(() => (mode.value === 'original' ? record.value?.attachment?.preview_path || '' : generatedUrl.value));
 const downloadUrl = computed(() => (mode.value === 'original' ? record.value?.attachment?.download_path || '' : `${generatedUrl.value.replace('&inline=1', '')}`));
+const statusTones = { draft: 'secondary', review: 'info', returned: 'warn', submitted: 'success', signed: 'success', finalized: 'success' };
+const statusTone = computed(() => statusTones[record.value?.status] || 'info');
+const documentActions = computed(() => [
+    { label: 'Print', icon: 'pi pi-print', disabled: !viewer.value?.canPrint, command: () => nextTick(() => viewer.value?.printDocument()) },
+    { label: 'Download this version', icon: 'pi pi-download', url: downloadUrl.value, disabled: !downloadUrl.value },
+]);
 const checklistLabels = {
     fields: 'Required fields',
     evidence: 'Supporting evidence',
@@ -46,6 +64,12 @@ const checklistLabels = {
     flags: 'Blocking flags',
     current: 'Current version',
 };
+const checklist = computed(() => (record.value?.checklist || []).map(item => ({
+    key: item.key,
+    label: checklistLabels[item.key] || item.label,
+    state: !item.met && ['fields', 'evidence', 'predecessor'].includes(item.key) ? 'pending' : checklistState(item),
+    detail: checklistDetail(item),
+})));
 
 const linked = computed(() => {
     const attachment = record.value?.attachment || {};
@@ -80,9 +104,14 @@ function checklistDetail(item) {
 }
 
 async function load() {
+    const request = ++recordRequest;
     error.value = '';
     const { data } = await window.axios.get(`/cdrrmo/api/reports/${kind.value}/${route.params.id}`);
-    record.value = data.data;
+    if (request === recordRequest) record.value = data.data;
+}
+
+function goBack() {
+    router.push(route.query.return || listPath.value);
 }
 
 function setMode(next) {
@@ -120,19 +149,74 @@ async function resolveFlag(flag) {
     }
 }
 
-onMounted(async () => {
+async function loadPage() {
+    const id = route.params.id;
+    const reportKind = kind.value;
+    if (!id || !reportKind) return;
     try {
         await load();
     } catch (exception) {
-        error.value = exception.response?.data?.message || 'This report could not be opened.';
+        if (id === route.params.id && reportKind === kind.value) {
+            error.value = exception.response?.data?.message || 'This report could not be opened.';
+        }
     }
+}
+
+onMounted(loadPage);
+watch([kind, () => route.params.id], () => {
+    record.value = null;
+    message.value = '';
+    loadPage();
 });
-watch(() => route.params.id, () => load().catch(() => {}));
 </script>
 
 <template>
-    <section class="report-document-page">
-        <header class="report-document-header">
+    <section :class="barangay ? 'barangay-document grid min-w-0 gap-4' : 'report-document-page'">
+        <header v-if="barangay" class="barangay-document-header grid min-w-0 gap-1 border-b border-surface-200 pb-3">
+            <Button label="Back to Reports" icon="pi pi-arrow-left" class="-ms-2 justify-self-start" size="small" severity="secondary" text @click="goBack" />
+            <div class="flex min-w-0 flex-wrap items-center justify-between gap-x-5 gap-y-3">
+                <div class="min-w-0 border-s-2 border-indigo-500 ps-3">
+                    <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                        <h2 class="text-xl/7 font-semibold">{{ title }}</h2>
+                        <Tag v-if="record" :value="record.label" :severity="statusTone" />
+                    </div>
+                    <div v-if="record" class="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs/5">
+                        <span class="min-w-0 wrap-anywhere font-medium text-indigo-800 tabular-nums">{{ record.reference }}</span>
+                        <span class="text-surface-600 sm:border-s sm:border-surface-300 sm:ps-2.5">Version {{ record.version || 1 }}</span>
+                    </div>
+                    <p v-else-if="!error" class="mt-1 text-xs text-surface-600" role="status">Loading report…</p>
+                </div>
+                <div v-if="record" class="flex min-w-0 flex-wrap items-center gap-2">
+                    <div v-if="hasOriginal" class="flex min-w-0 flex-wrap gap-0.5 rounded-lg border border-surface-200 bg-white p-0.5" role="group" aria-label="Document version">
+                        <Button aria-label="Original document" size="small" severity="secondary" text :aria-pressed="mode === 'original'" @click="setMode('original')">
+                            <span class="font-semibold">Original<span class="barangay-mode-label-suffix"> document</span></span>
+                        </Button>
+                        <Button aria-label="Generated report" size="small" severity="secondary" text :aria-pressed="mode === 'generated'" @click="setMode('generated')">
+                            <span class="font-semibold">Generated<span class="barangay-mode-label-suffix"> report</span></span>
+                        </Button>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <Button
+                            v-tooltip.bottom="detailsOpen ? 'Hide details' : 'Show details'"
+                            size="small" severity="secondary" outlined class="barangay-details-toggle"
+                            :aria-label="detailsOpen ? 'Hide details' : 'Show details'" :aria-expanded="detailsOpen"
+                            aria-controls="barangay-document-details" @click="detailsOpen = !detailsOpen"
+                        >
+                            <i class="pi pi-list" aria-hidden="true"></i>
+                            <span class="barangay-details-toggle-label">{{ detailsOpen ? 'Hide details' : 'Show details' }}</span>
+                        </Button>
+                        <Button
+                            v-tooltip.bottom="'More actions'" size="small" severity="secondary" outlined icon="pi pi-ellipsis-h"
+                            aria-label="More actions" aria-haspopup="menu" aria-controls="barangay-document-actions_list"
+                            :aria-expanded="actionsOpen" @click="actions.toggle($event)"
+                        />
+                    </div>
+                    <Menu id="barangay-document-actions" ref="actions" class="barangay-document-actions-menu" :model="documentActions" popup
+                        @show="actionsOpen = true" @hide="actionsOpen = false" />
+                </div>
+            </div>
+        </header>
+        <header v-else class="report-document-header">
             <div>
                 <button type="button" class="resident-action resident-action-secondary" @click="route.query.return ? router.push(route.query.return) : router.push(listPath)">Back to Reports</button>
                 <h2>{{ title }}</h2>
@@ -153,17 +237,33 @@ watch(() => route.params.id, () => load().catch(() => {}));
                 <a v-if="downloadUrl" role="menuitem" :href="downloadUrl">Download this version</a>
             </div>
         </header>
-        <p v-if="error" class="cdrrmo-error" role="alert">{{ error }} <button type="button" class="resident-action resident-action-secondary" @click="load">Retry</button></p>
-        <p v-if="message" class="cdrrmo-muted" role="status">{{ message }}</p>
-        <div class="report-document-layout" :class="{ 'details-hidden': !detailsOpen }">
+        <template v-if="barangay">
+            <Message v-if="error && !record" severity="error" size="small" class="barangay-document-feedback">
+                <span>{{ error }}</span>
+                <Button type="button" label="Retry" size="small" severity="secondary" text class="ms-2" @click="loadPage" />
+            </Message>
+        </template>
+        <template v-else>
+            <p v-if="error" class="cdrrmo-error" role="alert">{{ error }} <button type="button" class="resident-action resident-action-secondary" @click="load">Retry</button></p>
+            <p v-if="message" class="cdrrmo-muted" role="status">{{ message }}</p>
+        </template>
+        <div :class="[barangay ? 'barangay-document-layout grid min-w-0 items-start gap-4' : 'report-document-layout', { 'details-hidden': !detailsOpen }]">
             <ReportDocumentViewer
                 v-if="record"
                 ref="viewer"
                 :source-url="sourceUrl"
                 :download-url="downloadUrl"
                 :mode-label="mode === 'original' ? 'Original document' : 'Generated report'"
+                :presentation="barangay ? 'barangay' : ''"
             />
-            <aside v-if="detailsOpen && record" class="report-details-panel">
+            <Skeleton v-else-if="barangay && !error" height="var(--barangay-viewer-height)" aria-hidden="true" />
+            <BarangayDocumentDetails v-if="barangay && record" v-show="detailsOpen"
+                v-model:reason="flagForm.reason" v-model:resolution="resolution"
+                :record="record" :title="title" :status-tone="statusTone" :linked="linked" :checklist="checklist"
+                :error="error" :message="message"
+                @add-flag="addFlag" @resolve-flag="resolveFlag"
+            />
+            <aside v-else-if="detailsOpen && record" class="report-details-panel">
                 <section>
                     <h3>Overview</h3>
                     <dl>

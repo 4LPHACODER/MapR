@@ -32,9 +32,7 @@
         <env name="PULSE_ENABLED" value="false" force="true"/>
         <env name="TELESCOPE_ENABLED" value="false" force="true"/>
         <env name="NIGHTWATCH_ENABLED" value="false" force="true"/>
-        <env name="MAPR_DEMO_PASSWORD" value="testing-only-demo-password" force="true"/>
-        <env name="MAPR_ASSESSOR_DEMO_PASSWORD" value="testing-only-assessor-password" force="true"/>
-        <!-- PHP CLI inherits container variables in $_SERVER too. Override both adapters. -->
+        <!-- PHP CLI inherits environment variables in $_SERVER too. Override both adapters. -->
         <server name="APP_ENV" value="testing"/>
         <server name="APP_MAINTENANCE_DRIVER" value="file"/>
         <server name="BCRYPT_ROUNDS" value="4"/>
@@ -49,7 +47,5 @@
         <server name="PULSE_ENABLED" value="false"/>
         <server name="TELESCOPE_ENABLED" value="false"/>
         <server name="NIGHTWATCH_ENABLED" value="false"/>
-        <server name="MAPR_DEMO_PASSWORD" value="testing-only-demo-password"/>
-        <server name="MAPR_ASSESSOR_DEMO_PASSWORD" value="testing-only-assessor-password"/>
     </php>
 </phpunit>

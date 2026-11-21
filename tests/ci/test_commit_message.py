@@ -7,7 +7,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/ci/check-commit-message.sh'
 TYPES = ('feature', 'fix', 'hotfix', 'refactor', 'docs', 'test',
-         'chore', 'ci', 'style', 'perf', 'build', 'revert')
+         'redesign', 'chore', 'ci', 'style', 'perf', 'build', 'revert')
 
 
 def check(message, *flags):

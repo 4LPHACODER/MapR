@@ -21,7 +21,8 @@ class BranchFlowTest(unittest.TestCase):
         self.assertIn(f"got '{head}'", result.stderr)
 
     def test_develop_accepts_typed_work_branches(self):
-        for head in ('feature/resident-export', 'fix/login-redirect', 'hotfix/pdf-fonts', 'docs/ci-flow'):
+        for head in ('feature/resident-export', 'fix/login-redirect', 'hotfix/pdf-fonts',
+                     'redesign/resident-report-primevue', 'docs/ci-flow'):
             with self.subTest(head=head):
                 self.assertAllowed('develop', head)
 

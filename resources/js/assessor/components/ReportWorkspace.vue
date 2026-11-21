@@ -71,11 +71,7 @@ function photoUrl(photo) {
     return `${props.apiBase}/reports/${photoReportId.value}/photos/${photo.id}`;
 }
 
-const signatureSlots = computed(() => [
-    { role: 'assessed_by', title: 'Assessed by', name: props.record.assessor?.name || 'Assigned RDANA assessor', position: 'RDANA Assessor' },
-    { role: 'verified_by', title: 'Verified by', name: 'Mark L. Merillo', position: 'Administrative Officer III' },
-    { role: 'approved_by', title: 'Noted by', name: 'Engr. Lovy R. Dedicatoria, LAOO II', position: 'Acting City Assessor' },
-]);
+const signatureSlots = computed(() => props.record.assessment_signature_slots || []);
 
 function printPreview() {
     if (previewHref.value) window.open(previewHref.value, '_blank', 'noopener');

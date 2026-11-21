@@ -12,7 +12,11 @@ import ReportTrackPage from './resident/pages/ReportTrackPage.vue';
 import ProfilePage from './resident/pages/ProfilePage.vue';
 import '../css/shared/workspace.css';
 import '../css/resident/app.css';
+import '../css/resident/reports.css';
 import '../css/resident/dashboard.css';
+import '../css/resident/map.css';
+import '../css/resident/report.css';
+import '../css/resident/profile.css';
 
 const root = document.getElementById('resident-app');
 

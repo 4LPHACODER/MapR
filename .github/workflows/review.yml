@@ -45,6 +45,8 @@ jobs:
           cache: npm
       - run: composer install --no-interaction --prefer-dist --no-progress
       - run: npm ci
+      - run: npm run test:map
+      - run: npm run test:pwa
       - name: Build frontend assets (Blade views need the Vite manifest)
         run: npm run build
       - name: Prepare environment

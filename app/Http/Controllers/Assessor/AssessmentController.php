@@ -703,6 +703,10 @@ class AssessmentController extends Controller
                 'household_reference' => 'Not recorded',
             ];
 
+        $assessorName = $assessor
+            ? trim(implode(' ', array_filter([$assessor->first_name, $assessor->middle_name, $assessor->last_name])))
+            : null;
+
         return [
             ...$this->row($row),
             'kind' => 'field_assessment',
@@ -738,7 +742,7 @@ class AssessmentController extends Controller
                 'disaster_type' => $disasterType,
             ] : null,
             'barangay' => $barangay ? ['id' => $barangay->id, 'name' => $barangay->barangay_name] : null,
-            'assessor' => $assessor ? ['id' => $assessor->id, 'name' => trim($assessor->first_name.' '.($assessor->middle_name ? $assessor->middle_name.' ' : '').$assessor->last_name)] : null,
+            'assessor' => $assessor ? ['id' => $assessor->id, 'name' => $assessorName] : null,
             'building' => $building ? ['id' => $building->id, 'reference' => $building->building_reference] : null,
             'household' => $household ? ['id' => $household->id, 'reference' => $household->household_reference] : null,
             'resident' => [
@@ -749,6 +753,11 @@ class AssessmentController extends Controller
             'verifications' => $verifications,
             'signatures' => $signatures,
             'signature_slots' => $signaturePayload['slots'],
+            'assessment_signature_slots' => $this->signatories->resolveParentSlots(
+                'field_assessment_id',
+                (int) $row->id,
+                $this->signatories->fieldSlots($assessorName),
+            ),
             'signature_signed_count' => $signaturePayload['signed_count'],
             'damage_summary' => $damageSummary,
             'verified' => $verified,

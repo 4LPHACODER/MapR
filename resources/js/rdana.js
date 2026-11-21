@@ -1,5 +1,6 @@
 import './bootstrap';
 import { createApp } from 'vue';
+import { installPrimeVue } from './shared/ui/installPrimeVue';
 import { createRouter, createWebHistory } from 'vue-router';
 import FieldApp from './assessor/App.vue';
 import DashboardPage from './assessor/pages/DashboardPage.vue';
@@ -9,12 +10,11 @@ import BarangayReportDetailPage from './assessor/pages/BarangayReportDetailPage.
 import FieldAssessmentDetailPage from './assessor/pages/FieldAssessmentDetailPage.vue';
 import RegistryPage from './assessor/pages/RegistryPage.vue';
 import ResidentsPage from './assessor/pages/ResidentsPage.vue';
-import BuildingsPage from './bdrrm/pages/BuildingsPage.vue';
+import BuildingsPage from './assessor/pages/BuildingsPage.vue';
 import ProfilePage from './assessor/pages/ProfilePage.vue';
 import '../css/shared/workspace.css';
 import '../css/bdrrm/reports.css';
 import '../css/bdrrm/submissions.css';
-import '../css/bdrrm/buildings.css';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 
@@ -31,13 +31,13 @@ if (root) {
     const router = createRouter({
         history: createWebHistory('/rdana'),
         routes: [
-            { path: '/', component: DashboardPage, meta: { title: 'Assessor Dashboard' } },
-            { path: '/map', component: MapPage, meta: { title: 'Assessment Map' } },
-            { path: '/buildings', component: BuildingsPage, meta: { title: 'Building Records' } },
+            { path: '/', component: DashboardPage, meta: { title: 'Assessor Dashboard', compact: true } },
+            { path: '/map', component: MapPage, meta: { title: 'Assessment Map', compact: true } },
+            { path: '/buildings', component: BuildingsPage, meta: { title: 'Building Records', compact: true } },
             // Kept for deep links; removed from sidebar navigation.
             { path: '/incidents', component: RegistryPage, meta: { title: 'Disaster Incidents', source: 'incidents' } },
             { path: '/residents', component: ResidentsPage, meta: { title: 'Residents' } },
-            { path: '/reports/barangay', component: QueuePage, meta: { title: 'Barangay Reports', source: 'barangay', status: '' } },
+            { path: '/reports/barangay', component: QueuePage, meta: { title: 'Barangay Reports', source: 'barangay', status: '', compact: true } },
             { path: '/reports/barangay/:id', component: BarangayReportDetailPage, meta: { title: 'Barangay Report' } },
             { path: '/reports/field', component: QueuePage, meta: { title: 'Field Assessment Reports', source: 'field', status: '' } },
             { path: '/reports/drafts', component: QueuePage, meta: { title: 'Drafts', source: 'field', status: 'draft' } },
@@ -49,14 +49,14 @@ if (root) {
         ],
     });
 
-    createApp(FieldApp, {
+    installPrimeVue(createApp(FieldApp, {
         userName: root.dataset.userName || '',
         userEmail: root.dataset.userEmail || '',
         jobTitle: root.dataset.jobTitle || '',
         logoutUrl: root.dataset.logoutUrl || '/logout',
         homeUrl: root.dataset.homeUrl || '/',
         csrfToken: token || '',
-    })
+    }))
         .use(router)
         .provide('apiBase', '/rdana/api')
         .provide('roleCode', roleCode)

@@ -247,7 +247,7 @@ class ResidentReportTest extends TestCase
         $home = $this->barangay('Home');
         $incident = $this->incident($home);
         $owner = $this->user('resident', 'Ana Cruz', $home);
-        $assessor = $this->user('rdana', 'Mark Merillo', null);
+        $assessor = $this->user('rdana', 'Test Assessor', null);
         $other = $this->user('rdana', 'Other Assessor', null);
         DB::table('user_barangay_assignments')->insert([
             'assigned_at' => now(),
@@ -532,7 +532,7 @@ class ResidentReportTest extends TestCase
         $home = $this->barangay('Mabua');
         DB::table('barangays')->where('id', $home)->update(['barangay_code' => '166819008']);
         $incident = $this->incident($home);
-        $owner = $this->user('resident', 'Maricar Irizari', $home);
+        $owner = $this->user('resident', 'Case Rivera', $home);
         $neighbor = $this->user('resident', 'Other Resident', $home);
         $created = $this->actingAs($owner)->postJson('/resident/api/reports', [
             'disaster_incident_id' => $incident,
@@ -689,7 +689,7 @@ class ResidentReportTest extends TestCase
             'disaster_incident_id' => $incident,
             'barangay_id' => $second,
         ]);
-        $resident = $this->user('resident', 'Maricar Irizari', $mabua);
+        $resident = $this->user('resident', 'Case Rivera', $mabua);
         $officer = $this->officer($mabua);
         DB::table('user_barangay_assignments')->insert([
             'assigned_at' => now(),
@@ -752,7 +752,7 @@ class ResidentReportTest extends TestCase
         $listed = collect($list->json('data'))->firstWhere('reference', 'RIR-QUEUE-POINT');
         $this->assertSame('Pending BDRRM Review', $listed['label']);
         $this->assertSame('submitted', $listed['status']);
-        $this->assertSame('Maricar Irizari', $listed['resident_name']);
+        $this->assertSame('Case Rivera', $listed['resident_name']);
         $this->assertTrue($listed['has_point']);
         $this->assertArrayNotHasKey('email', $listed);
         $this->assertSame('submitted', DB::table('resident_incident_reports')->where('id', $point)->value('report_status'));
@@ -775,7 +775,7 @@ class ResidentReportTest extends TestCase
         $this->assertSame('Pending BDRRM Review', $opened->json('data.label'));
         $this->assertTrue($opened->json('data.reviewable'));
         $this->assertTrue($opened->json('data.has_point'));
-        $this->assertSame('Maricar Irizari', $opened->json('data.resident_name'));
+        $this->assertSame('Case Rivera', $opened->json('data.resident_name'));
         $this->assertNull($opened->json('data.barangay_report_id'));
         $this->assertSame(0, DB::table('activity_events')->count());
         DB::table('resident_incident_reports')->where('id', $point)->update(['updated_at' => '2000-01-01 00:00:00']);
@@ -1099,7 +1099,7 @@ class ResidentReportTest extends TestCase
         $other = $this->barangay('Other Link');
         $incident = $this->incident($home);
         $officer = $this->officer($home);
-        $resident = $this->user('resident', 'Maricar Irizari', $home);
+        $resident = $this->user('resident', 'Case Rivera', $home);
         $resident->contact_number = '09170001111';
         $resident->save();
         $stranger = $this->user('resident', 'Stranger Nearby', $home);
@@ -1150,7 +1150,7 @@ class ResidentReportTest extends TestCase
         $byBuilding = $insert('RIR-BY-BUILDING', $stranger->id, $home, 'submitted', '125.000 8.000', $buildingId);
 
         $summary = $this->actingAs($officer)->getJson('/bdrrm/api/submissions/'.$linked.'/summary')->assertOk();
-        $summary->assertJsonPath('data.resident_name', 'Maricar Irizari');
+        $summary->assertJsonPath('data.resident_name', 'Case Rivera');
         $summary->assertJsonPath('data.reference', 'RIR-LINKED');
         $summary->assertJsonPath('data.incident_name', 'Flooding');
         $summary->assertJsonPath('data.incident_type', 'Flood '.$home);
@@ -1181,7 +1181,7 @@ class ResidentReportTest extends TestCase
         $this->assertFalse(collect($household->json('data'))->pluck('reference')->contains('RIR-NEARBY'));
 
         $this->actingAs($officer)->getJson('/bdrrm/api/buildings/'.$buildingId.'/resident-reports')->assertForbidden();
-        $secretary = $this->user('barangay_secretary', 'Leonida Lagunda', $home);
+        $secretary = $this->user('barangay_secretary', 'Test Secretary', $home);
         DB::table('user_barangay_assignments')->insert([
             'assigned_at' => now(),
             'user_id' => $secretary->id,
@@ -1215,13 +1215,13 @@ class ResidentReportTest extends TestCase
         $mabua = $this->barangay('Mabua');
         $other = $this->barangay('Telaje');
         $incident = $this->incident($mabua);
-        $resident = $this->user('resident', 'Maricar Dumpa', $mabua);
-        $jesnard = $this->user('bdrrm', 'Jesnard Plaza', $mabua);
+        $resident = $this->user('resident', 'Case Santos', $mabua);
+        $assignedOfficer = $this->user('bdrrm', 'Test Officer', $mabua);
         $peter = $this->user('bdrrm', 'Peter Salomon', $mabua);
-        $secretary = $this->user('barangay_secretary', 'Leonida Lagunda', $mabua);
-        $captain = $this->user('barangay_captain', 'Rocky Pimentel', $mabua);
+        $secretary = $this->user('barangay_secretary', 'Test Secretary', $mabua);
+        $captain = $this->user('barangay_captain', 'Test Captain', $mabua);
         $outsider = $this->user('barangay_secretary', 'Other Secretary', $other);
-        foreach ([$jesnard, $peter, $secretary, $captain] as $supervisor) {
+        foreach ([$assignedOfficer, $peter, $secretary, $captain] as $supervisor) {
             DB::table('user_barangay_assignments')->insert([
                 'assigned_at' => now(),
                 'user_id' => $supervisor->id,
@@ -1259,7 +1259,7 @@ class ResidentReportTest extends TestCase
         DB::table('report_assignments')->insert([
             'subject_type' => 'resident_incident_report',
             'subject_id' => $assigned,
-            'assignee_user_id' => $jesnard->id,
+            'assignee_user_id' => $assignedOfficer->id,
             'assigned_by' => $secretary->id,
             'assignment_role' => 'bdrrm',
             'is_active' => true,
@@ -1277,11 +1277,11 @@ class ResidentReportTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $mine = $this->actingAs($jesnard)->getJson('/bdrrm/api/submissions')->assertOk();
+        $mine = $this->actingAs($assignedOfficer)->getJson('/bdrrm/api/submissions')->assertOk();
         $this->assertSame(['RIR-MINE'], collect($mine->json('data'))->pluck('reference')->all());
-        $this->actingAs($jesnard)->getJson('/bdrrm/api/submissions/'.$otherReport)->assertForbidden();
-        $this->actingAs($jesnard)->getJson('/bdrrm/api/submissions/'.$open)->assertForbidden();
-        $this->actingAs($jesnard)->post('/bdrrm/api/submissions/'.$open.'/accept', [
+        $this->actingAs($assignedOfficer)->getJson('/bdrrm/api/submissions/'.$otherReport)->assertForbidden();
+        $this->actingAs($assignedOfficer)->getJson('/bdrrm/api/submissions/'.$open)->assertForbidden();
+        $this->actingAs($assignedOfficer)->post('/bdrrm/api/submissions/'.$open.'/accept', [
             'confirmed' => true,
             'content_revision' => str_repeat('a', 64),
             'signature' => UploadedFile::fake()->image('signature.png', 80, 40),
@@ -1303,7 +1303,7 @@ class ResidentReportTest extends TestCase
         $this->assertSame(['RIR-OPEN'], collect($unassigned->json('data'))->pluck('reference')->all());
         $this->assertSame('not_opened', collect($queue->json('data'))->firstWhere('reference', 'RIR-MINE')['review_state']);
         $this->assertSame('Unassigned', collect($unassigned->json('data'))->first()['assignment_label']);
-        $this->actingAs($jesnard)->getJson('/bdrrm/api/submissions')->assertOk()
+        $this->actingAs($assignedOfficer)->getJson('/bdrrm/api/submissions')->assertOk()
             ->assertJsonPath('counts.pending', 1)
             ->assertJsonPath('counts.reviewed', 0);
         $this->actingAs($captain)->getJson('/bdrrm/api/submissions?queue=unassigned')->assertOk()
@@ -1316,7 +1316,7 @@ class ResidentReportTest extends TestCase
 
         $this->actingAs($outsider)->postJson('/bdrrm/api/submissions/assign', [
             'submission_ids' => [$open],
-            'assignee_user_id' => $jesnard->id,
+            'assignee_user_id' => $assignedOfficer->id,
         ])->assertForbidden();
         $this->actingAs($secretary)->postJson('/bdrrm/api/submissions/assign', [
             'submission_ids' => [$open, $assigned],
@@ -1340,7 +1340,7 @@ class ResidentReportTest extends TestCase
         $this->actingAs($peter)->postJson('/bdrrm/api/submissions/'.$open.'/start-review')->assertOk()
             ->assertJsonPath('data.status', 'under_review')
             ->assertJsonPath('data.review_state', 'reviewing');
-        $this->actingAs($jesnard)->postJson('/bdrrm/api/submissions/'.$open.'/start-review')->assertForbidden();
+        $this->actingAs($assignedOfficer)->postJson('/bdrrm/api/submissions/'.$open.'/start-review')->assertForbidden();
 
         $this->acceptSubmission($peter, $open);
         $this->assertSame(1, DB::table('report_signatures')->where('resident_incident_report_id', $open)->where('signature_role', 'bdrrm_reviewer')->count());
@@ -1362,12 +1362,12 @@ class ResidentReportTest extends TestCase
         $checked = $this->actingAs($captain)->getJson('/bdrrm/api/submissions?queue=checked')->assertOk();
         $this->assertSame(['RIR-OPEN'], collect($checked->json('data'))->pluck('reference')->all());
         $this->assertSame('secretary_checked', collect($checked->json('data'))->first()['review_state']);
-        $this->assertSame('Leonida Lagunda', collect($checked->json('data'))->first()['secretary_name']);
+        $this->assertSame('Test Secretary', collect($checked->json('data'))->first()['secretary_name']);
         $this->actingAs($peter)->getJson('/bdrrm/api/submissions?status=reviewed')->assertOk()
             ->assertJsonPath('counts.reviewed', 1)
             ->assertJsonPath('data.0.reference', 'RIR-OPEN');
 
-        $this->actingAs($jesnard)->getJson('/bdrrm/api/buildings')->assertForbidden();
+        $this->actingAs($assignedOfficer)->getJson('/bdrrm/api/buildings')->assertForbidden();
         $this->actingAs($secretary)->getJson('/bdrrm/api/buildings')->assertOk();
         $this->actingAs($captain)->getJson('/bdrrm/api/buildings')->assertOk();
     }
@@ -1386,8 +1386,8 @@ class ResidentReportTest extends TestCase
         $mabua = $this->barangay('Mabua');
         $other = $this->barangay('Telaje');
         $incident = $this->incident($mabua);
-        $resident = $this->user('resident', 'Maricar Dumpa', $mabua);
-        $captain = $this->user('barangay_captain', 'Rocky Pimentel', $mabua);
+        $resident = $this->user('resident', 'Case Santos', $mabua);
+        $captain = $this->user('barangay_captain', 'Test Captain', $mabua);
         $outsider = $this->user('barangay_captain', 'Other Captain', $other);
         foreach ([[$captain, $mabua], [$outsider, $other]] as [$person, $barangayId]) {
             DB::table('user_barangay_assignments')->insert([

@@ -1,0 +1,534 @@
+.assessor-dashboard {
+    --dashboard-space: 16px;
+    --dashboard-pad: 16px;
+    display: grid;
+    gap: var(--dashboard-space);
+    min-width: 0;
+    color: var(--resident-ink);
+    font-size: 13px;
+    line-height: 20px;
+    container-type: inline-size;
+}
+
+.assessor-dashboard h2,
+.assessor-dashboard p,
+.assessor-dashboard ul,
+.assessor-dashboard dl,
+.assessor-dashboard dd {
+    margin: 0;
+}
+
+.assessor-dashboard ul {
+    list-style: none;
+    padding: 0;
+}
+
+.assessor-dashboard h2 {
+    color: var(--resident-ink);
+    font-size: 15px;
+    line-height: 22px;
+    font-weight: 600;
+}
+
+.assessor-dashboard .assessor-dashboard-muted,
+.assessor-dashboard-cell span,
+.assessor-dashboard time,
+.assessor-dashboard-overview small {
+    color: var(--p-surface-600);
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.assessor-dashboard-panel {
+    min-width: 0;
+    border: 1px solid var(--resident-line);
+    border-radius: var(--resident-radius);
+    background: var(--resident-card);
+}
+
+.assessor-dashboard-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px var(--dashboard-pad);
+    flex-wrap: wrap;
+    padding: 12px var(--dashboard-pad);
+}
+
+.assessor-dashboard-actions,
+.assessor-dashboard-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.assessor-dashboard-row-actions {
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+}
+
+.assessor-dashboard .p-button svg,
+.assessor-dashboard-metric svg,
+.assessor-dashboard-overlay .p-menu-item-link svg {
+    width: 15px;
+    height: 15px;
+    flex: none;
+}
+
+.assessor-dashboard-filters {
+    display: grid;
+    gap: 8px;
+    padding: 12px var(--dashboard-pad);
+}
+
+.assessor-dashboard-filters .assessor-dashboard-heading {
+    padding: 0;
+}
+
+.assessor-dashboard-fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1.15fr) repeat(2, minmax(0, 0.9fr)) auto;
+    align-items: end;
+    justify-items: start;
+    gap: 8px 12px;
+}
+
+.assessor-dashboard-fields > div {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    width: 100%;
+}
+
+.assessor-dashboard-fields label {
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 18px;
+}
+
+.assessor-dashboard-fields .p-datepicker,
+.assessor-dashboard-fields .p-select {
+    width: 100%;
+    min-width: 0;
+}
+
+.assessor-dashboard-filters .assessor-dashboard-muted {
+    margin-top: 2px;
+}
+
+.assessor-dashboard-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-top: 1px solid var(--resident-line);
+}
+
+.assessor-dashboard-metrics > * + * {
+    border-inline-start: 1px solid var(--resident-line);
+}
+
+.assessor-dashboard-metric {
+    position: relative;
+    display: grid;
+    align-content: start;
+    gap: 3px;
+    height: 100%;
+    padding: 11px var(--dashboard-pad);
+    color: var(--resident-ink);
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.assessor-dashboard-metric:where(a) {
+    padding-inline-end: calc(var(--dashboard-pad) + 22px);
+}
+
+.assessor-dashboard-metric :is(strong, dd:not(.assessor-dashboard-muted)) {
+    color: var(--resident-navy);
+    font-size: 24px;
+    line-height: 29px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.assessor-dashboard-metric dd.assessor-dashboard-metric-prompt {
+    font-size: 14px;
+}
+
+.assessor-dashboard-metric svg {
+    position: absolute;
+    inset-inline-end: var(--dashboard-pad);
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--resident-blue);
+}
+
+.assessor-dashboard-metrics > :first-child a {
+    border-end-start-radius: var(--resident-radius);
+}
+
+.assessor-dashboard-metrics > :last-child a {
+    border-end-end-radius: var(--resident-radius);
+}
+
+.assessor-dashboard .assessor-dashboard-metric:where(a):hover {
+    background: var(--resident-wash);
+}
+
+.assessor-dashboard-support {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: var(--dashboard-space);
+    align-items: start;
+}
+
+.assessor-dashboard .p-datatable-table-container {
+    border-top: 1px solid var(--resident-line);
+    border-end-start-radius: var(--resident-radius);
+    border-end-end-radius: var(--resident-radius);
+}
+
+.assessor-dashboard :is(.p-datatable-thead > tr > th, .p-datatable-tbody > tr > td) {
+    padding: 7px var(--dashboard-pad);
+    border-color: var(--resident-line);
+    font-size: 13px;
+}
+
+.assessor-dashboard .p-datatable-thead > tr > th {
+    background: var(--p-surface-50);
+    color: var(--p-surface-600);
+    font-size: 12px;
+    line-height: 18px;
+    font-weight: 600;
+}
+
+.assessor-dashboard .p-datatable-tbody > tr:last-child > td {
+    border-bottom-width: 0;
+}
+
+.assessor-dashboard .p-datatable-tbody > tr:not(.p-datatable-empty-message):hover {
+    background: var(--p-surface-50);
+}
+
+.assessor-dashboard .p-datatable-paginator-bottom {
+    border-top: 1px solid var(--resident-line);
+}
+
+.assessor-dashboard .assessor-dashboard-queue-table {
+    min-width: 36rem;
+}
+
+.assessor-dashboard-overview :is(th, td):not(:first-child) {
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+}
+
+.assessor-dashboard-overview th:not(:first-child) .p-datatable-column-header-content {
+    justify-content: end;
+}
+
+.assessor-dashboard-overview small {
+    display: block;
+}
+
+.assessor-dashboard-cell {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.assessor-dashboard-cell strong {
+    font-weight: 500;
+}
+
+.assessor-dashboard-cell a {
+    width: fit-content;
+    color: var(--resident-blue-hover);
+    font-weight: 600;
+    text-underline-offset: 3px;
+}
+
+.assessor-dashboard-cell a:hover {
+    text-decoration: underline;
+}
+
+.assessor-dashboard time {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.assessor-dashboard-activity > li {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 12px;
+    border-top: 1px solid var(--resident-line);
+    padding: 9px var(--dashboard-pad);
+}
+
+.assessor-dashboard .assessor-dashboard-empty {
+    padding: 12px var(--dashboard-pad);
+    color: var(--p-surface-600);
+    border-top: 1px solid var(--resident-line);
+}
+
+.assessor-dashboard .p-datatable .assessor-dashboard-empty {
+    padding-inline: 0;
+    border-top: 0;
+}
+
+.assessor-dashboard-loading {
+    display: grid;
+    gap: 12px;
+    padding: var(--dashboard-pad);
+}
+
+.assessor-dashboard,
+.assessor-dashboard-overlay {
+    --p-focus-ring-width: 0;
+    --p-form-field-focus-ring-width: 0;
+    --p-form-field-shadow: none;
+    --p-button-focus-ring-width: 0;
+    --p-button-focus-ring-shadow: none;
+    --p-select-focus-ring-width: 0;
+    --p-select-focus-ring-shadow: none;
+    --p-inputtext-focus-ring-width: 0;
+    --p-inputtext-focus-ring-shadow: none;
+}
+
+.assessor-dashboard :is(.p-button, .p-select, .p-datepicker-input),
+.assessor-dashboard-overlay .p-button {
+    min-height: 32px;
+    border-radius: var(--resident-control, 8px);
+    font: inherit;
+}
+
+.assessor-dashboard .p-button,
+.assessor-dashboard-overlay .p-button {
+    padding: 5px 10px;
+    font-weight: 500;
+}
+
+.assessor-dashboard .p-button-icon-only {
+    width: 32px;
+    padding: 0;
+}
+
+.assessor-dashboard :is(.p-select-label, .p-datepicker-input) {
+    padding: 5px 10px;
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.assessor-dashboard :is(.p-select-dropdown, .p-datepicker-input-icon-container) {
+    width: 30px;
+}
+
+.assessor-dashboard :is(.p-select, .p-datepicker-input) {
+    box-shadow: none;
+}
+
+.assessor-dashboard .p-datepicker-input {
+    width: 100%;
+    padding-inline-end: 32px;
+}
+
+.assessor-dashboard .p-tag {
+    padding: 2px 7px;
+    font-size: 11px;
+    line-height: 16px;
+}
+
+.assessor-dashboard :focus,
+.assessor-dashboard :is(.p-select, .p-datepicker):focus-within,
+.assessor-dashboard-overlay :focus {
+    outline: none;
+    box-shadow: none;
+    transition: none;
+}
+
+.assessor-dashboard :is(.p-select.p-focus, .p-datepicker-input:focus) {
+    border-color: var(--resident-blue);
+}
+
+.assessor-dashboard .p-button:focus-visible {
+    border-color: var(--resident-blue);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.assessor-dashboard .p-button:not(.p-button-outlined, .p-button-text):focus-visible {
+    background: var(--resident-blue-hover);
+}
+
+.assessor-dashboard :is(a:not(.p-button), .p-paginator button, .p-button-outlined, .p-button-text):focus-visible {
+    background: var(--resident-wash);
+    color: var(--resident-navy);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.assessor-dashboard-overlay {
+    max-width: calc(100vw - 32px);
+    border-radius: 8px;
+    font: 400 13px/20px Roboto, Arial, sans-serif;
+}
+
+.assessor-dashboard-overlay .p-select-option-label {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.assessor-dashboard-overlay .p-select-option {
+    padding: 6px 10px;
+}
+
+.assessor-dashboard-overlay :is(.p-select-option.p-focus, .p-menu-item.p-focus .p-menu-item-content,
+.p-button:focus-visible, .p-datepicker-day:focus-visible, .p-datepicker-month:focus-visible, .p-datepicker-year:focus-visible) {
+    background: var(--p-primary-100);
+    color: var(--p-primary-900);
+}
+
+.assessor-dashboard-calendar {
+    width: 288px;
+    min-width: 0 !important;
+    padding: 10px;
+}
+
+.assessor-dashboard-calendar .p-datepicker-day {
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
+}
+
+@container (max-width: 800px) {
+    .assessor-dashboard-support {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@container (max-width: 660px) {
+    .assessor-dashboard-fields,
+    .assessor-dashboard-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .assessor-dashboard-metrics > :nth-child(3) {
+        border-inline-start: 0;
+    }
+
+    .assessor-dashboard-metrics > :nth-child(n+3) {
+        border-top: 1px solid var(--resident-line);
+    }
+
+    .assessor-dashboard-metrics > :first-child a {
+        border-end-start-radius: 0;
+    }
+
+    .assessor-dashboard-metrics > :nth-child(3) a {
+        border-end-start-radius: var(--resident-radius);
+    }
+}
+
+@container (max-width: 590px) {
+    .assessor-dashboard .assessor-dashboard-queue-table {
+        display: block;
+        min-width: 0;
+    }
+
+    .assessor-dashboard-queue-table .p-datatable-thead {
+        display: block;
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+
+    .assessor-dashboard-queue-table .p-datatable-tbody {
+        display: block;
+    }
+
+    .assessor-dashboard-queue-table .p-datatable-tbody > tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 4px 12px;
+        padding: 9px var(--dashboard-pad);
+    }
+
+    .assessor-dashboard-queue-table .p-datatable-tbody > tr + tr {
+        border-top: 1px solid var(--resident-line);
+    }
+
+    .assessor-dashboard .assessor-dashboard-queue-table .p-datatable-tbody > tr > td {
+        padding: 0;
+        border: 0;
+    }
+
+    .assessor-dashboard-queue-table .p-datatable-tbody > tr > td:nth-child(3) {
+        grid-row: 2;
+        grid-column: 2;
+        text-align: end;
+    }
+
+    .assessor-dashboard-queue-table .p-datatable-tbody > tr > td:nth-child(4) {
+        grid-row: 1;
+        grid-column: 2;
+        text-align: end;
+    }
+
+    .assessor-dashboard-queue-table .p-datatable-tbody > tr > td:last-child {
+        grid-column: 1 / -1;
+    }
+}
+
+@container (max-width: 420px) {
+    .assessor-dashboard-heading,
+    .assessor-dashboard-activity > li {
+        padding-inline: 12px;
+    }
+
+    .assessor-dashboard :is(.p-datatable-thead > tr > th, .p-datatable-tbody > tr > td),
+    .assessor-dashboard-metric {
+        padding-inline: 12px;
+    }
+
+    .assessor-dashboard-metric:where(a) {
+        padding-inline-end: 32px;
+    }
+
+    .assessor-dashboard-metric svg {
+        inset-inline-end: 10px;
+    }
+}
+
+@media (any-pointer: coarse) {
+    .assessor-dashboard :is(.p-button, .p-select, .p-datepicker-input) {
+        min-height: 44px;
+    }
+
+    .assessor-dashboard .p-button-icon-only {
+        width: 44px;
+    }
+
+    .assessor-dashboard .p-datepicker-input {
+        font-size: 16px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .assessor-dashboard .p-skeleton::after {
+        animation: none;
+    }
+}
+
+@media (forced-colors: active) {
+    .assessor-dashboard :focus-visible,
+    .assessor-dashboard .p-select:focus-within,
+    .assessor-dashboard-overlay :focus-visible {
+        outline: 2px solid Highlight;
+        outline-offset: -2px;
+    }
+}

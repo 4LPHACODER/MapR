@@ -4,6 +4,12 @@ import { useRoute, useRouter } from 'vue-router';
 import MapIcon from '../../shared/components/MapIcon.vue';
 import ResidentDetailDrawer from '../../shared/components/ResidentDetailDrawer.vue';
 import ResidentFormDialog from '../components/ResidentFormDialog.vue';
+import Button from 'primevue/button';
+import Message from 'primevue/message';
+import ResidentsSummary from '../components/residents/ResidentsSummary.vue';
+import ResidentsFilters from '../components/residents/ResidentsFilters.vue';
+import ResidentsTable from '../components/residents/ResidentsTable.vue';
+import ResidentsDialogs from '../components/residents/ResidentsDialogs.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -20,7 +26,11 @@ const error = ref('');
 const notice = ref('');
 const mapNotice = ref('');
 const selected = ref({});
-const openMenuId = ref(null);
+const actionBusy = ref(false);
+const optionsError = ref('');
+let composing = false;
+let reportsTicket = 0;
+let actionTrigger = null;
 const detail = ref(null);
 const formOpen = ref(false);
 const editing = ref(null);
@@ -47,6 +57,7 @@ const filters = reactive({
     household_id: route.query.household_id || '',
     building_id: route.query.building_id || '',
     incident_id: '',
+    report_availability: 'all',
     area_scope: route.query.area === '1',
     inclusion: '',
     quality: '',
@@ -58,20 +69,6 @@ const filters = reactive({
 const selectedList = computed(() => Object.values(selected.value));
 const selectedIds = computed(() => selectedList.value.map((row) => row.id));
 const pageRows = computed(() => page.value?.data || []);
-const pageSelected = computed(() => pageRows.value.length > 0 && pageRows.value.every((row) => selected.value[row.id]));
-const selectionHasLocation = computed(() => selectedList.value.some((row) => row.map_available));
-const rangeLabel = computed(() => {
-    const meta = page.value?.meta;
-    if (!meta?.total) return '0 residents';
-    const start = (meta.current_page - 1) * meta.per_page + 1;
-    const end = Math.min(meta.total, start + pageRows.value.length - 1);
-    return `${start}–${end} of ${meta.total}`;
-});
-function formatCount(value) {
-    if (value === null || value === undefined || value === '') return '—';
-    const number = Number(value);
-    return Number.isFinite(number) ? number.toLocaleString('en-US') : String(value);
-}
 const incidentName = computed(() => incidents.value.find((item) => String(item.id) === String(filters.incident_id))?.incident_name || '');
 const selectedBarangays = computed(() => [...new Set(selectedList.value.map((row) => row.barangay).filter(Boolean))]);
 
@@ -143,7 +140,6 @@ async function loadAreaContext() {
 
 function clearSelection() {
     selected.value = {};
-    openMenuId.value = null;
 }
 
 function showRegistered() {
@@ -198,9 +194,9 @@ function toggleRow(row) {
     selected.value = next;
 }
 
-function togglePage(event) {
+function togglePage(checked) {
     const next = { ...selected.value };
-    if (event.target.checked) pageRows.value.forEach((row) => { next[row.id] = row; });
+    if (checked) pageRows.value.forEach((row) => { next[row.id] = row; });
     else pageRows.value.forEach((row) => { delete next[row.id]; });
     selected.value = next;
 }
@@ -212,7 +208,6 @@ function goToPage(nextPage) {
 
 async function openDetail(row, event) {
     const ticket = ++detailTicket;
-    openMenuId.value = null;
     detailTrigger.value = event?.currentTarget || null;
     detail.value = {
         id: row.id,
@@ -245,14 +240,23 @@ function closeDetail() {
     nextTick(() => trigger?.focus());
 }
 
-async function startEdit(row) {
-    openMenuId.value = null;
-    editing.value = row.first_name ? row : (await window.axios.get(`${apiBase}/residents/${row.id}`)).data;
-    detail.value = null;
-    formOpen.value = true;
+async function startEdit(row, trigger) {
+    if (actionBusy.value) return;
+    actionTrigger = trigger || detailTrigger.value || document.activeElement;
+    actionBusy.value = true;
+    mapNotice.value = '';
+    try {
+        editing.value = row.first_name ? row : (await window.axios.get(`${apiBase}/residents/${row.id}`)).data;
+        detail.value = null;
+        formOpen.value = true;
+    } catch { mapNotice.value = 'Resident details could not be loaded. Try editing again.'; }
+    finally { actionBusy.value = false; }
 }
 
-function startAdd() {
+function restoreActionFocus() { nextTick(() => actionTrigger?.isConnected && actionTrigger.focus()); }
+
+function startAdd(event) {
+    actionTrigger = event?.currentTarget || document.activeElement;
     editing.value = null;
     formOpen.value = true;
 }
@@ -273,29 +277,32 @@ function onSaved() {
 }
 
 async function viewOnMap(rows) {
+    if (actionBusy.value) return;
     const list = Array.isArray(rows) ? rows : [rows];
     mapNotice.value = '';
-    const { data } = await window.axios.post(`${apiBase}/residents/map-focus`, {
-        resident_ids: list.map((row) => row.id),
-    });
-    if (data.missing) {
-        mapNotice.value = `${data.missing} selected resident${data.missing === 1 ? '' : 's'} have no usable location.`;
-    }
-    if (!data.mapped) return;
-    router.push({ path: '/map', query: { focus: 'residents' } });
+    actionBusy.value = true;
+    try {
+        const { data } = await window.axios.post(`${apiBase}/residents/map-focus`, { resident_ids: list.map((row) => row.id) });
+        if (data.missing) mapNotice.value = `${data.missing} selected resident${data.missing === 1 ? '' : 's'} have no usable location.`;
+        if (data.mapped) router.push({ path: '/map', query: { focus: 'residents' } });
+    } catch { mapNotice.value = 'The selected residents could not be shown on the map. Try again.'; }
+    finally { actionBusy.value = false; }
 }
 
-async function openReports(row) {
-    openMenuId.value = null;
+async function openReports(row, trigger) {
+    const ticket = ++reportsTicket;
+    if (!reportsOpen.value) actionTrigger = trigger || document.activeElement;
     reportsResident.value = row;
     reports.value = null;
     reportsError.value = '';
     reportsOpen.value = true;
     try {
-        reports.value = (await window.axios.get(`${apiBase}/residents/${row.id}/reports`, {
+        const data = (await window.axios.get(`${apiBase}/residents/${row.id}/reports`, {
             params: { incident_id: filters.incident_id || undefined },
         })).data;
+        if (ticket === reportsTicket) reports.value = data;
     } catch {
+        if (ticket !== reportsTicket) return;
         reportsError.value = 'Related reports could not be loaded.';
     }
 }
@@ -316,14 +323,16 @@ function openReport(item) {
     router.push({ path: item.open_path, query: { return: route.fullPath } });
 }
 
-function startArchive(row) {
-    openMenuId.value = null;
+function startArchive(row, trigger) {
+    actionTrigger = trigger || document.activeElement;
     archiveTarget.value = row;
     archiveReference.value = '';
     archiveError.value = '';
 }
 
 async function confirmArchive() {
+    if (actionBusy.value) return;
+    actionBusy.value = true;
     archiveError.value = '';
     try {
         await window.axios.post(`${apiBase}/residents/${archiveTarget.value.id}/archive`, {
@@ -338,17 +347,23 @@ async function confirmArchive() {
         reloadAll();
     } catch (exception) {
         archiveError.value = exception.response?.data?.message || 'The resident could not be archived.';
-    }
+    } finally { actionBusy.value = false; }
 }
 
 async function restoreResident(row) {
-    openMenuId.value = null;
-    await window.axios.post(`${apiBase}/residents/${row.id}/restore`);
-    notice.value = 'Resident restored.';
-    reloadAll();
+    if (actionBusy.value) return;
+    actionBusy.value = true;
+    mapNotice.value = '';
+    try {
+        await window.axios.post(`${apiBase}/residents/${row.id}/restore`);
+        notice.value = 'Resident restored.';
+        reloadAll();
+    } catch { mapNotice.value = 'The resident could not be restored. Try again.'; }
+    finally { actionBusy.value = false; }
 }
 
-function openInclusion() {
+function openInclusion(event) {
+    actionTrigger = event?.currentTarget || document.activeElement;
     inclusionError.value = '';
     inclusionForm.basis = 'manual_review';
     inclusionForm.reference = '';
@@ -357,11 +372,13 @@ function openInclusion() {
 }
 
 async function confirmInclusion(remove = false) {
+    if (actionBusy.value) return;
     inclusionError.value = '';
     if (!filters.incident_id) {
         inclusionError.value = 'An incident is required before residents can be added to the potentially affected list.';
         return;
     }
+    actionBusy.value = true;
     try {
         if (remove) {
             await window.axios.post(`${apiBase}/residents/inclusions/remove`, {
@@ -384,21 +401,43 @@ async function confirmInclusion(remove = false) {
         reloadAll();
     } catch (exception) {
         inclusionError.value = exception.response?.data?.message || 'The incident list could not be updated.';
-    }
+        if (remove) mapNotice.value = inclusionError.value;
+    } finally { actionBusy.value = false; }
 }
 
-function onDocumentClick(event) {
-    if (!event.target.closest('.residents-menu')) openMenuId.value = null;
+function updateFilters(patch) { Object.assign(filters, patch); }
+function clearRegistryScope() {
+    filters.household_id = '';
+    filters.building_id = '';
+    router.replace({ query: { ...route.query, household_id: undefined, building_id: undefined } });
 }
-
-function onKeydown(event) {
-    if (event.key !== 'Escape') return;
-    if (formOpen.value || detail.value || archiveTarget.value || inclusionOpen.value || reportsOpen.value) return;
-    openMenuId.value = null;
+function submitSearch() {
+    clearTimeout(searchTimer);
+    if (composing) return;
+    filters.page = 1;
+    reloadAll();
 }
+function onComposition(value) {
+    composing = value;
+    clearTimeout(searchTimer);
+    if (!value) searchTimer = setTimeout(submitSearch, 300);
+}
+function paginate(event) {
+    if (event.rows !== filters.per_page) filters.per_page = event.rows;
+    else goToPage(event.page + 1);
+}
+async function loadOptions() {
+    optionsError.value = '';
+    try {
+        const { data } = await window.axios.get(`${apiBase}/summary`);
+        barangays.value = data.barangays || [];
+        incidents.value = (await window.axios.get(`${apiBase}/incidents`)).data.data || [];
+    } catch { optionsError.value = 'Some filter options could not be loaded. Refresh to try again.'; }
+}
+function refresh() { loadOptions(); reloadAll(); }
 
 watch(() => filters.search, () => {
-    if (!ready.value) return;
+    if (!ready.value || composing) return;
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => {
         filters.page = 1;
@@ -421,15 +460,7 @@ watch(() => [filters.inclusion, filters.status, filters.per_page, filters.report
 });
 
 onMounted(async () => {
-    document.addEventListener('click', onDocumentClick);
-    document.addEventListener('keydown', onKeydown);
-    const summaryRes = await window.axios.get(`${apiBase}/summary`);
-    barangays.value = summaryRes.data.barangays || [];
-    try {
-        incidents.value = (await window.axios.get(`${apiBase}/incidents`)).data.data || [];
-    } catch {
-        incidents.value = [];
-    }
+    await loadOptions();
     await loadAreaContext();
     if (route.query.area === '1' || areaContext.value?.active) filters.area_scope = true;
     ready.value = true;
@@ -437,283 +468,31 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-    document.removeEventListener('click', onDocumentClick);
-    document.removeEventListener('keydown', onKeydown);
+    listTicket++;
+    summaryTicket++;
+    detailTicket++;
+    reportsTicket++;
     clearTimeout(searchTimer);
 });
 </script>
 
 <template>
-    <section class="residents-page">
-        <header class="residents-header">
-            <div>
-                <h2 class="cdrrmo-page-title">Residents</h2>
-                <p class="cdrrmo-page-lead">Manage authorized resident records and review incident-linked information.</p>
-            </div>
-            <div class="residents-header-actions">
-                <button type="button" class="mapr-button mapr-button-primary" @click="startAdd">
-                    <MapIcon name="plus" /> Add Resident
-                </button>
-                <button type="button" class="mapr-button mapr-button-secondary" @click="reloadAll">
-                    <MapIcon name="refresh" /> Refresh
-                </button>
-                <button v-if="selectionHasLocation" type="button" class="mapr-button mapr-button-secondary" @click="viewOnMap(selectedList)">
-                    <MapIcon name="pin" /> View Selected on Map
-                </button>
-            </div>
+    <section class="cdrrmo-residents" aria-labelledby="residents-title">
+        <header class="registry-page-heading">
+            <div><h2 id="residents-title">Residents</h2><p>Manage authorized resident records and review incident-linked information.</p></div>
+            <div class="registry-heading-actions"><Button label="Add Resident" size="small" @click="startAdd"><template #icon><MapIcon name="plus" /></template></Button><Button label="Refresh" size="small" severity="secondary" outlined :disabled="loading" @click="refresh"><template #icon><MapIcon name="refresh" /></template></Button></div>
         </header>
-
-        <p v-if="notice" class="residents-notice" role="status">{{ notice }}</p>
-        <p v-if="mapNotice" class="residents-warning" role="status">{{ mapNotice }}</p>
-
-        <div class="residents-summary-grid" aria-label="Resident summary">
-            <button type="button" class="cdrrmo-stat-card residents-summary-card" :class="{ 'is-active': !filters.inclusion && filters.status === 'active' }" @click="showRegistered">
-                <p><MapIcon name="users" /> Registered residents</p>
-                <strong>{{ formatCount(summary?.registered_residents) }}</strong>
-                <span class="cdrrmo-muted">Active records in this scope</span>
-            </button>
-            <article class="cdrrmo-stat-card residents-summary-card is-static">
-                <p><MapIcon name="home" /> Total household size</p>
-                <strong>{{ formatCount(summary?.total_household_size) }}</strong>
-                <span class="cdrrmo-muted">{{ summary?.household_size_partial ? `${summary.households_missing_size} households have no reported size` : 'Reported size, once per household' }}</span>
-            </article>
-            <button type="button" class="cdrrmo-stat-card residents-summary-card" :disabled="!filters.incident_id" :class="{ 'is-active': filters.inclusion === 'included' }" @click="showAffected">
-                <p><MapIcon name="pin-check" /> Potentially affected</p>
-                <strong v-if="summary?.incident_required">Select an incident</strong>
-                <strong v-else>{{ formatCount(summary?.potentially_affected) }}</strong>
-                <span class="cdrrmo-muted">Incident list, not confirmed harm</span>
-            </button>
-        </div>
-
-        <form class="cdrrmo-filters" @submit.prevent="reloadAll">
-            <select v-model="filters.incident_id" aria-label="Registry or incident">
-                <option value="">Registry view</option>
-                <option v-for="incident in incidents" :key="incident.id" :value="String(incident.id)">{{ incident.incident_name }}</option>
-            </select>
-            <select v-model="filters.barangay_id" aria-label="Barangay">
-                <option value="">All four barangays</option>
-                <option v-for="barangay in barangays" :key="barangay.id" :value="String(barangay.id)">{{ barangay.name }}</option>
-            </select>
-            <input v-model="filters.search" type="search" placeholder="Name, resident reference, or household reference" aria-label="Search residents">
-            <select v-if="filters.incident_id" v-model="filters.inclusion" aria-label="Incident inclusion">
-                <option value="">All inclusion states</option>
-                <option value="included">Potentially affected</option>
-                <option value="not_included">Not listed</option>
-            </select>
-            <select v-model="filters.report_availability" aria-label="Report availability">
-                <option value="all">All residents</option>
-                <option value="with">With reports</option>
-                <option value="without">Without reports</option>
-            </select>
-            <select v-model="filters.status" aria-label="Record status">
-                <option value="active">Active records</option>
-                <option value="inactive">Archived records</option>
-                <option value="all">Active and archived</option>
-            </select>
-            <button type="button" class="mapr-button mapr-button-secondary" @click="clearFilters">Clear filters</button>
-        </form>
-
-        <div v-if="filters.area_scope && areaContext?.active" class="cdrrmo-area-banner">
-            <div>
-                <strong>{{ areaContext.label }}</strong>
-                <p class="cdrrmo-muted">Barangays: {{ areaContext.barangays?.join(', ') || '—' }}</p>
-            </div>
-            <div class="cdrrmo-actions">
-                <router-link class="mapr-button mapr-button-secondary" to="/map">Return to map</router-link>
-                <button type="button" class="mapr-button mapr-button-secondary" @click="clearAreaFilter">Clear area filter</button>
-            </div>
-        </div>
-
-        <div v-if="selectedIds.length" class="residents-toolbar" role="region" aria-label="Selected residents">
-            <p>{{ selectedIds.length }} selected</p>
-            <div class="cdrrmo-actions">
-                <button type="button" class="mapr-button mapr-button-primary" @click="openInclusion">Add to incident list</button>
-                <button type="button" class="mapr-button mapr-button-secondary" :disabled="!filters.incident_id" @click="confirmInclusion(true)">Remove from incident list</button>
-                <button v-if="selectionHasLocation" type="button" class="mapr-button mapr-button-secondary" @click="viewOnMap(selectedList)">View Selected on Map</button>
-                <button type="button" class="mapr-button mapr-button-secondary" @click="clearSelection">Clear selection</button>
-            </div>
-            <p v-if="!filters.incident_id" class="cdrrmo-muted">An incident is required before residents can be added to the potentially affected list.</p>
-        </div>
-
-        <div v-if="loading && !page" class="residents-skeleton" aria-hidden="true">
-            <span></span><span></span><span></span><span></span><span></span><span></span>
-        </div>
-        <p v-else-if="error" class="cdrrmo-error" role="alert">{{ error }} <button type="button" class="resident-action resident-action-secondary" @click="reloadAll">Retry</button></p>
-        <p v-else-if="!pageRows.length && page?.meta?.total === 0 && !page?.meta?.registry_loaded">
-            Registry not loaded. Run <code>php artisan mapr:bootstrap-local-data</code> after migrate and seed.
-        </p>
-        <p v-else-if="!pageRows.length">No authorized resident records match these filters.</p>
-
-        <div v-else class="cdrrmo-table-wrap residents-table-wrap">
-            <table class="cdrrmo-table residents-table">
-                <thead>
-                    <tr>
-                        <th>
-                            <input :checked="pageSelected" type="checkbox" aria-label="Select this page" @change="togglePage">
-                        </th>
-                        <th>Resident</th>
-                        <th>Resident reference</th>
-                        <th>Household</th>
-                        <th>Barangay</th>
-                        <th>Reports</th>
-                        <th>Incident status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-for="row in pageRows" :key="row.id">
-                        <td>
-                            <input :checked="!!selected[row.id]" type="checkbox" :aria-label="`Select ${row.display_name}`" @change="toggleRow(row)">
-                        </td>
-                        <td>
-                            {{ row.display_name }}
-                        </td>
-                        <td>{{ row.registry_reference }}</td>
-                        <td>
-                            {{ row.household_reference || '—' }}
-                            <span class="residents-sub">{{ row.building_reference || 'No building' }}</span>
-                        </td>
-                        <td>{{ row.barangay || '—' }}</td>
-                        <td>
-                            <button type="button" class="residents-count" @click="openReports(row)">
-                                <MapIcon name="file" />
-                                {{ row.report_count === 1 ? '1 report' : (row.report_count ? `${row.report_count} reports` : 'No reports') }}
-                            </button>
-                        </td>
-                        <td>{{ filters.incident_id ? (row.potentially_affected ? 'Potentially affected' : 'Not listed') : '—' }}</td>
-                        <td>
-                            <div class="residents-actions">
-                                <button type="button" class="residents-icon-btn" title="View details" aria-label="View details" @click="openDetail(row, $event)">
-                                    <MapIcon name="eye" />
-                                </button>
-                                <button type="button" class="residents-icon-btn" title="View on map" :aria-label="row.map_available ? 'View on map' : row.map_limitation" :disabled="!row.map_available" @click="viewOnMap(row)">
-                                    <MapIcon name="pin" />
-                                </button>
-                                <button type="button" class="residents-icon-btn residents-action-secondary" title="Edit resident" aria-label="Edit resident" @click="startEdit(row)">
-                                    <MapIcon name="pencil" />
-                                </button>
-                                <button type="button" class="residents-icon-btn residents-action-secondary" title="Related reports" aria-label="Related reports" @click="openReports(row)">
-                                    <MapIcon name="file" />
-                                </button>
-                                <div class="residents-menu">
-                                    <button type="button" class="residents-icon-btn" title="More actions" aria-label="More actions" :aria-expanded="openMenuId === row.id" aria-haspopup="menu" @click.stop="openMenuId = openMenuId === row.id ? null : row.id">
-                                        <MapIcon name="more" />
-                                    </button>
-                                    <div v-if="openMenuId === row.id" class="residents-menu-panel" role="menu">
-                                        <button type="button" class="residents-menu-narrow" role="menuitem" @click="startEdit(row)">Edit resident</button>
-                                        <button type="button" class="residents-menu-narrow" role="menuitem" @click="openReports(row)">Related reports</button>
-                                        <button v-if="row.residency_status === 'active'" type="button" role="menuitem" @click="startArchive(row)">Archive Resident</button>
-                                        <button v-else type="button" role="menuitem" @click="restoreResident(row)">Restore resident</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div v-if="page?.meta?.total" class="residents-pager">
-            <span>{{ rangeLabel }}</span>
-            <label>
-                Rows
-                <select v-model.number="filters.per_page" aria-label="Rows per page">
-                    <option :value="10">10</option>
-                    <option :value="25">25</option>
-                    <option :value="50">50</option>
-                </select>
-            </label>
-            <div class="cdrrmo-actions">
-                <button type="button" class="mapr-button mapr-button-secondary" :disabled="page.meta.current_page <= 1" @click="goToPage(page.meta.current_page - 1)">Previous</button>
-                <span>Page {{ page.meta.current_page }} of {{ page.meta.last_page }}</span>
-                <button type="button" class="mapr-button mapr-button-secondary" :disabled="page.meta.current_page >= page.meta.last_page" @click="goToPage(page.meta.current_page + 1)">Next</button>
-            </div>
-        </div>
-
-        <ResidentDetailDrawer
-            :open="!!detail"
-            :resident="detail"
-            :incident-id="filters.incident_id"
-            :allow-edit="true"
-            @close="closeDetail"
-            @retry="detail && openDetail(detail)"
-            @edit="startEdit"
-            @view-map="viewOnMap"
-            @open-report="openReport"
-        />
-        <ResidentFormDialog :open="formOpen" :resident="editing" @close="formOpen = false" @saved="onSaved" />
-
-        <div v-if="archiveTarget" class="residents-dialog-backdrop">
-            <form class="residents-dialog" role="dialog" aria-modal="true" aria-labelledby="archive-title" @submit.prevent="confirmArchive">
-                <h3 id="archive-title">Archive Resident</h3>
-                <p>Archiving hides {{ archiveTarget.registry_reference }} from the active registry. The record is not deleted.</p>
-                <label>
-                    Type the resident reference to confirm
-                    <input v-model="archiveReference" required :placeholder="archiveTarget.registry_reference" autocomplete="off">
-                </label>
-                <p v-if="archiveError" class="cdrrmo-error" role="alert">{{ archiveError }}</p>
-                <div class="cdrrmo-actions">
-                    <button type="submit" class="mapr-button mapr-button-primary">Archive Resident</button>
-                    <button type="button" class="mapr-button mapr-button-secondary" @click="archiveTarget = null">Cancel</button>
-                </div>
-            </form>
-        </div>
-
-        <div v-if="inclusionOpen" class="residents-dialog-backdrop">
-            <form class="residents-dialog" role="dialog" aria-modal="true" aria-labelledby="inclusion-title" @submit.prevent="confirmInclusion(false)">
-                <h3 id="inclusion-title">Add to potentially affected list</h3>
-                <p>This list is incident-specific. It does not confirm harm or change saved estimates.</p>
-                <dl class="residents-detail-list">
-                    <div><dt>Incident</dt><dd>{{ incidentName || 'Select an incident' }}</dd></div>
-                    <div><dt>Residents</dt><dd>{{ selectedIds.length }}</dd></div>
-                    <div><dt>Barangays</dt><dd>{{ selectedBarangays.join(', ') || '—' }}</dd></div>
-                </dl>
-                <label>
-                    Basis
-                    <select v-model="inclusionForm.basis">
-                        <option value="manual_review">Manual review</option>
-                        <option value="selected_area">Selected area</option>
-                        <option value="authorized_report">Authorized report</option>
-                    </select>
-                </label>
-                <label>
-                    Reference
-                    <input v-model="inclusionForm.reference" maxlength="191">
-                </label>
-                <label>
-                    Notes
-                    <textarea v-model="inclusionForm.notes" rows="3" maxlength="1000"></textarea>
-                </label>
-                <p v-if="inclusionError" class="cdrrmo-error" role="alert">{{ inclusionError }}</p>
-                <div class="cdrrmo-actions">
-                    <button type="submit" class="mapr-button mapr-button-primary" :disabled="!filters.incident_id">Confirm inclusion</button>
-                    <button type="button" class="mapr-button mapr-button-secondary" @click="inclusionOpen = false">Cancel</button>
-                </div>
-            </form>
-        </div>
-
-        <div v-if="reportsOpen" class="residents-dialog-backdrop">
-            <div class="residents-dialog" role="dialog" aria-modal="true" aria-labelledby="reports-title">
-                <h3 id="reports-title">Related reports</h3>
-                <p class="cdrrmo-muted">{{ reportsResident?.display_name }} · {{ reportsResident?.registry_reference }}</p>
-                <p v-if="reportsError" class="cdrrmo-error" role="alert">{{ reportsError }}</p>
-                <p v-else-if="!reports">Loading related reports…</p>
-                <p v-else-if="reportsEmpty">No related reports are available for this resident.</p>
-                <template v-else>
-                    <section v-for="[label, rows] in reportGroups" :key="label">
-                        <h4>{{ label }}</h4>
-                        <ul v-if="rows.length" class="residents-history">
-                            <li v-for="item in rows" :key="item.report_reference + item.report_type">
-                                <strong>{{ item.report_reference }}</strong>
-                                <span>{{ item.report_type }} · {{ item.incident }} · {{ item.relationship }} · {{ item.status }}</span>
-                                <button v-if="item.open_path" type="button" class="mapr-button mapr-button-secondary" @click="openReport(item)">Open report</button>
-                            </li>
-                        </ul>
-                        <p v-else class="cdrrmo-muted">None in this group.</p>
-                    </section>
-                </template>
-                <button type="button" class="mapr-button mapr-button-secondary" @click="reportsOpen = false">Close</button>
-            </div>
-        </div>
+        <Message v-if="notice" severity="success" :closable="false">{{ notice }}</Message>
+        <Message v-if="mapNotice" severity="warn" :closable="false">{{ mapNotice }}</Message>
+        <ResidentsSummary :summary="summary" :inclusion="filters.inclusion" :status="filters.status" :incident-id="filters.incident_id" @registered="showRegistered" @affected="showAffected" />
+        <ResidentsFilters :model-value="filters" :incidents="incidents" :barangays="barangays" @update:model-value="updateFilters" @clear="clearFilters" @submit="submitSearch" @composition="onComposition" />
+        <Message v-if="optionsError" severity="warn" :closable="false">{{ optionsError }} <Button label="Retry" size="small" text @click="loadOptions" /></Message>
+        <div v-if="filters.household_id || filters.building_id" class="registry-scope-note"><MapIcon name="home" /><span>Showing the {{ filters.household_id ? 'household' : 'building' }} selected from the registry.</span><Button label="Clear scope" size="small" severity="secondary" text @click="clearRegistryScope" /></div>
+        <div v-if="filters.area_scope && areaContext?.active" class="registry-area-banner"><div><strong>{{ areaContext.label }}</strong><p>Barangays: {{ areaContext.barangays?.join(', ') || 'Not recorded' }}</p></div><div><Button as="router-link" to="/map" label="Return to map" size="small" severity="secondary" outlined /><Button label="Clear area filter" size="small" severity="secondary" text @click="clearAreaFilter" /></div></div>
+        <div v-if="selectedIds.length" class="registry-selection" role="region" aria-label="Selected residents"><div class="registry-selection-heading"><strong>{{ selectedIds.length }} selected</strong><Button label="Clear selection" size="small" severity="secondary" text @click="clearSelection" /></div><div class="registry-selection-actions"><Button label="Add to incident list" size="small" :disabled="actionBusy" @click="openInclusion" /><Button label="Remove from incident list" size="small" severity="secondary" outlined :disabled="!filters.incident_id || actionBusy" @click="confirmInclusion(true)" /><Button v-if="selectionHasLocation" label="View Selected on Map" size="small" severity="secondary" outlined :disabled="actionBusy" @click="viewOnMap(selectedList)"><template #icon><MapIcon name="pin" /></template></Button></div><p v-if="!filters.incident_id">An incident is required before residents can be added to the potentially affected list.</p></div>
+        <ResidentsTable :page="page" :selected="selected" :loading="loading" :error="error" :incident-id="filters.incident_id" :action-busy="actionBusy" @toggle="toggleRow" @toggle-page="togglePage" @page="paginate" @retry="reloadAll" @detail="openDetail" @edit="startEdit" @reports="openReports" @map="viewOnMap" @archive="startArchive" @restore="restoreResident" />
+        <ResidentDetailDrawer :open="!!detail" :resident="detail" :incident-id="filters.incident_id" :allow-edit="true" @close="closeDetail" @retry="detail && openDetail(detail)" @edit="startEdit" @view-map="viewOnMap" @open-report="openReport" />
+        <ResidentFormDialog :open="formOpen" :resident="editing" @close="formOpen = false" @saved="onSaved" @hide="!detail && restoreActionFocus()" />
+        <ResidentsDialogs :archive-target="archiveTarget" v-model:archive-reference="archiveReference" :archive-error="archiveError" :inclusion-open="inclusionOpen" :inclusion-form="inclusionForm" :inclusion-error="inclusionError" :incident-id="filters.incident_id" :incident-name="incidentName" :selected-count="selectedIds.length" :selected-barangays="selectedBarangays" :reports-open="reportsOpen" :reports-resident="reportsResident" :reports="reports" :reports-error="reportsError" :report-groups="reportGroups" :reports-empty="reportsEmpty" :busy="actionBusy" @close-archive="archiveTarget = null" @archive="confirmArchive" @close-inclusion="inclusionOpen = false" @inclusion="confirmInclusion(false)" @close-reports="reportsTicket++; reportsOpen = false" @retry-reports="openReports(reportsResident)" @report="openReport" @hide="restoreActionFocus" />
     </section>
 </template>

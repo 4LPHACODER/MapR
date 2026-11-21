@@ -23,9 +23,9 @@ class FieldAssessmentPreviewTest extends TestCase
     public function test_start_is_idempotent_and_preview_preserves_source_references(): void
     {
         $barangay = $this->barangay();
-        $officer = $this->member('rdana_admin_officer', 'Mark Merillo', $barangay);
+        $officer = $this->member('rdana_admin_officer', 'Test Assessor', $barangay);
         $assessor = $this->member('rdana', 'Orland Falcon', $barangay);
-        $bdrrm = $this->member('bdrrm', 'Jesnard Plaza', $barangay);
+        $bdrrm = $this->member('bdrrm', 'Test Officer', $barangay);
         $type = DB::table('disaster_types')->insertGetId([
             'name' => 'Flood',
             'created_at' => now(),
@@ -56,7 +56,7 @@ class FieldAssessmentPreviewTest extends TestCase
             'report_reference' => 'RIR-2026-SOURCE',
             'incident_description' => 'Resident reported rising floodwaters overnight.',
             'report_status' => 'accepted',
-            'resident_user_id' => $this->user('resident', 'Maricar Irizari', $barangay)->id,
+            'resident_user_id' => $this->user('resident', 'Case Rivera', $barangay)->id,
             'barangay_id' => $barangay,
             'barangay_report_id' => $report,
             'disaster_incident_id' => $incident,

@@ -948,7 +948,7 @@ class BuildingDamageAssessmentTest extends TestCase
         return $user->fresh('role');
     }
 
-    private function assessor(array $barangayIds, string $name = 'Mark Merillo'): User
+    private function assessor(array $barangayIds, string $name = 'Test Assessor'): User
     {
         $user = $this->user('rdana', $name);
         foreach ($barangayIds as $barangayId) {

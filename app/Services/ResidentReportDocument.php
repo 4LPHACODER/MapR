@@ -65,7 +65,7 @@ class ResidentReportDocument
                 'image' => $image,
                 'original_submission' => (bool) (is_array($signature) ? ($signature['original_submission'] ?? false) : false),
             ],
-            'endorsements' => $this->endorsements($row, $barangay->barangay_code ?? null),
+            'endorsements' => $this->signatories->residentOfficeEndorsements($row),
             'font_regular' => '/usr/share/fonts/google-carlito-fonts/Carlito-Regular.ttf',
             'font_bold' => '/usr/share/fonts/google-carlito-fonts/Carlito-Bold.ttf',
         ];
@@ -200,14 +200,6 @@ class ResidentReportDocument
             'summary' => 'Field assessment '.($assessment->assessment_reference ?? 'record').' is '.$assessment->assessment_status.'.',
             'finding' => $finding !== '' ? $finding : null,
         ];
-    }
-
-    /**
-     * @return list<array<string, mixed>>
-     */
-    private function endorsements(object $row, ?string $barangayCode): array
-    {
-        return $this->signatories->residentOfficeEndorsements($row, $barangayCode);
     }
 
     private function assetPath(mixed $assetId): ?string

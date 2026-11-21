@@ -664,8 +664,7 @@ class BarangayReportController extends Controller
         $hasSignature = collect($signed)->contains(fn ($signature) => $signature->signature_role === 'barangay_signer' && $signature->mechanism === 'authenticated_e_signature');
         $openFlags = collect(ReportFlagController::forSubject('barangay_report', (int) $row->id))->where('status', 'open')->count();
         $user = auth()->user();
-        $captain = config('mapr_reference.barangay_captains.'.DB::table('barangays')->where('id', $row->barangay_id)->value('barangay_code'));
-        $canSign = $user && is_string($captain) && strcasecmp(trim((string) $user->display_name), trim($captain)) === 0;
+        $canSign = $user && $this->workflow->canSignBarangay($user, $row);
         $successor = Schema::hasColumn('barangay_reports', 'supersedes_id')
             && DB::table('barangay_reports')->where('supersedes_id', $row->id)->exists();
 

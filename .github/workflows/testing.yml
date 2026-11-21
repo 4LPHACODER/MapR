@@ -19,34 +19,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: bcmath, exif, gd, intl, mbstring, pcntl, pdo_mysql, pdo_sqlite, zip
+          tools: composer:v2
+          coverage: none
+      - name: Install LibreOffice for DOCX preview tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-writer fonts-crosextra-carlito fonts-dejavu-core fonts-liberation
+          sudo mkdir -p /usr/share/fonts/google-carlito-fonts
+          sudo ln -sfn /usr/share/fonts/truetype/crosextra/Carlito-Regular.ttf /usr/share/fonts/google-carlito-fonts/Carlito-Regular.ttf
+          sudo ln -sfn /usr/share/fonts/truetype/crosextra/Carlito-Bold.ttf /usr/share/fonts/google-carlito-fonts/Carlito-Bold.ttf
+          test -x /usr/bin/soffice
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
+      - run: composer install --no-interaction --prefer-dist --no-progress
       - run: npm ci
+      - run: npm run test:map
+      - run: npm run test:pwa
       - run: npm run build
-      - name: Build development image
-        run: >-
-          docker build --file docker/Dockerfile --target development
-          --build-arg LOCAL_UID="$(id -u)" --build-arg LOCAL_GID="$(id -g)"
-          --tag mapr-ci-dev .
-      - name: Require LibreOffice so DOCX preview tests do not skip
-        run: docker run --rm --entrypoint test mapr-ci-dev -x /usr/bin/soffice
-      - name: Run PHPUnit in the development image
+      - name: Prepare environment
         run: |
-          docker run --rm --volume "$PWD:/var/www/html" mapr-ci-dev sh -ec '
-            composer install --no-interaction --prefer-dist --no-progress
-            cp .env.example .env
-            php artisan key:generate --ansi
-            composer test
-          '
+          cp .env.example .env
+          php artisan key:generate --ansi
+      - run: composer test
 
-  docker-tests:
-    name: Docker tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - run: python3 -B -m unittest discover -s tests/docker -v
-
-  images:
-    uses: ./.github/workflows/build-images.yml
+  build:
+    uses: ./.github/workflows/build.yml

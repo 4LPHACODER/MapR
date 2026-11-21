@@ -1,5 +1,6 @@
 import './bootstrap';
 import { createApp } from 'vue';
+import { installPrimeVue } from './shared/ui/installPrimeVue';
 import { createRouter, createWebHistory } from 'vue-router';
 import CdrrmoApp from './cdrrmo/App.vue';
 import DashboardPage from './cdrrmo/pages/DashboardPage.vue';
@@ -12,6 +13,10 @@ import UsersPage from './cdrrmo/pages/UsersPage.vue';
 import ActivityLogPage from './cdrrmo/pages/ActivityLogPage.vue';
 import ProfilePage from './cdrrmo/pages/ProfilePage.vue';
 import '../css/shared/workspace.css';
+import '../css/cdrrmo/dashboard.css';
+import '../css/cdrrmo/map.css';
+import '../css/cdrrmo/incidents.css';
+import '../css/cdrrmo/residents.css';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 
@@ -43,7 +48,7 @@ if (root) {
         ],
     });
 
-    createApp(CdrrmoApp, {
+    installPrimeVue(createApp(CdrrmoApp, {
         userName: root.dataset.userName || '',
         userEmail: root.dataset.userEmail || '',
         mapboxToken: root.dataset.mapboxToken || '',
@@ -52,7 +57,7 @@ if (root) {
         logoutUrl: root.dataset.logoutUrl || '/logout',
         homeUrl: root.dataset.homeUrl || '/',
         csrfToken: token || '',
-    })
+    }))
         .use(router)
         .provide('mapboxToken', root.dataset.mapboxToken || '')
         .provide('mapboxStyle', root.dataset.mapboxStyle || '')

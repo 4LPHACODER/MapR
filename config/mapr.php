@@ -2,13 +2,13 @@
 
 return [
 
-    'demo_password' => env('MAPR_DEMO_PASSWORD'),
-
-    'assessor_demo_password' => env('MAPR_ASSESSOR_DEMO_PASSWORD'),
-
-    'assessor_verifier_email' => env('MAPR_ASSESSOR_VERIFIER_EMAIL', 'mark.merillo@mapr.test'),
-
+    'assessor_verifier_email' => env('MAPR_ASSESSOR_VERIFIER_EMAIL', ''),
     'assessor_approver_email' => env('MAPR_ASSESSOR_APPROVER_EMAIL', ''),
+
+    'consolidated_signer_emails' => [
+        'noted_by' => env('MAPR_CONSOLIDATED_NOTED_BY_EMAIL', ''),
+        'approved_by' => env('MAPR_CONSOLIDATED_APPROVED_BY_EMAIL', ''),
+    ],
 
     'mapbox' => [
         'token' => env('MAPBOX_ACCESS_TOKEN'),

@@ -25,7 +25,7 @@
         "required_status_checks": [
           { "context": "Branch flow" },
           { "context": "Commit messages" },
-          { "context": "images / Build images" }
+          { "context": "build / Build application" }
         ]
       }
     }

@@ -1,8 +1,8 @@
 *.log
 .DS_Store
 .env
-.env.backup
-.env.production
+.env.*
+!.env.example
 .phpactor.json
 .phpunit.result.cache
 /.fleet
@@ -27,15 +27,10 @@ Thumbs.db
 /.claude
 /.agents
 /.ai
+/.impeccable/
 /docs/superpowers/
 TODO.md
 AGENTS.md
 CLAUDE.md
 /.superpowers/
-.env.docker
-.env.docker.production
-
-.env.docker.*
-!.env.docker.example
-!.env.docker.production.example
 /backups/

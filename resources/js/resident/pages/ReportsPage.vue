@@ -1,10 +1,13 @@
 <script setup>
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Button from 'primevue/button';
 import DatePicker from 'primevue/datepicker';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
+import Menu from 'primevue/menu';
+import Paginator from 'primevue/paginator';
+import ProgressSpinner from 'primevue/progressspinner';
 import { useConfirm } from 'primevue/useconfirm';
 import InputText from 'primevue/inputtext';
 import Message from 'primevue/message';
@@ -17,6 +20,8 @@ import { dateToIso, isoToDate } from '../../shared/ui/dates';
 
 const apiBase = inject('apiBase');
 const confirm = useConfirm();
+// Repeated filter/menu use, including keyboard activation, stays immediate.
+const instantOverlay = { transition: { css: false } };
 const route = useRoute();
 const router = useRouter();
 const reports = ref([]);
@@ -25,14 +30,26 @@ const loading = ref(true);
 const searchInput = ref('');
 const showDates = ref(false);
 const dateError = ref('');
+const datesTrigger = ref(null);
+const animateDates = ref(false);
+const dateAnimations = new WeakMap();
+const datesApplied = computed(() => Boolean(filters.value.from || filters.value.to));
 const filters = ref({ search: '', status: '', from: '', to: '' });
 const dateDraft = ref({ from: '', to: '' });
 const pendingDelete = ref(null);
 const actionMessage = ref('');
-const openReport = ref(null);
-const menuTrigger = ref(null);
-const menuEl = ref(null);
-const menuPosition = ref({ top: 0, left: 0 });
+const reportMenu = ref(null);
+const searchField = ref(null);
+const first = ref(0);
+const deleting = ref(false);
+const composing = ref(false);
+const pageReports = computed(() => reports.value.slice(first.value, first.value + 10));
+const activeReport = ref(null);
+const reportActions = computed(() => activeReport.value ? [
+    { label: 'Track Status', command: () => router.push({ path: `/reports/${activeReport.value.id}/track`, query: { ...route.query } }) },
+    ...(activeReport.value.editable ? [{ label: 'Edit', command: () => router.push(`/report/${activeReport.value.id}`) }] : []),
+    ...(activeReport.value.status === 'draft' ? [{ separator: true }, { label: 'Delete draft', class: 'reports-delete-action', command: () => chooseMenu(activeReport.value) }] : []),
+] : []);
 const statuses = [
     { value: 'all_submitted', label: 'All submitted reports' },
     { value: 'in_review', label: 'All review stages' },
@@ -119,6 +136,7 @@ async function load() {
         const response = await window.axios.get(`${apiBase}/reports`, { params: paramsFrom(route.query) });
         if (id !== requestId) return;
         reports.value = response.data.data || [];
+        first.value = Math.min(first.value, Math.max(0, Math.ceil(reports.value.length / 10) - 1) * 10);
     } catch (exception) {
         if (id !== requestId) return;
         reports.value = [];
@@ -135,6 +153,7 @@ function commitQuery() {
 
 function onSearchInput() {
     clearTimeout(searchTimer);
+    if (composing.value) return;
     searchTimer = setTimeout(() => {
         searchTimer = null;
         const next = searchInput.value.trim();
@@ -144,11 +163,94 @@ function onSearchInput() {
     }, 300);
 }
 
+function submitSearch(event) {
+    if (composing.value || event?.isComposing) return;
+    clearTimeout(searchTimer);
+    searchTimer = null;
+    filters.value.search = searchInput.value.trim();
+    commitQuery();
+}
+
+async function clearSearch() {
+    searchInput.value = '';
+    submitSearch();
+    await nextTick();
+    searchField.value?.$el?.focus();
+}
+
 function onStatusChange() {
     commitQuery();
 }
 
-function applyDates() {
+// Capture the painted frame before cancelling so fast reversals never restart.
+function prepareDateMotion(element) {
+    const height = element.getBoundingClientRect().height;
+    const opacity = height ? getComputedStyle(element).opacity : '0';
+    const running = dateAnimations.get(element);
+    if (running) {
+        running.onfinish = null;
+        running.cancel();
+        dateAnimations.delete(element);
+    }
+    element.style.height = `${height}px`;
+    element.style.opacity = opacity;
+}
+
+function transitionDates(element, done, opening) {
+    if (!animateDates.value || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        // Reduced motion keeps a brief fade, without moving the report list.
+        element.style.height = '';
+        if (!animateDates.value) {
+            element.style.opacity = '';
+            done();
+            return;
+        }
+    }
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const targetHeight = element.firstElementChild.getBoundingClientRect().height;
+    const frames = reduced
+        ? [{ opacity: element.style.opacity }, { opacity: opening ? 1 : 0 }]
+        : [{ height: element.style.height, opacity: element.style.opacity }, { height: `${opening ? targetHeight : 0}px`, opacity: opening ? 1 : 0 }];
+    const animation = element.animate(frames, {
+        duration: reduced ? 100 : opening ? 200 : 150,
+        easing: getComputedStyle(element).getPropertyValue('--resident-sidebar-ease').trim(),
+    });
+    dateAnimations.set(element, animation);
+    animation.onfinish = () => {
+        dateAnimations.delete(element);
+        element.style.height = '';
+        element.style.opacity = '';
+        done();
+    };
+}
+
+function toggleDates(event) {
+    animateDates.value = Boolean(event?.detail);
+    if (!showDates.value) {
+        dateDraft.value = { from: filters.value.from, to: filters.value.to };
+        dateError.value = '';
+    }
+    showDates.value = !showDates.value;
+}
+
+async function closeDates(event) {
+    animateDates.value = Boolean(event?.detail);
+    dateDraft.value = { from: filters.value.from, to: filters.value.to };
+    dateError.value = '';
+    showDates.value = false;
+    await nextTick();
+    datesTrigger.value?.$el?.focus();
+}
+
+function clearDates() {
+    dateDraft.value = { from: '', to: '' };
+    filters.value.from = '';
+    filters.value.to = '';
+    dateError.value = '';
+    commitQuery();
+}
+
+function applyDates(event) {
     const from = dateDraft.value.from;
     const to = dateDraft.value.to;
     if (from && to && from > to) {
@@ -159,9 +261,11 @@ function applyDates() {
     filters.value.from = from;
     filters.value.to = to;
     commitQuery();
+    closeDates(event);
 }
 
-function clearFilters() {
+function clearFilters(event) {
+    animateDates.value = Boolean(event?.detail);
     clearTimeout(searchTimer);
     searchTimer = null;
     searchInput.value = '';
@@ -188,96 +292,13 @@ function secondaryAction(report) {
     return null;
 }
 
-function menuItems(report) {
-    return [
-        report.editable
-            ? { key: 'edit', label: 'Edit', icon: 'pencil', to: `/report/${report.id}` }
-            : { key: 'edit', label: 'Edit', icon: 'pencil' },
-        { key: 'delete', label: 'Delete', icon: 'eraser', danger: true },
-        { key: 'track', label: 'Track Status', icon: 'history', to: { path: `/reports/${report.id}/track`, query: { ...route.query } } },
-    ];
+function toggleMenu(report, event) {
+    activeReport.value = report;
+    reportMenu.value.toggle(event);
 }
 
-function placeMenu(fallbackHeight = 0, fallbackWidth = 0) {
-    const button = menuTrigger.value;
-    if (!button) return;
-    const rect = button.getBoundingClientRect();
-    const menuHeight = menuEl.value?.offsetHeight || fallbackHeight;
-    const menuWidth = menuEl.value?.offsetWidth || fallbackWidth;
-    const nav = document.querySelector('.resident-bottom-nav');
-    const navVisible = nav && getComputedStyle(nav).display !== 'none';
-    const limit = navVisible ? nav.getBoundingClientRect().top : window.innerHeight;
-    let top = rect.bottom + 8;
-    if (top + menuHeight > limit - 8) top = rect.top - menuHeight - 8;
-    top = Math.max(72, top);
-    let left = rect.right - menuWidth;
-    left = Math.max(8, Math.min(left, window.innerWidth - menuWidth - 8));
-    menuPosition.value = { top, left };
-}
-
-async function toggleMenu(report, event) {
-    actionMessage.value = '';
-    if (openReport.value?.id === report.id) {
-        closeMenu(true);
-        return;
-    }
-    menuTrigger.value = event.currentTarget;
-    placeMenu(168, 220);
-    openReport.value = report;
-    await nextTick();
-    placeMenu();
-    menuEl.value?.querySelector('[role="menuitem"]')?.focus();
-}
-
-function closeMenu(restoreFocus) {
-    const trigger = menuTrigger.value;
-    openReport.value = null;
-    if (restoreFocus) trigger?.focus();
-}
-
-function onMenuKeydown(event) {
-    const items = [...(menuEl.value?.querySelectorAll('[role="menuitem"]') || [])];
-    const index = items.indexOf(document.activeElement);
-    if (event.key === 'Escape') {
-        event.preventDefault();
-        closeMenu(true);
-        return;
-    }
-    if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        items[index < 0 ? 0 : (index + 1) % items.length]?.focus();
-    } else if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        items[index < 0 ? items.length - 1 : (index - 1 + items.length) % items.length]?.focus();
-    } else if (event.key === 'Home') {
-        event.preventDefault();
-        items[0]?.focus();
-    } else if (event.key === 'End') {
-        event.preventDefault();
-        items[items.length - 1]?.focus();
-    }
-}
-
-function onPointerDown(event) {
-    if (!openReport.value) return;
-    if (menuEl.value?.contains(event.target) || menuTrigger.value?.contains(event.target)) return;
-    closeMenu(false);
-}
-
-function onViewport() {
-    if (openReport.value) placeMenu();
-}
-
-function chooseMenu(item, report) {
-    closeMenu(false);
-    if (item.key === 'edit') {
-        actionMessage.value = report.edit_message || 'Editing is unavailable while this report is under review.';
-        return;
-    }
-    if (report.status !== 'draft') {
-        actionMessage.value = 'Only a draft can be deleted.';
-        return;
-    }
+function chooseMenu(report) {
+    if (deleting.value || report.status !== 'draft') return;
     actionMessage.value = '';
     pendingDelete.value = report;
     confirm.require({
@@ -286,8 +307,8 @@ function chooseMenu(item, report) {
         acceptLabel: 'Delete draft',
         rejectLabel: 'Cancel',
         defaultFocus: 'reject',
-        acceptProps: { severity: 'danger' },
-        rejectProps: { severity: 'secondary', outlined: true },
+        acceptProps: { severity: 'danger', size: 'small' },
+        rejectProps: { severity: 'secondary', outlined: true, size: 'small' },
         accept: confirmDelete,
         reject: () => { pendingDelete.value = null; },
         onHide: () => { pendingDelete.value = null; },
@@ -298,11 +319,20 @@ async function confirmDelete() {
     const report = pendingDelete.value;
     pendingDelete.value = null;
     if (!report) return;
-    await window.axios.delete(`${apiBase}/reports/${report.id}`);
-    await load();
+    deleting.value = true;
+    try {
+        await window.axios.delete(`${apiBase}/reports/${report.id}`);
+        actionMessage.value = `Draft ${report.reference} deleted.`;
+        await load();
+    } catch (exception) {
+        actionMessage.value = exception.response?.data?.message || 'Draft could not be deleted. Try again from its actions menu.';
+    } finally {
+        deleting.value = false;
+    }
 }
 
 watch(() => JSON.stringify(readQuery(route.query)), () => {
+    first.value = 0;
     const next = readQuery(route.query);
     const datesChanged = next.from !== filters.value.from || next.to !== filters.value.to;
     filters.value = { ...next, search: searchTimer ? filters.value.search : next.search };
@@ -314,135 +344,108 @@ watch(() => JSON.stringify(readQuery(route.query)), () => {
     load();
 }, { immediate: true });
 
-onMounted(() => {
-    window.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('resize', onViewport);
-    window.addEventListener('scroll', onViewport, true);
-});
-
 onBeforeUnmount(() => {
     requestId += 1;
     clearTimeout(searchTimer);
-    window.removeEventListener('pointerdown', onPointerDown);
-    window.removeEventListener('resize', onViewport);
-    window.removeEventListener('scroll', onViewport, true);
+
 });
 </script>
 
 <template>
-    <section class="resident-reports resident-stack">
-        <header class="resident-list-head">
-            <p class="resident-lead">Search your drafts and submitted reports.</p>
-            <router-link class="resident-primary" to="/report"><MapIcon name="camera" /> New Report</router-link>
+    <section class="resident-reports resident-stack" aria-label="My reports">
+        <header class="reports-intro">
+            <div>
+                <h2>Report history</h2>
+                <p>Follow your submissions, resume drafts, and make corrections.</p>
+            </div>
+            <Button as="router-link" to="/report" size="small"><MapIcon name="plus" /> New Report</Button>
         </header>
-        <div class="resident-reports-filters">
-            <div class="resident-reports-toolbar">
-                <label class="resident-reports-search">
-                    <span>Search</span>
-                    <IconField class="resident-reports-search-field">
+
+        <div class="reports-workspace">
+            <div class="reports-toolbar">
+                <div class="reports-search">
+                    <label for="reports-search">Search reports</label>
+                    <IconField>
                         <InputIcon><MapIcon name="search" /></InputIcon>
-                        <InputText id="resident-reports-search" v-model="searchInput" type="search" placeholder="Reference or incident" @input="onSearchInput" />
+                        <InputText id="reports-search" ref="searchField" v-model="searchInput" size="small" type="search" placeholder="Reference or incident"
+                            @input="onSearchInput" @keydown.enter="submitSearch"
+                            @compositionstart="composing = true" @compositionend="composing = false; onSearchInput()" />
+                        <Button v-if="searchInput" size="small" text severity="secondary" class="reports-search-clear" aria-label="Clear search" @click="clearSearch"><MapIcon name="x" /></Button>
                     </IconField>
-                </label>
-                <div class="resident-reports-tools">
-                    <label class="resident-reports-status">
-                        <span>Status</span>
-                        <Select
-                            v-model="selectedStatus"
-                            input-id="resident-reports-status"
-                            :options="statuses"
-                            option-label="label"
-                            option-value="value"
-                            placeholder="All reports"
-                            show-clear
-                        />
-                    </label>
-                    <Button type="button" class="resident-reports-dates" :aria-expanded="showDates" aria-controls="resident-report-dates" @click="showDates = !showDates">
-                        <MapIcon name="clock" /> Dates
-                    </Button>
-                    <Button v-if="filtersActive" type="button" text class="resident-reports-clear" @click="clearFilters">Clear filters</Button>
                 </div>
+                <div class="reports-status-filter">
+                    <label for="reports-status">Status</label>
+                    <Select v-model="selectedStatus" input-id="reports-status" aria-label="Status" size="small" :options="statuses" option-label="label" option-value="value" placeholder="All reports" show-clear panel-class="reports-select-panel" :pt="instantOverlay" />
+                </div>
+                <Button ref="datesTrigger" size="small" severity="secondary" outlined :aria-expanded="showDates" aria-controls="report-dates" :class="{ 'is-active': showDates || datesApplied }" @click="toggleDates"><MapIcon name="calendar" /> {{ datesApplied ? 'Dates applied' : 'Dates' }}</Button>
+                <Button size="small" text severity="secondary" :disabled="!filtersActive" @click="clearFilters">Reset</Button>
             </div>
-            <div v-show="showDates" id="resident-report-dates" class="resident-reports-dates-panel">
-                <label for="resident-reports-from">From
-                    <DatePicker input-id="resident-reports-from" v-model="fromDate" date-format="mm/dd/yy" />
-                </label>
-                <label for="resident-reports-to">To
-                    <DatePicker input-id="resident-reports-to" v-model="toDate" date-format="mm/dd/yy" />
-                </label>
-                <Button type="button" class="resident-primary" @click="applyDates">Apply dates</Button>
-                <Message v-if="dateError" severity="error" :closable="false" class="resident-error">{{ dateError }}</Message>
-            </div>
-        </div>
-        <div v-if="loading" class="resident-reports-list" aria-hidden="true">
-            <div v-for="item in 3" :key="item" class="resident-reports-card resident-reports-skeleton"></div>
-        </div>
-        <p v-if="loading" class="resident-reports-sr">Loading reports…</p>
-        <div v-else-if="error" class="resident-reports-error">
-            <Message severity="error" :closable="false" class="resident-error">{{ error }}</Message>
-            <Button type="button" severity="secondary" variant="outlined" class="resident-secondary" @click="load">Retry</Button>
-        </div>
-        <EmptyState v-else-if="!reports.length && !queryActive" icon="file" title="No reports yet.">
-            <p>Drafts and submitted reports will show up here.</p>
-        </EmptyState>
-        <EmptyState v-else-if="!reports.length" icon="search" title="No reports match your filters.">
-            <Button type="button" severity="secondary" variant="outlined" class="resident-secondary" @click="clearFilters">Clear filters</Button>
-        </EmptyState>
-        <template v-else>
-        <Message v-if="actionMessage" severity="info" :closable="false" class="resident-reports-note" role="status">{{ actionMessage }}</Message>
-        <div class="resident-reports-list">
-            <article v-for="report in reports" :key="report.id" class="resident-card resident-reports-card">
-                <span class="resident-reports-mark" aria-hidden="true"><MapIcon name="file" /></span>
-                <div class="resident-reports-main">
-                    <div class="resident-reports-heading">
-                        <strong class="resident-reports-ref">{{ report.reference }}</strong>
-                        <StatusBadge :label="report.label" />
+            <Transition :css="false" @before-enter="prepareDateMotion" @enter="(element, done) => transitionDates(element, done, true)" @enter-cancelled="prepareDateMotion" @before-leave="prepareDateMotion" @leave="(element, done) => transitionDates(element, done, false)" @leave-cancelled="prepareDateMotion">
+                <div v-show="showDates" id="report-dates" class="reports-date-disclosure" :inert="!showDates" :aria-hidden="!showDates">
+            <section class="reports-date-panel" aria-labelledby="reports-date-title">
+                <div class="reports-date-heading">
+                    <div>
+                        <h3 id="reports-date-title">Updated date</h3>
+                        <p id="reports-date-hint">Include reports updated within this range. Use MM/DD/YYYY.</p>
                     </div>
-                    <p class="resident-reports-incident"><MapIcon name="disaster" /> <span>{{ report.incident_name || report.incident_type || 'Incident' }}</span></p>
-                    <p v-if="report.reported_location" class="resident-reports-meta"><MapIcon name="pin" /> <span>{{ report.reported_location }}</span></p>
-                    <p v-if="report.updated_at" class="resident-reports-meta"><MapIcon name="clock" /> <span>{{ formatWhen(report.updated_at) }}</span></p>
+                    <Button size="small" text severity="secondary" :disabled="!dateDraft.from && !dateDraft.to && !datesApplied" @click="clearDates">Clear dates</Button>
                 </div>
-                <div class="resident-reports-actions">
-                    <router-link class="resident-primary" :to="primaryAction(report).to">
-                        <MapIcon :name="primaryAction(report).icon" /> {{ primaryAction(report).label }}
-                    </router-link>
-                    <router-link v-if="secondaryAction(report)" class="resident-secondary" :to="secondaryAction(report).to">
-                        <MapIcon :name="secondaryAction(report).icon" /> {{ secondaryAction(report).label }}
-                    </router-link>
-                    <Button
-                        type="button"
-                        class="resident-reports-more"
-                        text
-                        rounded
-                        aria-haspopup="menu"
-                        :aria-expanded="openReport?.id === report.id"
-                        :aria-label="`More actions for ${report.reference}`"
-                        @click="toggleMenu(report, $event)"
-                    >
-                        <template #icon><MapIcon name="more" /></template>
-                    </Button>
+                <div class="reports-date-range">
+                    <div class="reports-date-field">
+                        <label for="reports-from">From</label>
+                        <DatePicker v-model="fromDate" input-id="reports-from" size="small" panel-class="reports-calendar-panel" :pt="{ ...instantOverlay, dropdown: { 'aria-label': 'Choose start date' } }" date-format="mm/dd/yy" placeholder="MM/DD/YYYY" show-icon :show-on-focus="false" show-button-bar :today-button-props="{ size: 'small', severity: 'secondary', text: true }" :clear-button-props="{ size: 'small', severity: 'secondary', text: true }" :invalid="!!dateError" :input-props="{ inputmode: 'text', enterkeyhint: 'next', 'aria-describedby': dateError ? 'reports-date-hint reports-date-error' : 'reports-date-hint' }" />
+                    </div>
+                    <span class="reports-date-separator" aria-hidden="true">–</span>
+                    <div class="reports-date-field">
+                        <label for="reports-to">To</label>
+                        <DatePicker v-model="toDate" input-id="reports-to" size="small" panel-class="reports-calendar-panel" :pt="{ ...instantOverlay, dropdown: { 'aria-label': 'Choose end date' } }" date-format="mm/dd/yy" placeholder="MM/DD/YYYY" show-icon :show-on-focus="false" show-button-bar :today-button-props="{ size: 'small', severity: 'secondary', text: true }" :clear-button-props="{ size: 'small', severity: 'secondary', text: true }" :invalid="!!dateError" :input-props="{ inputmode: 'text', enterkeyhint: 'done', 'aria-describedby': dateError ? 'reports-date-hint reports-date-error' : 'reports-date-hint' }" />
+                    </div>
+                    <div class="reports-date-actions">
+                        <Button size="small" severity="secondary" text @click="closeDates">Cancel</Button>
+                        <Button size="small" @click="applyDates">Apply dates</Button>
+                    </div>
                 </div>
-            </article>
-        </div>
-        </template>
-        <Teleport to="body">
-            <div
-                v-if="openReport"
-                ref="menuEl"
-                class="resident-reports-menu"
-                role="menu"
-                :style="{ top: `${menuPosition.top}px`, left: `${menuPosition.left}px` }"
-                @keydown="onMenuKeydown"
-            >
-                <template v-for="item in menuItems(openReport)" :key="item.key">
-                    <router-link v-if="item.to" role="menuitem" :to="item.to" @click="closeMenu(false)">
-                        <MapIcon :name="item.icon" /> {{ item.label }}
-                    </router-link>
-                    <Button v-else type="button" text role="menuitem" :class="{ 'is-danger': item.danger }" @click="chooseMenu(item, openReport)">
-                        <MapIcon :name="item.icon" /> {{ item.label }}
-                    </Button>
-                </template>
+                <Message v-if="dateError" id="reports-date-error" severity="error" :closable="false">{{ dateError }}</Message>
+            </section>
+                </div>
+            </Transition>
+            <div class="reports-list-caption">
+                <p role="status">{{ loading ? 'Loading reports…' : `${reports.length} ${reports.length === 1 ? 'report' : 'reports'}${queryActive ? ' found' : ''}` }}</p>
+                <span>Latest updated first</span>
             </div>
-        </Teleport>
+            <Message v-if="actionMessage" severity="info" :closable="false" class="reports-feedback">{{ actionMessage }}</Message>
+            <div v-if="loading" class="reports-state" role="status" aria-label="Loading reports" aria-busy="true"><ProgressSpinner style="width: 24px; height: 24px" stroke-width="4" /><p>Getting your reports…</p></div>
+            <div v-else-if="error" class="reports-state">
+                <Message severity="error" :closable="false">{{ error }}</Message>
+                <Button size="small" severity="secondary" outlined @click="load">Retry</Button>
+            </div>
+            <EmptyState v-else-if="!reports.length" :icon="queryActive ? 'search' : 'file'" :title="queryActive ? 'No matching reports' : 'Your reports start here'">
+                <p>{{ queryActive ? 'Try another reference, incident, or date range.' : 'Create a report to share what happened in your area.' }}</p>
+                <Button v-if="queryActive" size="small" severity="secondary" outlined @click="clearFilters">Clear filters</Button>
+                <Button v-else as="router-link" to="/report" size="small">New Report</Button>
+            </EmptyState>
+            <template v-else>
+                <div class="reports-column-head" aria-hidden="true"><span>Report / incident</span><span>Status</span><span>Last updated</span><span>Actions</span></div>
+                <ol class="reports-ledger" aria-label="Reports, latest updated first">
+                    <li v-for="report in pageReports" :key="report.id" class="reports-row" :class="{ 'needs-correction': report.status === 'returned' }">
+                        <div class="reports-identity">
+                            <router-link :to="viewTo(report)" class="reports-reference">{{ report.reference }}</router-link>
+                            <p class="reports-incident">{{ report.incident_name || report.incident_type || 'Incident' }}</p>
+                            <p v-if="report.reported_location" class="reports-location"><MapIcon name="pin" /><span>{{ report.reported_location }}</span></p>
+                        </div>
+                        <div class="reports-status"><StatusBadge :label="report.label" /></div>
+                        <p class="reports-updated"><span class="reports-mobile-label">Updated </span>{{ report.updated_at ? formatWhen(report.updated_at) : 'Not available' }}</p>
+                        <div class="reports-actions">
+                            <Button as="router-link" :to="secondaryAction(report)?.to || primaryAction(report).to" size="small" :severity="report.status === 'returned' || report.status === 'draft' ? 'primary' : 'secondary'" outlined>
+                                <MapIcon :name="secondaryAction(report)?.icon || primaryAction(report).icon" />{{ secondaryAction(report)?.label || primaryAction(report).label }}
+                            </Button>
+                            <Button size="small" text severity="secondary" class="reports-more" aria-haspopup="menu" aria-controls="report-actions" :aria-label="`Actions for ${report.reference}`" :disabled="deleting" @click="toggleMenu(report, $event)"><MapIcon name="more" /></Button>
+                        </div>
+                    </li>
+                </ol>
+                <footer class="reports-footer"><span>Showing {{ first + 1 }}–{{ Math.min(first + 10, reports.length) }} of {{ reports.length }}</span><Paginator v-if="reports.length > 10" v-model:first="first" :rows="10" :total-records="reports.length" template="PrevPageLink PageLinks NextPageLink" /></footer>
+            </template>
+        </div>
+        <Menu id="report-actions" ref="reportMenu" :model="reportActions" class="reports-action-menu" :pt="instantOverlay" popup />
     </section>
 </template>
