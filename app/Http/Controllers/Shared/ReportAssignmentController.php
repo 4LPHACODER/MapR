@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Shared;
 
 use App\Http\Controllers\Controller;
+use App\Models\Auth\User;
 use App\Services\ReportAssignmentService;
 use App\Services\ReportWorkflow;
 use App\Services\SignatureConfirmation;
@@ -21,9 +22,26 @@ class ReportAssignmentController extends Controller
     public function personnel(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'barangay_id' => ['required', 'integer'],
+            'barangay_id' => ['nullable', 'integer'],
             'role' => ['required', 'in:bdrrm,rdana'],
+            'summary' => ['sometimes', 'boolean'],
         ]);
+
+        if ($request->boolean('summary') && $data['role'] === 'rdana') {
+            $user = $request->user();
+            $user->loadMissing('role');
+            if (! in_array($user->role?->code, ['rdana_admin_officer', 'rdana_city_assessor'], true)) {
+                abort(403, 'You cannot manage assessor personnel.');
+            }
+            $scope = app(\App\Services\AssignmentScope::class);
+            $summary = $this->assignments->assessorSummary($scope->activeBarangayIds($user->id), 'rdana');
+
+            return response()->json(['data' => $summary['personnel'], 'summary' => $summary]);
+        }
+
+        if (empty($data['barangay_id'])) {
+            abort(422, 'A barangay is required.');
+        }
 
         return response()->json([
             'data' => $this->assignments->candidates((int) $data['barangay_id'], $data['role']),
@@ -129,7 +147,7 @@ class ReportAssignmentController extends Controller
         if ($report === null) {
             return;
         }
-        $assessor = \App\Models\Auth\User::query()->find($assigneeUserId);
+        $assessor = User::query()->find($assigneeUserId);
         if ($assessor === null) {
             return;
         }
@@ -181,10 +199,18 @@ class ReportAssignmentController extends Controller
     {
         $row = DB::table('field_assessments')->where('id', $assessment)->first();
         abort_if($row === null, 404);
-        if ($request->has('confirmed') || $request->filled('password')) {
-            $this->confirmation->assertConfirmed($request->user(), $request);
+        $this->confirmation->assertConfirmed($request->user(), $request);
+        $request->validate([
+            'use_saved_signature' => ['sometimes', 'boolean'],
+            'signature' => ['nullable', 'file'],
+        ]);
+        if (! $request->hasFile('signature') && ! $request->boolean('use_saved_signature')) {
+            abort(422, 'Draw a signature or choose your saved signature before submitting.');
         }
-        $this->workflow->submitAssessedDamage($request->user(), $row);
+        $this->workflow->submitAssessedDamage($request->user(), $row, [
+            'use_saved' => $request->boolean('use_saved_signature'),
+            'file' => $request->file('signature'),
+        ]);
 
         return response()->json(['message' => 'Assessment submitted for verification.']);
     }
@@ -193,10 +219,18 @@ class ReportAssignmentController extends Controller
     {
         $row = DB::table('field_assessments')->where('id', $assessment)->first();
         abort_if($row === null, 404);
-        if ($request->has('confirmed') || $request->filled('password')) {
-            $this->confirmation->assertConfirmed($request->user(), $request);
+        $this->confirmation->assertConfirmed($request->user(), $request);
+        $request->validate([
+            'use_saved_signature' => ['sometimes', 'boolean'],
+            'signature' => ['nullable', 'file'],
+        ]);
+        if (! $request->hasFile('signature') && ! $request->boolean('use_saved_signature')) {
+            abort(422, 'Draw a signature or choose your saved signature before verifying.');
         }
-        $this->workflow->verifyByAdminOfficer($request->user(), $row);
+        $this->workflow->verifyByAdminOfficer($request->user(), $row, [
+            'use_saved' => $request->boolean('use_saved_signature'),
+            'file' => $request->file('signature'),
+        ]);
 
         return response()->json(['message' => 'Assessment verified.']);
     }
@@ -205,12 +239,20 @@ class ReportAssignmentController extends Controller
     {
         $row = DB::table('field_assessments')->where('id', $assessment)->first();
         abort_if($row === null, 404);
-        if ($request->has('confirmed') || $request->filled('password')) {
-            $this->confirmation->assertConfirmed($request->user(), $request);
+        $this->confirmation->assertConfirmed($request->user(), $request);
+        $request->validate([
+            'use_saved_signature' => ['sometimes', 'boolean'],
+            'signature' => ['nullable', 'file'],
+        ]);
+        if (! $request->hasFile('signature') && ! $request->boolean('use_saved_signature')) {
+            abort(422, 'Draw a signature or choose your saved signature before reviewing.');
         }
-        $this->workflow->approveAndForward($request->user(), $row);
+        $this->workflow->approveAndForward($request->user(), $row, [
+            'use_saved' => $request->boolean('use_saved_signature'),
+            'file' => $request->file('signature'),
+        ]);
 
-        return response()->json(['message' => 'Assessment forwarded to CDRRMO.']);
+        return response()->json(['message' => 'Assessment reviewed and marked ready for field consolidation.']);
     }
 
     public function returnAssessment(Request $request, int $assessment): JsonResponse

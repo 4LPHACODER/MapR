@@ -51,8 +51,10 @@ class ReportController extends Controller
                 }
             });
         }
-        if ($request->filled('status')) {
-            $query->where('reports.report_status', $request->string('status'));
+        $status = (string) $request->input('status', '');
+        $summaryStatus = in_array($status, ['all_submitted', 'in_review', 'finalized'], true);
+        if ($status !== '' && ! $summaryStatus) {
+            $query->where('reports.report_status', $status);
         }
         if ($request->filled('from')) {
             $query->whereDate('reports.updated_at', '>=', $request->date('from'));
@@ -61,9 +63,16 @@ class ReportController extends Controller
             $query->whereDate('reports.updated_at', '<=', $request->date('to'));
         }
 
-        return response()->json([
-            'data' => $query->get()->map(fn ($row) => $this->reports->present($row))->values(),
-        ]);
+        $reports = $query->get()->map(fn ($row) => $this->reports->present($row));
+        if ($summaryStatus) {
+            $reports = $reports->filter(fn ($report) => match ($status) {
+                'all_submitted' => $report['status'] !== 'draft',
+                'in_review' => $report['bucket'] === 'under_review',
+                'finalized' => $report['bucket'] === 'finalized',
+            });
+        }
+
+        return response()->json(['data' => $reports->values()]);
     }
 
     public function store(Request $request): JsonResponse
@@ -100,7 +109,7 @@ class ReportController extends Controller
         $row = $this->find($report);
         abort_unless($this->policy->update($request->user(), $row), 403);
         $data = $request->validate([
-            'disaster_incident_id' => ['sometimes', 'integer'],
+            'disaster_incident_id' => ['sometimes', 'nullable', 'integer'],
             'reported_incident_type' => ['nullable', 'string', 'max:120'],
             'incident_description' => ['nullable', 'string', 'max:5000'],
             'reported_location' => ['nullable', 'string', 'max:2000'],

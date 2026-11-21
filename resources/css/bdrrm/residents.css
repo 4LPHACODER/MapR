@@ -1,0 +1,113 @@
+.barangay-residents {
+    container-name: barangay-registry;
+    gap: .875rem;
+}
+
+.barangay-residents .registry-page-heading { flex-wrap: nowrap; padding-bottom: 0; }
+.barangay-residents .registry-page-heading h2 { font-weight: 700; }
+.barangay-residents .registry-page-heading > .p-button { gap: .375rem; }
+.barangay-residents .registry-metric { min-height: 6rem; padding: .75rem .875rem; }
+.barangay-residents .registry-metric-label { color: var(--p-slate-700); }
+.barangay-residents .registry-filters { padding: .625rem .875rem .75rem; }
+.barangay-residents .registry-filter-grid { gap: .625rem; }
+.barangay-residents .registry-field { gap: .25rem; }
+.barangay-residents .registry-field .p-select:focus-within,
+.barangay-residents .registry-page-size .p-select:focus-within { border-color: var(--registry-focus); }
+.barangay-residents .registry-search > .p-button:focus-visible { border-color: var(--registry-focus); }
+
+.barangay-residents .registry-selection-heading { flex-wrap: wrap; }
+.barangay-residents .registry-table .p-datatable-table { min-width: 0; }
+.barangay-residents .registry-table .p-datatable-header-cell { padding: .625rem; }
+.barangay-residents .registry-table .p-datatable-tbody > tr > td { padding: .5rem .625rem; }
+.barangay-residents .registry-table .registry-checkbox-column { width: 2.625rem; }
+.barangay-residents .registry-table .registry-name-column { width: auto; }
+.barangay-residents .registry-table .registry-household-column { width: 17%; }
+.barangay-residents .registry-table .registry-barangay-column { width: 12%; overflow-wrap: anywhere; }
+.barangay-residents .registry-table .registry-report-column { width: 5.75rem; }
+.barangay-residents .registry-table .registry-incident-column { width: 8rem; }
+.barangay-residents .registry-table .registry-actions-column { width: 8.75rem; }
+.barangay-residents .registry-name-cell .registry-reference { white-space: normal; }
+.barangay-residents .registry-report-button.p-button { padding-inline: .125rem; }
+.barangay-residents .registry-incident-column .p-tag { white-space: normal; }
+.barangay-residents .registry-mobile-label { display: none; }
+.barangay-residents .p-checkbox-box { border-radius: .25rem; }
+.barangay-residents .registry-table-state { min-height: 13rem; }
+.barangay-residents .registry-pagination { min-height: 3.25rem; padding: .5rem .875rem; }
+.barangay-residents .registry-page-size { display: flex; align-items: center; gap: .375rem; margin-inline-end: .5rem; }
+.barangay-residents .registry-page-size .p-select { min-width: 3.5rem; }
+
+.barangay-residents-overlay.p-select-overlay { min-width: 0; transition: none; }
+.barangay-residents-overlay:is(.p-menu, .p-select-overlay) { box-shadow: 0 4px 16px rgb(15 23 42 / .1); }
+
+@container barangay-registry (width >= 57rem) {
+    .barangay-residents .registry-filter-grid {
+        grid-template-columns: repeat(2, minmax(8rem, 1fr)) minmax(13rem, 1.8fr) repeat(2, minmax(8rem, 1fr));
+    }
+
+    .barangay-residents .registry-filter-grid:has(.registry-inclusion-field) {
+        grid-template-columns: repeat(2, minmax(7rem, 1fr)) minmax(13rem, 1.6fr) repeat(3, minmax(7rem, 1fr));
+    }
+
+    .barangay-residents .registry-filter-grid :is(.registry-search-field, .registry-inclusion-field, .registry-reports-field, .registry-status-field) {
+        grid-column: auto;
+    }
+}
+
+@container barangay-registry (width < 57rem) {
+    .barangay-residents .registry-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .barangay-residents .registry-filter-grid .registry-search-field { grid-column: 1 / -1; grid-row: auto; }
+    .barangay-residents .registry-filter-grid :is(.registry-inclusion-field, .registry-reports-field, .registry-status-field) {
+        grid-column: auto;
+    }
+}
+
+@container barangay-registry (width < 44rem) {
+    .barangay-residents .registry-table :is(table, thead, tbody, td) { display: block; }
+    .barangay-residents .registry-table .p-datatable-thead > tr { display: flex; }
+    .barangay-residents .registry-table .p-datatable-header-cell:not(.registry-checkbox-column) {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+
+    .barangay-residents .registry-table .p-datatable-header-cell.registry-checkbox-column { width: 100%; }
+    .barangay-residents .registry-table .registry-checkbox-column .p-datatable-column-header-content { gap: .5rem; }
+    .barangay-residents .registry-table .p-datatable-tbody > tr {
+        display: grid;
+        grid-template-columns: auto repeat(2, minmax(0, 1fr));
+        gap: .375rem .625rem;
+        padding: .75rem;
+        border-bottom: 1px solid var(--resident-line);
+    }
+
+    .barangay-residents .registry-table .p-datatable-tbody > tr:last-child { border-bottom: 0; }
+    .barangay-residents .registry-table .p-datatable-tbody > tr > td { width: auto; min-width: 0; padding: 0; border: 0; }
+    .barangay-residents .registry-name-column { grid-column: 2 / -1; }
+    .barangay-residents .registry-table .p-datatable-tbody > tr > :is(.registry-household-column, .registry-report-column) { grid-column: 2; }
+    .barangay-residents .registry-table .registry-actions-column { grid-column: 2 / -1; }
+    .barangay-residents .registry-mobile-label { display: block; color: var(--p-slate-600); font-size: .75rem; font-weight: 500; }
+    .barangay-residents .registry-table .registry-muted { overflow-wrap: anywhere; }
+}
+
+@container barangay-registry (width < 35rem) {
+    .barangay-residents .registry-page-heading h2 { font-size: 1.25rem; line-height: 1.5rem; }
+    .barangay-residents .registry-metric { min-height: 0; }
+    .barangay-residents .registry-filter-grid :is(.registry-view-field, .registry-barangay-field) { grid-column: auto; }
+    .barangay-residents .registry-table-heading { padding-inline: .75rem; }
+    .barangay-residents .registry-pagination .p-paginator { margin: 0; }
+}
+
+@media (pointer: coarse) {
+    .barangay-residents .registry-table .registry-checkbox-column { width: 3.75rem; }
+    .barangay-residents .registry-table .registry-actions-column { width: 12.625rem; }
+    .barangay-residents .registry-pagination .p-paginator :is(.p-paginator-prev, .p-paginator-next) { width: 2.75rem; height: 2.75rem; }
+    .barangay-residents .registry-name-button.p-button { min-height: 2.75rem; }
+}
+
+@media (forced-colors: active) {
+    .barangay-residents .p-select:focus-within { outline: 1px solid Highlight !important; }
+}

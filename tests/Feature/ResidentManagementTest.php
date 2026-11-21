@@ -2,12 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\Auth\Role;
+use App\Models\Auth\User;
 use App\Models\Registry\Barangay;
 use App\Models\Registry\Building;
 use App\Models\Registry\Household;
 use App\Models\Registry\Resident;
-use App\Models\Auth\Role;
-use App\Models\Auth\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -112,6 +112,33 @@ class ResidentManagementTest extends TestCase
         $this->actingAs($this->admin)->getJson('/cdrrmo/api/residents')
             ->assertOk()
             ->assertJsonFragment(['registry_reference' => $created['registry_reference'], 'residency_status' => 'active']);
+    }
+
+    public function test_future_birth_dates_are_rejected_on_create_and_update(): void
+    {
+        $payload = [
+            'first_name' => 'Quincya',
+            'last_name' => 'Holdfast',
+            'household_id' => $this->household('HH-1')->id,
+            'record_source' => 'Authorized roster',
+            'birth_date' => now()->addDay()->toDateString(),
+        ];
+
+        $this->actingAs($this->admin)->postJson('/cdrrmo/api/residents', $payload)
+            ->assertUnprocessable()->assertJsonValidationErrors('birth_date');
+        $this->assertDatabaseCount('residents', 0);
+
+        $today = now()->toDateString();
+        $resident = $this->postJson('/cdrrmo/api/residents', [...$payload, 'birth_date' => $today])
+            ->assertCreated()->assertJsonPath('birth_date', $today)->json();
+
+        $this->patchJson('/cdrrmo/api/residents/'.$resident['id'], [
+            'updated_at' => $resident['updated_at'],
+            'reason' => 'Correct birth date',
+            'birth_date' => $payload['birth_date'],
+        ])->assertUnprocessable()->assertJsonValidationErrors('birth_date');
+        $this->getJson('/cdrrmo/api/residents/'.$resident['id'])->assertOk()
+            ->assertJsonPath('birth_date', $today);
     }
 
     public function test_inclusion_does_not_duplicate_an_active_row_or_affect_another_incident(): void
@@ -259,6 +286,10 @@ class ResidentManagementTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+        DB::table('field_assessments')->insert([
+            ['barangay_report_id' => $linked, 'assessment_reference' => 'FA-LINKED', 'assessment_status' => 'draft', 'updated_at' => now()],
+            ['barangay_report_id' => $unlinked, 'assessment_reference' => 'FA-UNLINKED', 'assessment_status' => 'draft', 'updated_at' => now()],
+        ]);
         DB::table('resident_incident_reports')->insert([
             'report_reference' => 'RES-OTHER',
             'report_status' => 'submitted',
@@ -276,10 +307,15 @@ class ResidentManagementTest extends TestCase
         $forB = $this->actingAs($this->admin)->getJson('/cdrrmo/api/residents/'.$residentB->id.'/reports')->assertOk()->json();
 
         $this->assertSame([], $forA['submitted_by_account']);
-        $this->assertSame(['BRGY-LINKED'], array_column($forA['household_or_building'], 'report_reference'));
+        $this->assertSame(['BRGY-LINKED', 'FA-LINKED'], array_column($forA['household_or_building'], 'report_reference'));
         $this->assertSame([], $forB['household_or_building']);
         $this->assertSame([], $forB['submitted_by_account']);
         $this->assertSame([], $forA['estimate_or_consolidated']);
+
+        $this->getJson('/cdrrmo/api/residents?search=CBMS22-RES-A&incident_id='.$incident)->assertOk()
+            ->assertJsonPath('data.0.report_count', 2);
+        $this->getJson('/cdrrmo/api/residents?search=CBMS22-RES-B')->assertOk()
+            ->assertJsonPath('data.0.report_count', 0);
     }
 
     public function test_report_availability_and_household_size_use_explicit_links(): void
@@ -475,6 +511,13 @@ class ResidentManagementTest extends TestCase
             $table->id();
             $table->unsignedBigInteger('barangay_report_id');
             $table->unsignedBigInteger('building_id');
+            $table->timestamps();
+        });
+        Schema::create('field_assessments', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('barangay_report_id');
+            $table->string('assessment_reference');
+            $table->string('assessment_status');
             $table->timestamps();
         });
         Schema::create('resident_incident_reports', function (Blueprint $table) {

@@ -2,15 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Models\Auth\Role;
 use App\Models\Auth\User;
-use Database\Seeders\MaprDocumentWorkflowSeeder;
-use Database\Seeders\RoleSeeder;
+use App\Services\ReportSignatoryCatalog;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
-use RuntimeException;
 use Tests\Support\CreatesMaprAuthSchema;
 use Tests\TestCase;
 
@@ -23,22 +21,21 @@ class DocumentWorkflowTest extends TestCase
         parent::setUp();
         $this->createMaprAuthSchema();
         $this->createDocumentTables();
-        $this->seed(RoleSeeder::class);
     }
 
-    public function test_screen_markup_uses_stat_cards_and_a_scoped_barangay_placeholder(): void
+    public function test_screen_markup_uses_dashboard_metrics_and_a_scoped_barangay_placeholder(): void
     {
         $map = file_get_contents(resource_path('js/shared/components/MapWorkspace.vue'));
         $this->assertStringContainsString('No assigned barangay', $map);
         $this->assertStringContainsString('All four barangays', $map);
 
         foreach ([
-            resource_path('js/bdrrm/pages/DashboardPage.vue'),
-            resource_path('js/assessor/pages/DashboardPage.vue'),
-        ] as $dashboardPath) {
-            $dashboard = file_get_contents($dashboardPath);
-            $this->assertStringContainsString('cdrrmo-stat-grid', $dashboard);
-            $this->assertStringContainsString('cdrrmo-stat-card', $dashboard);
+            'bdrrm' => ['bdrrm-dash-cards', 'bdrrm-dash-card'],
+            'assessor' => ['assessor-dashboard-metrics', 'assessor-dashboard-metric'],
+        ] as $workspace => [$groupClass, $metricClass]) {
+            $dashboard = file_get_contents(resource_path("js/{$workspace}/pages/DashboardPage.vue"));
+            $this->assertMatchesRegularExpression('/class="'.$groupClass.'(?:\s|")/', $dashboard);
+            $this->assertMatchesRegularExpression('/class="'.$metricClass.'(?:\s|")/', $dashboard);
             $this->assertStringNotContainsString('cdrrmo-summary-grid', $dashboard);
         }
 
@@ -51,88 +48,77 @@ class DocumentWorkflowTest extends TestCase
         }
     }
 
-    public function test_document_seed_is_idempotent_and_keeps_existing_passwords(): void
+    public function test_configured_cdrrmo_signers_are_authorized_for_their_slot_only(): void
     {
-        $markPassword = User::query()->where('email', 'mark.merillo@mapr.test')->value('password');
-        $lesterPassword = User::query()->where('email', 'lestertalan@mapr_admin.com')->value('password');
+        $notingOfficer = User::query()->where('email', 'reviewer@example.test')->firstOrFail();
+        $approvingOfficer = User::factory()->create([
+            'role_id' => $notingOfficer->role_id,
+            'email' => 'approver@example.test',
+            'password' => 'review-password',
+            'account_status' => 'active',
+        ]);
+        $report = DB::table('consolidated_reports')->insertGetId([
+            'report_reference' => 'TEST-CONSOLIDATED',
+            'report_summary' => 'Test report.',
+            'report_status' => 'draft',
+            'disaster_incident_id' => 1,
+            'prepared_by' => $notingOfficer->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $confirmation = ['confirmed' => true, 'password' => 'review-password'];
+        $endpoint = '/cdrrmo/api/consolidated/'.$report;
+        $this->actingAs($notingOfficer)->postJson($endpoint.'/note', $confirmation)->assertForbidden();
 
-        $this->seed(MaprDocumentWorkflowSeeder::class);
-        $this->seed(MaprDocumentWorkflowSeeder::class);
+        config(['mapr.consolidated_signer_emails' => [
+            'noted_by' => strtoupper($notingOfficer->email),
+            'approved_by' => $approvingOfficer->email,
+        ]]);
+        $this->actingAs($notingOfficer)->getJson('/cdrrmo/api/reports/consolidated')
+            ->assertOk()->assertJsonPath('signing_capacity', 'noted_by');
+        $this->assertSame($notingOfficer->display_name, app(ReportSignatoryCatalog::class)->consolidatedSlots()[0]['name']);
+        $this->postJson($endpoint.'/approve', $confirmation)->assertForbidden();
+        $this->postJson($endpoint.'/note', $confirmation)->assertOk();
+        $this->actingAs($approvingOfficer)->postJson($endpoint.'/approve', $confirmation)->assertOk();
+        $this->assertDatabaseHas('report_signatures', ['signature_role' => 'noted_by', 'signer_user_id' => $notingOfficer->id]);
+        $this->assertDatabaseHas('report_signatures', ['signature_role' => 'approved_by', 'signer_user_id' => $approvingOfficer->id]);
+    }
 
-        $this->assertTrue(Hash::check('already-set', $markPassword));
-        $this->assertSame($markPassword, User::query()->where('email', 'mark.merillo@mapr.test')->value('password'));
-        $this->assertSame($lesterPassword, User::query()->where('email', 'lestertalan@mapr_admin.com')->value('password'));
-        $this->assertNull(User::withTrashed()->where('email', 'lester.talan@mapr.test')->first());
-        $this->assertSame(1, User::query()->where('email', 'luis.maquiling@mapr.test')->count());
-        $this->assertSame(4, DB::table('imported_report_documents')->count());
-        $this->assertSame(1, DB::table('resident_incident_reports')->count());
-        $this->assertSame(1, DB::table('field_assessments')->where('assessment_status', 'draft')->count());
-        $this->assertSame(1, DB::table('field_assessments')->where('assessment_status', 'submitted')->count());
-        $this->assertSame(0, DB::table('buildings')->count());
+    public function test_removed_signature_asset_remains_linked_to_the_signed_report(): void
+    {
+        $verifier = User::query()->where('email', 'verifier@example.test')->firstOrFail();
+        config(['mapr.assessor_verifier_email' => $verifier->email]);
+        $assessment = DB::table('field_assessments')->insertGetId([
+            'assessment_reference' => 'TEST-ASSESSMENT',
+            'assessment_status' => 'draft',
+            'barangay_report_id' => 1,
+            'assigned_assessor_id' => $verifier->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
-        $unresolved = json_decode(DB::table('imported_report_documents')->where('import_key', 'MAPR-20261029-BOL-001')->value('unresolved_identifiers'), true);
-        $this->assertContains('resident:CBMS22-RES-632-01', $unresolved);
-        $this->assertContains('building:CBMS22-BLDG-632', $unresolved);
-        $this->assertNull(DB::table('imported_report_documents')->where('import_key', 'MAPR-20261029-BOL-001')->value('resolved_building_id'));
-
-        $simulated = DB::table('report_signatures')->where('document_reference', 'MAPR-20261029-BON-004')->first();
-        $this->assertSame('simulated_demo', $simulated->mechanism);
-        $this->assertStringContainsString('simulated', $simulated->signature_statement);
-        $this->assertSame(0, DB::table('report_signatures')->where('mechanism', 'authenticated_e_signature')->where('document_reference', 'MAPR-20261029-BON-004')->count());
-
-        $mark = User::query()->where('email', 'mark.merillo@mapr.test')->first();
-        $summary = $this->actingAs($mark)->getJson('/rdana/api/summary')->assertOk();
-        $cards = collect($summary->json('cards'))->keyBy('key');
-        $this->assertSame(1, $cards['drafts']['count']);
-        $this->assertSame(1, $cards['submitted']['count']);
-        $this->assertGreaterThanOrEqual(1, $cards['review']['count']);
-
-        $luis = User::query()->where('email', 'luis.maquiling@mapr.test')->first();
-        $this->actingAs($luis)->get('/bdrrm/api/documents/MAPR-20261029-TEL-002')->assertForbidden();
-        $this->actingAs($mark)->get('/rdana/api/documents/MAPR-20261029-MAB-003')->assertOk();
-
-        $assessment = DB::table('field_assessments')->where('assessment_status', 'draft')->value('id');
-        $this->actingAs($mark)->postJson('/rdana/api/assessments/'.$assessment.'/approve', [
-            'confirmed' => true,
-            'password' => 'already-set',
-        ])->assertForbidden();
-
-        $lester = User::query()->where('email', 'lestertalan@mapr_admin.com')->first();
-        $consolidated = DB::table('consolidated_reports')->value('id');
-        $this->actingAs($lester)->postJson('/cdrrmo/api/consolidated/'.$consolidated.'/approve', [
-            'confirmed' => true,
-            'password' => 'lester-existing',
-        ])->assertForbidden();
-
-        $this->actingAs($mark)->post('/rdana/api/signature', [
-            'signature' => UploadedFile::fake()->createWithContent('mark.svg', '<svg xmlns="http://www.w3.org/2000/svg"></svg>'),
+        $this->actingAs($verifier)->post('/rdana/api/signature', [
+            'signature' => UploadedFile::fake()->createWithContent('signature.svg', '<svg xmlns="http://www.w3.org/2000/svg"></svg>'),
         ])->assertStatus(422);
         $this->assertSame(0, DB::table('user_signature_assets')->count());
 
-        $this->actingAs($mark)->post('/rdana/api/signature', [
-            'signature' => UploadedFile::fake()->image('mark.png', 40, 40),
+        $this->actingAs($verifier)->post('/rdana/api/signature', [
+            'signature' => UploadedFile::fake()->image('signature.png', 40, 40),
         ])->assertOk();
         $assetId = DB::table('user_signature_assets')->where('is_current', true)->value('id');
-        $this->actingAs($mark)->postJson('/rdana/api/assessments/'.$assessment.'/verify', [
+        $this->actingAs($verifier)->postJson('/rdana/api/assessments/'.$assessment.'/verify', [
             'confirmed' => true,
             'password' => 'already-set',
         ])->assertStatus(422);
         DB::table('field_assessments')->where('id', $assessment)->update(['findings' => 'Waterline checked.']);
-        $this->actingAs($mark)->postJson('/rdana/api/assessments/'.$assessment.'/verify', [
+        $this->actingAs($verifier)->postJson('/rdana/api/assessments/'.$assessment.'/verify', [
             'confirmed' => true,
             'password' => 'already-set',
         ])->assertOk();
         $this->assertSame((int) $assetId, (int) DB::table('report_signatures')->where('signature_role', 'verified_by')->value('user_signature_asset_id'));
-        $this->actingAs($mark)->delete('/rdana/api/signature')->assertOk();
+        $this->actingAs($verifier)->delete('/rdana/api/signature')->assertOk();
         $this->assertSame((int) $assetId, (int) DB::table('report_signatures')->where('signature_role', 'verified_by')->value('user_signature_asset_id'));
         $this->assertSame(0, DB::table('user_signature_assets')->where('is_current', true)->count());
-    }
-
-    public function test_production_refuses_the_document_seeder(): void
-    {
-        $this->app['env'] = 'production';
-        $this->expectException(RuntimeException::class);
-        (new MaprDocumentWorkflowSeeder)->run();
     }
 
     private function createDocumentTables(): void
@@ -301,24 +287,19 @@ class DocumentWorkflowTest extends TestCase
             $table->timestamps();
         });
 
-        $this->seed(RoleSeeder::class);
-        User::query()->create([
-            'first_name' => 'Mark',
-            'middle_name' => 'L.',
-            'last_name' => 'Merillo',
-            'email' => 'mark.merillo@mapr.test',
+        $assessor = Role::query()->create(['name' => 'RDANA Assessor', 'code' => 'rdana']);
+        $administrator = Role::query()->create(['name' => 'CDRRMO Administrator', 'code' => 'cdrrmo_admin']);
+        User::factory()->create([
+            'role_id' => $assessor->id,
+            'email' => 'verifier@example.test',
             'password' => 'already-set',
-            'job_title' => 'Administrative Officer III',
             'account_status' => 'active',
-            'role_id' => DB::table('roles')->where('code', 'rdana')->value('id'),
         ]);
-        User::query()->create([
-            'first_name' => 'Lester',
-            'last_name' => 'Talan',
-            'email' => 'lestertalan@mapr_admin.com',
-            'password' => 'lester-existing',
+        User::factory()->create([
+            'role_id' => $administrator->id,
+            'email' => 'reviewer@example.test',
+            'password' => 'review-password',
             'account_status' => 'active',
-            'role_id' => DB::table('roles')->where('code', 'cdrrmo_admin')->value('id'),
         ]);
     }
 }

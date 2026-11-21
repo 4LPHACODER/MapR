@@ -4,11 +4,9 @@ namespace App\Http\Controllers\Cdrrmo;
 
 use App\Http\Controllers\Controller;
 use App\Models\Registry\Barangay;
-use App\Services\AreaSummaryService;
 use App\Services\PolygonSpatial;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 class AreaContextController extends Controller

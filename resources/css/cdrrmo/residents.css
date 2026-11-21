@@ -1,0 +1,294 @@
+/* Residents owns its indigo variant; the shared workspace keeps its civic blue. */
+.cdrrmo-residents,
+.cdrrmo-residents-overlay {
+    --registry-primary: var(--p-indigo-600);
+    --registry-primary-hover: var(--p-indigo-700);
+    --registry-wash: var(--p-indigo-50);
+    --registry-focus: var(--p-indigo-400);
+    --p-primary-color: var(--registry-primary);
+    --p-primary-hover-color: var(--registry-primary-hover);
+    --p-primary-active-color: var(--p-indigo-800);
+    --p-highlight-background: var(--registry-wash);
+    --p-highlight-color: var(--p-indigo-900);
+    --p-highlight-focus-background: var(--p-indigo-100);
+    --p-highlight-focus-color: var(--p-indigo-900);
+    --p-button-primary-background: var(--registry-primary);
+    --p-button-primary-border-color: var(--registry-primary);
+    --p-button-primary-hover-background: var(--registry-primary-hover);
+    --p-button-primary-hover-border-color: var(--registry-primary-hover);
+    --p-button-primary-active-background: var(--p-indigo-800);
+    --p-button-primary-active-border-color: var(--p-indigo-800);
+    --p-select-option-selected-background: var(--registry-wash);
+    --p-select-option-selected-color: var(--p-indigo-900);
+    --p-select-option-selected-focus-background: var(--p-indigo-100);
+    --p-select-option-selected-focus-color: var(--p-indigo-900);
+    --p-checkbox-checked-background: var(--registry-primary);
+    --p-checkbox-checked-border-color: var(--registry-primary);
+    --p-checkbox-checked-hover-background: var(--registry-primary-hover);
+    --p-checkbox-checked-hover-border-color: var(--registry-primary-hover);
+    --p-datepicker-date-selected-background: var(--registry-primary);
+    --p-datepicker-date-selected-color: white;
+    --p-focus-ring-width: 0;
+    --p-focus-ring-shadow: none;
+    --p-form-field-focus-ring-width: 0;
+    --p-form-field-focus-ring-shadow: none;
+    --p-inputtext-focus-ring-width: 0;
+    --p-inputtext-focus-ring-shadow: none;
+    --p-select-focus-ring-width: 0;
+    --p-select-focus-ring-shadow: none;
+    --p-textarea-focus-ring-width: 0;
+    --p-textarea-focus-ring-shadow: none;
+    --p-checkbox-focus-ring-width: 0;
+    --p-checkbox-focus-ring-shadow: none;
+    --p-button-focus-ring-width: 0;
+    --p-button-focus-ring-shadow: none;
+    font: 400 13px/20px Roboto, Arial, sans-serif;
+    color: var(--p-surface-900);
+    caret-color: var(--registry-primary);
+}
+.cdrrmo-residents { display: grid; min-width: 0; gap: 16px; container-type: inline-size; }
+.cdrrmo-residents :is(h2, h3, h4, p), .cdrrmo-residents-overlay :is(h3, h4, p) { margin: 0; }
+.cdrrmo-residents .cdrrmo-icon, .cdrrmo-residents-overlay .cdrrmo-icon { width: 16px; height: 16px; flex-shrink: 0; }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) ::selection { background: var(--p-indigo-100); color: var(--p-indigo-950); }
+.registry-page-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding-bottom: 4px; }
+.registry-page-heading h2 { font-size: 24px; line-height: 32px; letter-spacing: -0.4px; font-weight: 600; }
+.registry-page-heading p { margin-top: 4px; color: var(--p-surface-600); }
+.registry-heading-actions { display: flex; flex-shrink: 0; flex-wrap: wrap; gap: 8px; }
+.registry-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.registry-metric { display: grid; align-content: start; gap: 6px; min-width: 0; min-height: 108px; margin: 0; padding: 14px 16px; border: 1px solid var(--resident-line); border-radius: var(--resident-radius); background: var(--resident-card); color: inherit; font: inherit; text-align: left; }
+button.registry-metric { cursor: pointer; }
+button.registry-metric:hover:not(:disabled) { border-color: var(--p-indigo-200); background: var(--registry-wash); }
+button.registry-metric:active:not(:disabled) { background: var(--p-indigo-100); }
+button.registry-metric:disabled { cursor: default; }
+.registry-metric.is-selected { border-color: var(--p-indigo-200); background: var(--registry-wash); }
+.registry-metric-label { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; color: var(--p-surface-600); }
+.registry-metric-label .cdrrmo-icon { color: var(--registry-primary); }
+.registry-metric strong { font-size: 24px; line-height: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.registry-metric strong.registry-metric-prompt { font-size: 16px; line-height: 28px; font-weight: 500; }
+.registry-metric-note { font-size: 12px; line-height: 18px; color: var(--p-surface-600); }
+.registry-filters, .registry-table-panel { min-width: 0; border: 1px solid var(--resident-line); border-radius: var(--resident-radius); background: var(--resident-card); }
+.registry-filters { padding: 12px 16px 16px; }
+.registry-section-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+.registry-section-heading h3 { display: flex; align-items: center; gap: 8px; font-size: 14px; line-height: 22px; font-weight: 600; }
+.registry-section-heading > span { font-size: 12px; color: var(--p-surface-600); }
+.registry-filter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 8px; }
+.registry-search-field { grid-column: span 2; }
+.registry-filter-grid:not(:has(.registry-inclusion-field)) :is(.registry-reports-field, .registry-status-field) { grid-column: span 2; }
+.registry-filter-grid:has(.registry-inclusion-field) .registry-status-field { grid-column: span 2; }
+.registry-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.registry-field > label { font-size: 12px; line-height: 18px; font-weight: 500; color: var(--p-surface-600); }
+.registry-field > :is(.p-select, .p-inputtext, .p-datepicker, .p-textarea) { width: 100%; min-width: 0; }
+.registry-field .p-datepicker-input { width: 100%; min-width: 0; }
+.registry-field .p-datepicker { display: flex; }
+.registry-search { position: relative; display: flex; align-items: center; min-width: 0; }
+.registry-search > .cdrrmo-icon { position: absolute; left: 10px; color: var(--p-surface-500); pointer-events: none; }
+.registry-search > .p-inputtext { width: 100%; }
+.registry-search > .p-button { position: absolute; right: 3px; }
+.registry-table-panel { overflow: hidden; }
+.registry-table-heading { padding: 12px 16px; border-bottom: 1px solid var(--resident-line); }
+.registry-table { font-size: 13px; }
+.registry-table .p-datatable-table-container { overflow-x: auto; }
+.registry-table .p-datatable-table { width: 100%; min-width: 1020px; table-layout: fixed; }
+.registry-table .p-datatable-header-cell { padding: 9px 12px; background: var(--p-surface-50); border-color: var(--resident-line); font-size: 12px; color: var(--p-surface-600); }
+.registry-table .p-datatable-column-title { font-weight: 500; }
+.registry-table .p-datatable-tbody > tr > td { padding: 10px 12px; vertical-align: middle; border-color: var(--p-surface-100); }
+.registry-table .p-datatable-tbody > tr:last-child > td { border-bottom: 0; }
+.registry-table .p-datatable-tbody > tr:hover { background: var(--p-surface-50); }
+.registry-table .p-datatable-tbody > tr:has(.p-checkbox-checked) { background: var(--registry-wash); }
+.registry-table .registry-checkbox-column { width: 44px; padding-left: 16px; padding-right: 8px; }
+.registry-table .registry-name-column { width: 24%; }
+.registry-table .registry-household-column { width: 19%; }
+.registry-table .registry-barangay-column { width: 11%; }
+.registry-table .registry-report-column { width: 112px; }
+.registry-table .registry-incident-column { width: 140px; }
+.registry-table .registry-actions-column { width: 140px; }
+.registry-name-cell, .registry-household-cell { display: grid; justify-items: start; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.registry-reference, .registry-household-cell small { font-size: 12px; line-height: 18px; color: var(--p-surface-600); font-variant-numeric: tabular-nums; }
+.registry-name-cell .registry-reference { white-space: nowrap; }
+.registry-household-cell > span { font-size: 12px; font-variant-numeric: tabular-nums; }
+.registry-muted { color: var(--p-surface-600); font-size: 12px; }
+.registry-row-actions { display: flex; align-items: center; gap: 2px; }
+.registry-action-hint { display: inline-flex; }
+.registry-pagination { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 10px 16px; min-height: 54px; border-top: 1px solid var(--resident-line); color: var(--p-surface-600); font-size: 12px; font-variant-numeric: tabular-nums; }
+.registry-pagination .p-paginator { gap: 4px; padding: 0; font: inherit; }
+.registry-pagination .p-paginator-current { min-width: 64px; text-align: center; }
+.registry-pagination .p-paginator :is(.p-paginator-prev, .p-paginator-next) { width: 32px; height: 32px; border-radius: var(--resident-control); }
+.registry-pagination .p-select { min-width: 66px; }
+.registry-pagination nav[inert] { opacity: 0.5; }
+.registry-table-state { display: grid; justify-items: center; align-content: center; gap: 10px; min-height: 260px; padding: 28px 20px; text-align: center; }
+.registry-table-state > .cdrrmo-icon { width: 24px; height: 24px; color: var(--p-surface-500); }
+.registry-table-state h4 { font-size: 14px; font-weight: 600; }
+.registry-table-state p { max-width: 55ch; color: var(--p-surface-600); }
+.registry-table-state .p-button { margin-top: 4px; }
+.registry-table-skeleton { padding: 12px 16px; }
+.registry-table-skeleton > div { display: flex; align-items: center; justify-content: space-between; min-height: 54px; gap: 16px; border-bottom: 1px solid var(--p-surface-100); }
+.registry-selection, .registry-area-banner, .registry-scope-note { border: 1px solid var(--p-indigo-200); border-radius: var(--resident-radius); background: var(--registry-wash); padding: 12px 16px; }
+.registry-selection { display: grid; gap: 8px; }
+.registry-selection-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.registry-selection-heading strong { color: var(--p-indigo-900); font-size: 13px; }
+.registry-selection-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.registry-selection > p { color: var(--p-indigo-900); font-size: 12px; }
+.registry-area-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.registry-area-banner > div:last-child { display: flex; flex-wrap: wrap; gap: 8px; }
+.registry-area-banner p { font-size: 12px; color: var(--p-indigo-900); }
+.registry-scope-note { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; }
+.registry-scope-note .p-button { margin-left: auto; }
+
+/* Small controls, including their portaled menus and calendars. */
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) .p-button { min-height: 32px; padding: 5px 10px; border-radius: 8px; font: 500 13px/20px Roboto, Arial, sans-serif; white-space: nowrap; cursor: pointer; }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) .p-button:disabled { cursor: default; }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) :is(.p-inputtext, .p-select, .p-textarea) { min-height: 32px; border-radius: 8px; font: 400 13px/20px Roboto, Arial, sans-serif; box-shadow: none; }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) .p-inputtext { padding: 5px 10px; }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) .p-select-label { padding: 5px 10px; font-size: 13px; line-height: 20px; }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) .p-select-dropdown { width: 28px; }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) .p-select:not(.p-disabled) { cursor: pointer; }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) .p-button:is(.p-button-text, .p-button-outlined):not(.p-button-danger) { color: var(--p-surface-700); }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) .p-button:is(.p-button-text, .p-button-outlined):not(.p-button-danger):not(:disabled):hover { background: var(--registry-wash); color: var(--registry-primary-hover); }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) .p-textarea { padding: 8px 10px; min-height: 80px; resize: none; }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) .p-tag { font-size: 11px; line-height: 16px; padding: 2px 6px; font-weight: 500; }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) :focus { outline: none !important; box-shadow: none !important; }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) :is(.p-select, .p-inputtext, .p-datepicker, .p-textarea, .p-checkbox-box, .p-button) { outline: none !important; box-shadow: none !important; }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) :is(.p-inputtext:focus, .p-textarea:focus, .p-select.p-focus) { border-color: var(--registry-focus); }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) :is(.p-inputtext, .p-select, .p-textarea).p-invalid { border-color: var(--p-red-600); }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) .p-button:focus-visible { border-color: var(--registry-focus); text-decoration: underline; text-underline-offset: 3px; }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) .p-button:is(.p-button-text, .p-button-outlined):focus-visible { background: var(--registry-wash); }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) .p-button:not(.p-button-text):not(.p-button-outlined):not(.p-button-danger):focus-visible { background: var(--registry-primary-hover); }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) .p-checkbox:has(:focus-visible) .p-checkbox-box { border-color: var(--registry-primary); background: var(--registry-wash); }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) .p-checkbox.p-checkbox-checked:has(:focus-visible) .p-checkbox-box { background: var(--registry-primary-hover); }
+.cdrrmo-residents .registry-metric:focus-visible { border-color: var(--registry-focus); background: var(--registry-wash); }
+.cdrrmo-residents .registry-pagination button:focus-visible { background: var(--registry-wash); color: var(--registry-primary-hover); }
+.cdrrmo-residents .registry-name-button.p-button { justify-content: flex-start; min-height: 0; padding: 0; max-width: 100%; border: 0; border-radius: 0; color: var(--p-surface-900); font-weight: 600; text-align: left; }
+.cdrrmo-residents .registry-name-button .p-button-label { white-space: normal; overflow-wrap: anywhere; }
+.cdrrmo-residents .registry-name-button.p-button:hover { color: var(--registry-primary-hover); background: transparent; text-decoration: underline; text-underline-offset: 3px; }
+.cdrrmo-residents .registry-report-button.p-button { padding: 3px 0; min-height: 28px; font-size: 12px; }
+.registry-report-button .cdrrmo-icon { width: 14px; height: 14px; }
+.cdrrmo-residents .registry-row-actions .p-button { width: 28px; min-height: 28px; padding: 6px; }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) .registry-search > .p-inputtext { padding-left: 34px; padding-right: 34px; }
+:is(.cdrrmo-residents, .cdrrmo-residents-overlay) .registry-search > .p-button { width: 26px; min-height: 26px; padding: 4px; }
+.cdrrmo-residents-overlay.p-select-overlay { width: 0; max-width: calc(100vw - 32px); border-radius: 8px; }
+.cdrrmo-residents-overlay .p-select-option { padding: 7px 10px; font-size: 13px; }
+.cdrrmo-residents-overlay .p-select-option-label { white-space: normal; overflow-wrap: anywhere; }
+.cdrrmo-residents-overlay .p-select-option.p-focus, .cdrrmo-residents-overlay .p-menu-item.p-focus > .p-menu-item-content { background: var(--registry-wash); color: var(--p-indigo-900); }
+.registry-action-menu.p-menu { min-width: 180px; border-radius: 8px; }
+.registry-action-menu .p-menu-item-link { padding: 8px 10px; }
+.registry-action-menu .p-menu-item-content { border-radius: 8px; }
+.registry-action-menu .registry-danger-action .p-menu-item-link { color: var(--p-red-700); }
+.registry-action-menu .registry-danger-action .p-menu-item-content:hover { background: var(--p-red-50); }
+.registry-calendar.p-datepicker-panel { min-width: 0 !important; width: 288px; border-radius: 8px; padding: 10px; }
+.registry-calendar .p-datepicker-day { width: 28px; height: 28px; font-size: 12px; }
+.registry-calendar .p-datepicker-header { padding: 0 0 8px; }
+.registry-calendar :is(.p-datepicker-select-month, .p-datepicker-select-year) { font-size: 13px; }
+.registry-calendar :is(button, .p-datepicker-day):focus-visible { background: var(--registry-wash); color: var(--p-indigo-900); }
+
+/* Dialog bodies scroll; footer actions stay visible. */
+.registry-dialog.p-dialog { width: min(460px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); border-radius: 8px; }
+.registry-form-dialog.p-dialog { width: min(600px, calc(100vw - 32px)); }
+.registry-reports-dialog.p-dialog { width: min(560px, calc(100vw - 32px)); }
+.cdrrmo-residents-overlay .p-dialog-header { padding: 16px 20px; gap: 12px; }
+.cdrrmo-residents-overlay .p-dialog-title { font-size: 18px; line-height: 26px; font-weight: 600; }
+.cdrrmo-residents-overlay .p-dialog-header-actions { flex-shrink: 0; }
+.cdrrmo-residents-overlay .p-dialog-content { padding: 0 20px 20px; }
+.cdrrmo-residents-overlay .p-dialog-footer { padding: 12px 20px; border-top: 1px solid var(--p-content-border-color); gap: 8px; flex-wrap: wrap; }
+.cdrrmo-residents-overlay .p-dialog-close-button { width: 32px; height: 32px; }
+.registry-dialog-form { display: grid; gap: 16px; }
+.registry-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.registry-field-wide { grid-column: 1 / -1; }
+.registry-optional { font-weight: 400; }
+.registry-field-error { font-size: 12px; line-height: 18px; color: var(--p-red-700); }
+.registry-dialog-facts { display: grid; gap: 8px; margin: 0; padding: 12px 0; border-block: 1px solid var(--p-content-border-color); }
+.registry-dialog-facts > div { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 12px; }
+.registry-dialog-facts dt { font-size: 12px; color: var(--p-surface-600); }
+.registry-dialog-facts dd { margin: 0; overflow-wrap: anywhere; }
+.registry-household-options { list-style: none; padding: 0; margin: 0; max-height: 180px; overflow: auto; border: 1px solid var(--p-content-border-color); border-radius: 8px; }
+.registry-household-options li + li { border-top: 1px solid var(--p-content-border-color); }
+.registry-household-options .p-button { justify-content: space-between; width: 100%; padding: 8px 10px; text-align: left; white-space: normal; }
+.registry-household-options small { display: block; margin-top: 2px; color: var(--p-surface-600); font-size: 12px; }
+.registry-household-options .p-button[aria-pressed="true"] { background: var(--registry-wash); }
+.registry-household-selected { display: flex; align-items: flex-start; gap: 8px; color: var(--p-indigo-900); font-size: 12px; overflow-wrap: anywhere; }
+.registry-household-selected .cdrrmo-icon { margin-top: 2px; }
+.registry-duplicate-note { display: grid; justify-items: start; gap: 8px; padding: 12px; border: 1px solid var(--p-amber-200); border-radius: 8px; background: var(--p-amber-50); }
+.registry-duplicate-note ul { padding-left: 20px; margin: 0; }
+.registry-report-identity { display: grid; gap: 4px; }
+.registry-report-loading { display: grid; gap: 12px; }
+.registry-report-group { display: grid; gap: 8px; }
+.registry-report-group h4 { font-size: 14px; line-height: 22px; font-weight: 600; }
+.registry-report-group ul { list-style: none; padding: 0; margin: 0; }
+.registry-report-group li { display: grid; justify-items: start; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--p-content-border-color); overflow-wrap: anywhere; }
+.registry-report-group li > span { color: var(--p-surface-600); font-size: 12px; }
+
+/* The shared detail drawer inherits this variant only inside Residents. */
+.cdrrmo-residents .residents-drawer { width: min(500px, 100vw); font: inherit; box-shadow: none; }
+.cdrrmo-residents :is(.resident-drawer-header, .resident-drawer-footer) { padding: 16px 20px; gap: 8px; }
+.cdrrmo-residents .resident-drawer-body { padding: 16px 20px; }
+.cdrrmo-residents .resident-drawer-title h3 { font-size: 16px; line-height: 24px; }
+.cdrrmo-residents .resident-drawer-title p { font-size: 12px; }
+.cdrrmo-residents .resident-avatar { width: 32px; height: 32px; background: var(--registry-wash); color: var(--registry-primary-hover); font-size: 12px; }
+.cdrrmo-residents .resident-status { font-size: 11px; font-weight: 500; }
+.cdrrmo-residents .resident-close { width: 28px; height: 28px; border: 0; }
+.cdrrmo-residents .resident-tabs { gap: 4px; margin-bottom: 16px; }
+.cdrrmo-residents .resident-tabs button { padding: 6px 10px; font-size: 13px; font-weight: 500; }
+.cdrrmo-residents .resident-tabs button[aria-selected="true"] { background: var(--registry-wash); color: var(--registry-primary-hover); }
+.cdrrmo-residents .resident-section { gap: 12px; }
+.cdrrmo-residents .resident-section h4 { font-size: 14px; line-height: 22px; }
+.cdrrmo-residents .resident-fields { gap: 12px; }
+.cdrrmo-residents dl.resident-fields > div { grid-template-columns: 140px minmax(0, 1fr); }
+.cdrrmo-residents .resident-fields dt { font-size: 12px; }
+.cdrrmo-residents .resident-action { height: 32px; min-height: 32px; max-height: none; padding: 5px 10px; font: 500 13px/20px Roboto, Arial, sans-serif; }
+.cdrrmo-residents .resident-action-primary { background: var(--registry-primary); }
+.cdrrmo-residents .resident-action-primary:hover { background: var(--registry-primary-hover); }
+.cdrrmo-residents .resident-action-secondary { color: var(--p-surface-700); }
+.cdrrmo-residents .resident-report-link { color: var(--registry-primary-hover); font-size: 13px; font-weight: 500; }
+.cdrrmo-residents .resident-metrics article { padding: 10px; border-radius: 8px; }
+.cdrrmo-residents .resident-metrics .cdrrmo-icon { color: var(--registry-primary); }
+.cdrrmo-residents :is(.resident-action, .resident-close, .resident-tabs button, .resident-report-link, .resident-source summary):focus-visible { border-color: var(--registry-focus); background: var(--registry-wash); color: var(--registry-primary-hover); text-decoration: underline; text-underline-offset: 3px; }
+
+@container (max-width: 900px) {
+    .registry-page-heading { flex-wrap: wrap; }
+    .registry-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .registry-search-field { grid-column: 1 / -1; grid-row: 1; }
+    .registry-filter-grid:not(:has(.registry-inclusion-field)) :is(.registry-reports-field, .registry-status-field), .registry-filter-grid:has(.registry-inclusion-field) .registry-status-field { grid-column: auto; }
+}
+@container (max-width: 560px) {
+    .registry-summary { grid-template-columns: 1fr; gap: 8px; }
+    .registry-metric { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; min-height: 0; padding: 12px 14px; }
+    .registry-metric-label { grid-column: 1; }
+    .registry-metric strong { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-size: 22px; }
+    .registry-metric strong.registry-metric-prompt { max-width: 108px; font-size: 13px; line-height: 18px; text-align: right; }
+    .registry-metric-note { grid-column: 1; }
+    .registry-filters { padding: 10px 12px 12px; }
+    .registry-filter-grid { gap: 10px; }
+    .registry-view-field { grid-column: 1 / -1; }
+    .registry-search-field { grid-row: auto; }
+    .registry-barangay-field { grid-column: 1 / -1; }
+    .registry-pagination { padding-inline: 12px; }
+    .registry-pagination .p-paginator { margin-left: auto; }
+    .registry-selection, .registry-area-banner { padding: 10px 12px; }
+}
+@media (max-width: 560px) {
+    .registry-form-grid { grid-template-columns: 1fr; }
+    .cdrrmo-residents-overlay .p-dialog-header, .cdrrmo-residents-overlay .p-dialog-footer { padding: 12px 16px; }
+    .cdrrmo-residents-overlay .p-dialog-content { padding: 0 16px 16px; }
+    .cdrrmo-residents dl.resident-fields > div { grid-template-columns: 1fr; gap: 4px; }
+    .cdrrmo-residents .resident-drawer-header { flex-wrap: wrap; }
+    .cdrrmo-residents .resident-drawer-footer .resident-action { width: auto; }
+}
+@media (pointer: coarse) {
+    :is(.cdrrmo-residents, .cdrrmo-residents-overlay) :is(.p-button, .p-inputtext, .p-select) { min-height: 44px; }
+    :is(.cdrrmo-residents, .cdrrmo-residents-overlay) :is(.p-inputtext, .p-textarea) { font-size: 16px; }
+    .cdrrmo-residents .registry-row-actions .p-button { min-height: 44px; width: 44px; }
+    .registry-table .registry-actions-column { width: 208px; }
+    .registry-table .registry-checkbox-column { width: 60px; }
+    .registry-table .p-checkbox { width: 44px; height: 44px; align-items: center; justify-content: center; }
+    .cdrrmo-residents .registry-name-button.p-button { min-height: 44px; }
+    .cdrrmo-residents .registry-report-button.p-button { min-height: 44px; }
+    :is(.cdrrmo-residents, .cdrrmo-residents-overlay) .registry-search > .p-button { min-height: 40px; width: 40px; right: 2px; }
+    :is(.cdrrmo-residents, .cdrrmo-residents-overlay) .registry-search > .p-inputtext { padding-right: 46px; }
+    .cdrrmo-residents :is(.resident-action, .resident-close, .resident-tabs button) { min-height: 44px; }
+    .registry-calendar .p-datepicker-day { width: 36px; height: 36px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .cdrrmo-residents *, .cdrrmo-residents-overlay, .cdrrmo-residents-overlay * { transition: none !important; }
+}
+@media (forced-colors: active) {
+    :is(.cdrrmo-residents, .cdrrmo-residents-overlay) :focus-visible { outline: 2px solid Highlight !important; outline-offset: -2px; }
+}

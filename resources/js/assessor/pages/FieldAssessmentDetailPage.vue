@@ -34,6 +34,7 @@ const returnReason = ref('');
 const resolution = ref('');
 const signOpen = ref(false);
 const signMode = ref('submit-assessed');
+const documentNonce = ref(0);
 const signaturesOpen = ref(false);
 const historyOpen = ref(false);
 const reviewOpen = ref(false);
@@ -52,12 +53,12 @@ const editForm = reactive({
 const assessmentId = computed(() => (route.params.id ? String(route.params.id) : ''));
 const documentUrl = computed(() => (
     assessmentId.value
-        ? `/rdana/assessments/${assessmentId.value}/preview?format=pdf&inline=1`
+        ? `/rdana/assessments/${assessmentId.value}/preview?format=pdf&inline=1&v=${documentNonce.value}`
         : ''
 ));
 const downloadUrl = computed(() => (
     assessmentId.value
-        ? `/rdana/assessments/${assessmentId.value}/preview?format=pdf`
+        ? `/rdana/assessments/${assessmentId.value}/preview?format=pdf&v=${documentNonce.value}`
         : ''
 ));
 const statusLabel = computed(() => assessment.value?.label || '—');
@@ -70,7 +71,7 @@ const canSign = computed(() => canSubmitAssessed.value || canVerifyOfficer.value
 const signLabel = computed(() => {
     if (canSubmitAssessed.value) return 'Review & Sign Assessment';
     if (canVerifyOfficer.value) return 'Verify and Sign';
-    if (canForwardCity.value) return 'Note and Sign';
+    if (canForwardCity.value) return 'Review Report';
     return 'Review & Sign';
 });
 const openFlags = computed(() => Number(assessment.value?.open_flags || 0));
@@ -233,7 +234,17 @@ async function confirmSign(payload) {
             : signMode.value === 'verify-officer'
                 ? `${apiBase}/assessments/${assessment.value.id}/verify-officer`
                 : `${apiBase}/assessments/${assessment.value.id}/submit-assessed`;
-        await window.axios.post(path, payload);
+        const body = new FormData();
+        body.append('confirmed', payload?.confirmed ? '1' : '0');
+        body.append('password', payload?.password || '');
+        if (payload?.use_saved_signature) {
+            body.append('use_saved_signature', '1');
+        } else if (payload?.signatureFile) {
+            body.append('signature', payload.signatureFile, payload.signatureFile.name || 'signature.png');
+            body.append('use_saved_signature', '0');
+        }
+        await window.axios.post(path, body);
+        documentNonce.value += 1;
         await reloadAssessment();
     } catch (exception) {
         actionError.value = exception.response?.data?.message || 'The signature could not be recorded.';
@@ -450,6 +461,14 @@ onBeforeUnmount(() => {
                         <MapIcon name="printer" /> Print
                     </button>
                     <button
+                        v-if="canEdit && sourceReportId"
+                        type="button"
+                        class="submission-quiet"
+                        @click="openDamageWorkspace"
+                    >
+                        <MapIcon name="clipboard-check" /> Generate Damage Assessment
+                    </button>
+                    <button
                         v-if="canSign"
                         type="button"
                         class="submission-primary"
@@ -471,15 +490,6 @@ onBeforeUnmount(() => {
                             Actions <MapIcon name="chevron" class="submission-chevron-down" />
                         </button>
                         <div v-if="menuOpen" id="fa-action-menu" class="submission-menu" role="menu" @keydown="onActionMenuKey">
-                            <button v-if="canEdit" type="button" role="menuitem" @click="openEdit">
-                                <MapIcon name="pencil" /> Edit Assessment
-                            </button>
-                            <button v-if="canEdit && sourceReportId" type="button" role="menuitem" @click="openDamageWorkspace">
-                                <MapIcon name="clipboard-check" /> Building Damage Assessment
-                            </button>
-                            <button v-if="canSign" type="button" role="menuitem" :disabled="busy" @click="openSign()">
-                                <MapIcon name="pen-line" /> {{ signLabel }}
-                            </button>
                             <RouterLink
                                 v-if="sourceReportId"
                                 role="menuitem"
@@ -755,6 +765,7 @@ onBeforeUnmount(() => {
 
         <ReviewSignDialog
             :open="signOpen"
+            capture-signature
             :reference="assessment?.reference || ''"
             :name="profile?.name || ''"
             :position="profile?.job_title || profile?.role || ''"

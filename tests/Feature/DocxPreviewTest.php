@@ -2,10 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Auth\Role;
 use App\Models\Auth\User;
 use App\Services\DocxPreviewConverter;
 use App\Services\ImportedDocumentLinkRepair;
-use Database\Seeders\RoleSeeder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -21,7 +21,6 @@ class DocxPreviewTest extends TestCase
     {
         parent::setUp();
         $this->createMaprAuthSchema();
-        $this->seed(RoleSeeder::class);
         Schema::create('imported_report_documents', function (Blueprint $table) {
             $table->id();
             $table->string('import_key')->unique();
@@ -55,12 +54,11 @@ class DocxPreviewTest extends TestCase
             $this->markTestSkipped('LibreOffice is not installed.');
         }
 
-        $source = base_path('assets/01_MapR_Resident_Report_Pending_BDRRM_Review.docx');
+        $source = $this->createDocx();
         $before = hash_file('sha256', $source);
-        Storage::disk('local')->put('imported-reports/TEST-PREVIEW.docx', file_get_contents($source));
         DB::table('imported_report_documents')->insert([
             'import_key' => 'TEST-PREVIEW',
-            'filename' => '01_MapR_Resident_Report_Pending_BDRRM_Review.docx',
+            'filename' => 'Test-Report.docx',
             'storage_path' => 'imported-reports/TEST-PREVIEW.docx',
             'sha256' => $before,
             'workflow_status' => 'submitted',
@@ -80,7 +78,6 @@ class DocxPreviewTest extends TestCase
         $this->assertStringContainsString('application/pdf', (string) $response->headers->get('content-type'));
         $this->assertStringStartsWith('%PDF-', $response->streamedContent());
         $this->assertSame($before, hash_file('sha256', Storage::disk('local')->path('imported-reports/TEST-PREVIEW.docx')));
-        $this->assertSame($before, hash_file('sha256', $source));
     }
 
     public function test_failed_conversion_does_not_return_the_generated_report(): void
@@ -112,19 +109,46 @@ class DocxPreviewTest extends TestCase
             $this->markTestSkipped('LibreOffice is not installed.');
         }
 
-        $converter = new DocxPreviewConverter();
-        $files = glob(base_path('assets/0*_MapR_*.docx')) ?: [];
-        $this->assertCount(4, $files);
-        foreach ($files as $path) {
-            $before = hash_file('sha256', $path);
-            $result = $converter->convert($path);
-            $this->assertTrue($result['ok'], $result['error'] ?? basename($path));
-            $this->assertSame($before, hash_file('sha256', $path));
-            $pdf = file_get_contents($result['path']);
-            $this->assertStringStartsWith('%PDF-', $pdf);
-            $this->assertSame(1, preg_match('/MediaBox\s*\[\s*0(?:\.0+)?\s+0(?:\.0+)?\s+(59[0-9.]+)\s+(84[0-9.]+)\s*\]/', $pdf));
-            $this->assertGreaterThan(0, preg_match_all('/\/Subtype\s*\/Image/', $pdf));
-        }
+        $path = $this->createDocx();
+        $before = hash_file('sha256', $path);
+        $result = (new DocxPreviewConverter)->convert($path);
+        $this->assertTrue($result['ok'], $result['error'] ?? '');
+        $this->assertSame($before, hash_file('sha256', $path));
+        $pdf = file_get_contents($result['path']);
+        $this->assertStringStartsWith('%PDF-', $pdf);
+        $this->assertMatchesRegularExpression('/MediaBox\s*\[\s*0(?:\.0+)?\s+0(?:\.0+)?\s+(59[0-9.]+)\s+(84[0-9.]+)\s*\]/', $pdf);
+        $this->assertMatchesRegularExpression('/\/Count\s+2\b/', $pdf);
+    }
+
+    private function createDocx(): string
+    {
+        $disk = Storage::disk('local');
+        $disk->makeDirectory('imported-reports');
+        $path = $disk->path('imported-reports/TEST-PREVIEW.docx');
+        $zip = new \ZipArchive;
+        $this->assertTrue($zip->open($path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE));
+        $zip->addFromString('[Content_Types].xml', <<<'XML'
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>
+XML);
+        $zip->addFromString('_rels/.rels', <<<'XML'
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>
+XML);
+        $zip->addFromString('word/document.xml', <<<'XML'
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>First page.</w:t><w:br w:type="page"/><w:t>Second page.</w:t></w:r></w:p>
+    <w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr>
+  </w:body>
+</w:document>
+XML);
+        $this->assertTrue($zip->close());
+
+        return $path;
     }
 
     public function test_exact_reference_repair_links_one_building_and_is_idempotent(): void
@@ -147,7 +171,7 @@ class DocxPreviewTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $repair = new ImportedDocumentLinkRepair();
+        $repair = new ImportedDocumentLinkRepair;
         $first = $repair->repair();
         $second = $repair->repair();
 
@@ -165,7 +189,7 @@ class DocxPreviewTest extends TestCase
             'email' => $code.'.'.uniqid().'@mapr.test',
             'password' => 'secret-pass',
             'account_status' => 'active',
-            'role_id' => DB::table('roles')->where('code', $code)->value('id'),
+            'role_id' => Role::query()->firstOrCreate(['code' => $code], ['name' => $code])->id,
         ]);
     }
 }

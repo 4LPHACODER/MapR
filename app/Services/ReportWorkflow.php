@@ -25,6 +25,7 @@ class ReportWorkflow
             'assessor_draft' => 'Assessor draft',
             'pending_admin_verification' => 'Awaiting administrative verification',
             'pending_city_assessor' => 'Awaiting city assessor notation',
+            'ready_for_consolidation' => 'Ready for field consolidation',
             'forwarded_cdrrmo' => 'Forwarded to CDRRMO',
             default => $status ?: 'Unknown',
         };
@@ -298,13 +299,16 @@ class ReportWorkflow
         }
     }
 
-    public function submitAssessedDamage(User $user, object $assessment): void
+    /**
+     * @param  array{use_saved?: bool, file?: mixed}|null  $endorsement
+     */
+    public function submitAssessedDamage(User $user, object $assessment, ?array $endorsement = null): void
     {
         $user->loadMissing('role');
         if ($user->role?->code !== 'rdana') {
             abort(403, 'Only the assigned assessor can submit this assessment.');
         }
-        app(\App\Services\ReportAssignmentService::class)->assertAssignee($user, 'barangay_report', (int) $assessment->barangay_report_id, 'rdana');
+        app(ReportAssignmentService::class)->assertAssignee($user, 'barangay_report', (int) $assessment->barangay_report_id, 'rdana');
         if (Schema::hasTable('building_damage_cost_assessments')) {
             $saved = DB::table('building_damage_cost_assessments')
                 ->where('barangay_report_id', $assessment->barangay_report_id)
@@ -312,7 +316,9 @@ class ReportWorkflow
                 ->exists();
             abort_unless($saved, 422, 'Save the damage assessment before submitting.');
         }
-        $this->storeSignature($user, 'field_assessment_id', (int) $assessment->id, 'assessed_by', $assessment);
+        $storedPath = null;
+        $assetId = $this->resolveEndorsementAsset($user, $endorsement, $storedPath);
+        $this->storeSignature($user, 'field_assessment_id', (int) $assessment->id, 'assessed_by', $assessment, $assetId);
         $update = [
             // Clear prior return so assessmentBucket can treat this as completed / awaiting verification.
             'assessment_status' => Schema::hasColumn('field_assessments', 'assessment_status') ? 'draft' : null,
@@ -334,7 +340,10 @@ class ReportWorkflow
         $this->logger->log($user, 'field_assessment_assessed', 'Submitted '.$assessment->assessment_reference.' for administrative verification.', 'field_assessment', (int) $assessment->id);
     }
 
-    public function verifyByAdminOfficer(User $user, object $assessment): void
+    /**
+     * @param  array{use_saved?: bool, file?: mixed}|null  $endorsement
+     */
+    public function verifyByAdminOfficer(User $user, object $assessment, ?array $endorsement = null): void
     {
         $user->loadMissing('role');
         if ($user->role?->code !== 'rdana_admin_officer') {
@@ -343,7 +352,9 @@ class ReportWorkflow
         if (! $this->hasSignature('field_assessment_id', (int) $assessment->id, 'assessed_by')) {
             abort(422, 'The assigned assessor must sign before verification.');
         }
-        $this->storeSignature($user, 'field_assessment_id', (int) $assessment->id, 'verified_by', $assessment);
+        $storedPath = null;
+        $assetId = $this->resolveEndorsementAsset($user, $endorsement, $storedPath);
+        $this->storeSignature($user, 'field_assessment_id', (int) $assessment->id, 'verified_by', $assessment, $assetId);
         $update = ['updated_at' => now()];
         if (Schema::hasColumn('field_assessments', 'workflow_stage')) {
             $update['workflow_stage'] = 'pending_city_assessor';
@@ -352,26 +363,78 @@ class ReportWorkflow
         $this->logger->log($user, 'field_assessment_verified_by_officer', 'Verified '.$assessment->assessment_reference.'.', 'field_assessment', (int) $assessment->id);
     }
 
-    public function approveAndForward(User $user, object $assessment): void
+    /**
+     * @param  array{use_saved?: bool, file?: mixed}|null  $endorsement
+     */
+    public function approveAndForward(User $user, object $assessment, ?array $endorsement = null): void
     {
         $user->loadMissing('role');
-        if ($user->role?->code !== 'rdana_city_assessor' && ! $this->matchesApprover($user)) {
+        if (! $this->matchesApprover($user)) {
             abort(403, 'Only the city assessor can approve this assessment.');
         }
         if (! $this->hasSignature('field_assessment_id', (int) $assessment->id, 'verified_by')) {
             abort(422, 'Administrative verification is required before city approval.');
         }
-        $this->storeSignature($user, 'field_assessment_id', (int) $assessment->id, 'approved_by', $assessment);
+        $storedPath = null;
+        $assetId = $this->resolveEndorsementAsset($user, $endorsement, $storedPath);
+        $this->storeSignature($user, 'field_assessment_id', (int) $assessment->id, 'approved_by', $assessment, $assetId);
         $update = [
             'assessment_status' => 'submitted',
             'submitted_at' => now(),
             'updated_at' => now(),
         ];
         if (Schema::hasColumn('field_assessments', 'workflow_stage')) {
-            $update['workflow_stage'] = 'forwarded_cdrrmo';
+            $update['workflow_stage'] = 'ready_for_consolidation';
         }
         DB::table('field_assessments')->where('id', $assessment->id)->update($update);
-        $this->logger->log($user, 'field_assessment_forwarded', 'Forwarded '.$assessment->assessment_reference.' to CDRRMO.', 'field_assessment', (int) $assessment->id);
+        $this->logger->log(
+            $user,
+            'field_assessment_reviewed',
+            'Reviewed '.$assessment->assessment_reference.' and marked it ready for field consolidation.',
+            'field_assessment',
+            (int) $assessment->id,
+        );
+    }
+
+    public function markAssessmentsForwardedToCdrrmo(User $user, array $assessmentIds, string $packageReference): void
+    {
+        $ids = array_values(array_unique(array_map('intval', $assessmentIds)));
+        if ($ids === []) {
+            return;
+        }
+
+        $query = DB::table('field_assessments')->whereIn('id', $ids);
+        if (Schema::hasColumn('field_assessments', 'workflow_stage')) {
+            $query->where('workflow_stage', 'ready_for_consolidation');
+        }
+
+        $rows = $query->get(['id', 'assessment_reference']);
+        if ($rows->count() !== count($ids)) {
+            abort(422, 'Only assessments ready for consolidation can be submitted to CDRRMO.');
+        }
+
+        $update = ['updated_at' => now()];
+        if (Schema::hasColumn('field_assessments', 'workflow_stage')) {
+            $update['workflow_stage'] = 'forwarded_cdrrmo';
+        }
+        DB::table('field_assessments')->whereIn('id', $ids)->update($update);
+
+        foreach ($rows as $row) {
+            $this->logger->log(
+                $user,
+                'field_assessment_forwarded',
+                'Included '.$row->assessment_reference.' in package '.$packageReference.' and forwarded it to CDRRMO.',
+                'field_assessment',
+                (int) $row->id,
+            );
+        }
+    }
+
+    public function canSubmitFieldPackage(User $user): bool
+    {
+        $user->loadMissing('role');
+
+        return $this->matchesApprover($user);
     }
 
     public function returnFieldAssessment(User $user, object $assessment, string $reason): void
@@ -423,11 +486,17 @@ class ReportWorkflow
         );
     }
 
+    public function canSignBarangay(User $user, object $report): bool
+    {
+        return ($report->workflow_stage ?? null) === null
+            && $user->role?->code === 'barangay_captain'
+            && in_array((int) $report->barangay_id, app(AssignmentScope::class)->activeBarangayIds($user->id), true);
+    }
+
     public function signBarangay(User $user, object $report): void
     {
         $this->assertNoOpenFlags('barangay_report', (int) $report->id);
-        $captain = config('mapr_reference.barangay_captains.'.$this->barangayCode((int) $report->barangay_id));
-        if (! is_string($captain) || strcasecmp(trim($user->display_name), trim($captain)) !== 0) {
+        if (! $this->canSignBarangay($user, $report)) {
             abort(403, 'Only the authorized barangay signer can sign this report.');
         }
         $this->storeSignature($user, 'barangay_report_id', (int) $report->id, 'barangay_signer', $report);
@@ -497,7 +566,7 @@ class ReportWorkflow
             return (int) $existingForAssessor;
         }
 
-        // Reassignment: transfer the latest draft FA instead of creating a duplicate.
+        // Reassignment: transfer the latest unlocked draft FA instead of creating a duplicate.
         $latest = DB::table('field_assessments')
             ->where('barangay_report_id', $report->id)
             ->orderByDesc('id')
@@ -511,7 +580,7 @@ class ReportWorkflow
                     ->where('signature_role', 'assessed_by')
                     ->exists();
             $locked = in_array($status, ['submitted', 'signed'], true)
-                || in_array($stage, ['pending_admin_verification', 'pending_city_assessor', 'forwarded_cdrrmo'], true)
+                || in_array($stage, ['pending_admin_verification', 'pending_city_assessor', 'ready_for_consolidation', 'forwarded_cdrrmo'], true)
                 || $signed;
             if (! $locked) {
                 DB::table('field_assessments')->where('id', $latest->id)->update([
@@ -613,10 +682,8 @@ class ReportWorkflow
     {
         $this->assertNoOpenFlags('field_assessment', (int) $assessment->id);
         $verifierEmail = (string) config('mapr.assessor_verifier_email');
-        $verifierName = (string) config('mapr_reference.assessor_verifier.name');
-        $matches = ($verifierEmail !== '' && strcasecmp($user->email, $verifierEmail) === 0)
-            || ($verifierName !== '' && strcasecmp(trim($user->display_name), trim($verifierName)) === 0);
-        if (! $matches || (int) $assessment->assigned_assessor_id !== (int) $user->id) {
+        $matches = $user->role?->code === 'rdana' && $verifierEmail !== '' && strcasecmp($user->email, $verifierEmail) === 0;
+        if (($assessment->workflow_stage ?? null) !== null || ! $matches || (int) $assessment->assigned_assessor_id !== (int) $user->id) {
             abort(403, 'Only the assigned verifying officer can verify this assessment.');
         }
         if (trim((string) $assessment->findings) === '') {
@@ -658,7 +725,7 @@ class ReportWorkflow
     public function approveAssessment(User $user, object $assessment): void
     {
         $this->assertNoOpenFlags('field_assessment', (int) $assessment->id);
-        if (! $this->matchesApprover($user) || (int) $assessment->assigned_assessor_id === (int) $user->id) {
+        if (($assessment->workflow_stage ?? null) !== null || ! $this->matchesApprover($user) || (int) $assessment->assigned_assessor_id === (int) $user->id) {
             abort(403, 'Only the Acting City Assessor can approve this assessment.');
         }
         if (! in_array($assessment->assessment_status, ['draft', 'review', 'signed'], true)) {
@@ -672,7 +739,7 @@ class ReportWorkflow
     public function noteConsolidated(User $user, object $report): void
     {
         $this->assertNoOpenFlags('consolidated_report', (int) $report->id);
-        if (! in_array(strtolower($user->email), ['lestertalan@mapr_admin.com', 'lestertalan@mapr.com'], true)) {
+        if ($this->consolidatedCapacity($user) !== 'noted_by') {
             abort(403, 'Only the noted-by officer can sign in that capacity.');
         }
         $this->storeSignature($user, 'consolidated_report_id', (int) $report->id, 'noted_by', $report);
@@ -682,7 +749,7 @@ class ReportWorkflow
     public function approveConsolidated(User $user, object $report): void
     {
         $this->assertNoOpenFlags('consolidated_report', (int) $report->id);
-        if (strcasecmp($user->email, 'reyveen.geli@mapr.test') !== 0) {
+        if ($this->consolidatedCapacity($user) !== 'approved_by') {
             abort(403, 'Only the CDRRMO approving officer can sign in that capacity.');
         }
         $this->storeSignature($user, 'consolidated_report_id', (int) $report->id, 'approved_by', $report);
@@ -722,11 +789,24 @@ class ReportWorkflow
     private function matchesApprover(User $user): bool
     {
         $email = (string) config('mapr.assessor_approver_email');
-        $name = (string) config('mapr_reference.assessor_approver.name');
 
-        return strcasecmp($user->email, 'lovy.dedicatoria@mapr.test') === 0
-            || ($email !== '' && strcasecmp($user->email, $email) === 0)
-            || ($name !== '' && strcasecmp(trim($user->display_name), trim($name)) === 0);
+        return $user->role?->code === 'rdana_city_assessor'
+            || ($user->role?->code === 'rdana' && $email !== '' && strcasecmp($user->email, $email) === 0);
+    }
+
+    public function consolidatedCapacity(?User $user): ?string
+    {
+        if ($user?->role?->code !== 'cdrrmo_admin') {
+            return null;
+        }
+
+        foreach (config('mapr.consolidated_signer_emails') as $capacity => $email) {
+            if (is_string($email) && $email !== '' && strcasecmp($user->email, $email) === 0) {
+                return $capacity;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -886,14 +966,9 @@ class ReportWorkflow
 
     private function assertBarangayMember(User $user, int $barangayId): void
     {
-        $ids = app(\App\Services\AssignmentScope::class)->activeBarangayIds($user->id);
+        $ids = app(AssignmentScope::class)->activeBarangayIds($user->id);
         if (! in_array($barangayId, $ids, true)) {
             abort(403, 'That barangay is outside your assignment.');
         }
-    }
-
-    private function barangayCode(int $barangayId): string
-    {
-        return (string) DB::table('barangays')->where('id', $barangayId)->value('barangay_code');
     }
 }

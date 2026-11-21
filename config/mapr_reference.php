@@ -50,6 +50,26 @@ return [
         ],
     ],
 
+    // Deployment starter taxonomy. Review with CDRRMO before importing official records.
+    // Categories alone never classify a resident; vulnerability records require verification.
+    'disaster_types' => [
+        ['name' => 'Flood'],
+        ['name' => 'Typhoon'],
+        ['name' => 'Earthquake'],
+        ['name' => 'Landslide'],
+        ['name' => 'Fire'],
+        ['name' => 'Storm surge'],
+        ['name' => 'Tsunami'],
+    ],
+
+    'vulnerability_categories' => [
+        ['category_name' => 'Senior citizen', 'description' => 'Person aged 60 years or older; verify individual records.'],
+        ['category_name' => 'Person with disability', 'description' => 'Disability status confirmed through the authorized verification workflow.'],
+        ['category_name' => 'Pregnant woman', 'description' => 'Pregnancy status confirmed through the authorized verification workflow.'],
+        ['category_name' => 'Lactating mother', 'description' => 'Lactation status confirmed through the authorized verification workflow.'],
+        ['category_name' => 'Child under five', 'description' => 'Child younger than five years; verify individual records.'],
+    ],
+
     'flood_classes' => [
         'VHF' => 'VHF (source FloodSusc)',
         'HF' => 'HF (source FloodSusc)',
@@ -78,36 +98,6 @@ return [
             'description' => 'Field verification: the building is not affected.',
             'display_order' => 3,
             'counts_as_damaged' => false,
-        ],
-    ],
-
-    'barangay_captains' => [
-        '166819002' => 'Hon. Luis F. Maquiling',
-        '166819022' => 'Hon. Melanie Joy Momo Guno',
-        '166819008' => 'Hon. Rocky Roger M. Pimentel',
-        '166819005' => 'Hon. Charisse Valentine P. Pineda',
-    ],
-
-    'assessor_verifier' => [
-        'name' => 'Mark L. Merillo',
-        'title' => 'Administrative Officer III',
-    ],
-
-    'assessor_approver' => [
-        'name' => 'Engr. Lovy R. Dedicatoria',
-        'title' => 'LAOO II Acting City Assessor',
-    ],
-
-    'signatories' => [
-        'noted_by' => [
-            'name' => 'Lester Lito C. Talan, LPT, MST Sci (CAR)',
-            'title' => 'LDRRMO II',
-            'office' => 'Head, Research & Planning Div.',
-        ],
-        'approved_by' => [
-            'name' => 'Reyveen John B. Geli, RN, DPA',
-            'title' => 'Head, City Disaster Risk Reduction and Management Office (CDRRMO)',
-            'office' => '',
         ],
     ],
 

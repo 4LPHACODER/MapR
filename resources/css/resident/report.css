@@ -1,0 +1,993 @@
+/* Resident reporting: compact PrimeVue controls within the existing civic workspace. */
+.resident-wizard.resident-report {
+    --report-meta-size: 0.75rem;
+    --report-motion-step: 180ms;
+    --report-motion-reduced: 100ms;
+    --resident-muted: var(--p-slate-600, #475569);
+    --p-button-text-danger-color: var(--p-red-700, #b91c1c);
+    --p-focus-ring-width: 0;
+    --p-focus-ring-shadow: none;
+    --p-form-field-focus-ring-width: 0;
+    --p-form-field-focus-ring-shadow: none;
+    --p-checkbox-focus-ring-width: 0;
+    --p-button-focus-ring-width: 0;
+    --p-form-field-border-radius: var(--resident-control);
+    --p-button-border-radius: var(--resident-control);
+    --p-button-sm-font-size: 0.8125rem;
+    --p-form-field-sm-font-size: 0.8125rem;
+    --p-form-field-border-color: var(--p-slate-300);
+    --p-form-field-placeholder-color: var(--resident-muted);
+    max-width: 76rem;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+    margin: 0 auto;
+    font-size: 0.875rem;
+    line-height: 1.55;
+}
+.resident-report .report-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 0 0 1.5rem;
+}
+.resident-report .report-page-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+}
+.resident-report .report-page-header p {
+    margin: 0.25rem 0 0;
+    color: var(--resident-muted);
+    max-width: 65ch;
+    line-height: 1.6;
+}
+.resident-report .report-stepper {
+    background: transparent;
+}
+.resident-wizard.resident-report .resident-wizard-steps {
+    display: flex;
+    gap: 0;
+    margin: 0 0 1.5rem;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--resident-line);
+    border-radius: var(--resident-radius);
+    background: var(--resident-card);
+    list-style: none;
+}
+.resident-report .p-step {
+    flex: 1;
+    padding: 0;
+    gap: 1rem;
+}
+.resident-report .p-step:last-child {
+    flex: 0 1 auto;
+}
+.resident-report .p-step-header {
+    gap: 0.625rem;
+    padding: 0.25rem;
+    border: 1px solid transparent;
+    border-radius: var(--resident-control);
+    text-align: left;
+    cursor: pointer;
+}
+.resident-report .p-step-header:not(:disabled):hover {
+    background: var(--resident-wash);
+}
+.resident-report .p-step-header:disabled {
+    cursor: default;
+}
+.resident-report .p-step.p-disabled {
+    opacity: 1;
+}
+.resident-report .p-step-number {
+    width: 1.875rem;
+    height: 1.875rem;
+    min-width: 1.875rem;
+    font-size: 0.8125rem;
+    border: 1px solid var(--resident-line);
+    border-radius: var(--resident-control);
+    background: var(--resident-canvas);
+    color: var(--resident-muted);
+    box-shadow: none;
+}
+.resident-report .p-step-active .p-step-number {
+    background: var(--resident-blue);
+    border-color: var(--resident-blue);
+    color: var(--resident-card);
+}
+.resident-report .report-step-complete .p-step-number {
+    background: var(--resident-wash);
+    border-color: var(--resident-blue);
+    color: var(--resident-blue);
+}
+.resident-report .p-step-title {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--resident-muted);
+}
+.resident-report .p-step-active .p-step-title,
+.resident-report .report-step-complete .p-step-title {
+    color: var(--resident-ink);
+}
+.resident-report .report-step-label {
+    display: grid;
+    gap: 0.05rem;
+}
+.resident-report .report-step-label small {
+    font-size: var(--report-meta-size);
+    color: var(--resident-muted);
+    font-weight: 400;
+    white-space: nowrap;
+}
+.resident-report .p-stepper-separator {
+    margin: 0 1.25rem 0 0;
+    background: var(--resident-line);
+}
+.resident-wizard.resident-report .resident-wizard-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 16rem;
+    gap: 1.5rem;
+    align-items: start;
+}
+.resident-report .resident-wizard-main {
+    background: var(--resident-card);
+    border: 1px solid var(--resident-line);
+    border-radius: var(--resident-radius);
+    padding: 1.5rem;
+}
+.resident-report .p-steppanels,
+.resident-report .p-steppanel {
+    padding: 0;
+    background: transparent;
+}
+.resident-report .report-step-intro {
+    margin-bottom: 1.25rem;
+}
+.resident-report .resident-step-heading {
+    margin: 0;
+    font-size: 1.125rem;
+    line-height: 1.4;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+}
+.resident-report .report-step-intro p {
+    margin: 0.375rem 0 0;
+    color: var(--resident-muted);
+    font-size: 0.8125rem;
+    max-width: 65ch;
+    line-height: 1.6;
+}
+.resident-report .report-required {
+    color: var(--p-red-700);
+}
+.resident-wizard.resident-report .report-details-step {
+    display: block;
+}
+.resident-report .report-form-section {
+    display: grid;
+    gap: 1rem;
+    padding: 1.5rem 0;
+    border-top: 1px solid var(--resident-line);
+}
+.resident-report .report-form-section h4,
+.resident-report .report-context h3 {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+.resident-report .report-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+.resident-report .report-section-heading > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--resident-muted);
+    font-size: 0.75rem;
+}
+.resident-report .report-section-heading svg {
+    width: 0.875rem;
+    height: 0.875rem;
+}
+.resident-report .resident-field-pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: 1rem;
+}
+.resident-report .report-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    min-width: 0;
+}
+.resident-report .report-field > label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+.resident-report .report-field > small,
+.resident-report .report-field-meta small {
+    font-size: var(--report-meta-size);
+    color: var(--resident-muted);
+    line-height: 1.5;
+}
+.resident-report .report-optional {
+    color: var(--resident-muted);
+    font-size: var(--report-meta-size);
+    font-weight: 400;
+}
+.resident-report .report-field .resident-req::after {
+    margin-left: -0.3rem;
+}
+.resident-wizard.resident-report .p-inputtext,
+.resident-wizard.resident-report .p-select,
+.resident-wizard.resident-report .p-textarea {
+    min-height: 2rem;
+    width: 100%;
+    border-radius: var(--resident-control);
+    font-size: 0.8125rem;
+    line-height: 1.25;
+    padding: 0.375rem 0.625rem;
+    box-shadow: none;
+}
+.resident-report .p-select {
+    padding: 0;
+}
+.resident-report .p-select-label {
+    padding: 0;
+}
+.resident-report .p-autocomplete,
+.resident-report .p-datepicker {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+}
+.resident-report .report-incident-group {
+    min-width: 0;
+    height: 2rem;
+    border: 1px solid var(--p-form-field-border-color);
+    border-radius: var(--resident-control);
+    background: var(--p-form-field-background);
+    transition: border-color 140ms ease;
+}
+.resident-report .report-incident-group:focus-within {
+    border-color: var(--resident-blue);
+}
+.resident-report .report-incident-group.is-invalid {
+    border-color: var(--p-form-field-invalid-border-color);
+}
+.resident-report .report-incident-group > .p-autocomplete {
+    flex: 1;
+    min-width: 0;
+    border-radius: inherit;
+}
+.resident-wizard.resident-report .report-incident-group .p-autocomplete-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 1%;
+    min-height: 0;
+    height: 100%;
+    border: 0;
+    /* Follow the group's outer radius inside its one-pixel border. */
+    border-radius: calc(var(--resident-control) - 1px) 0 0 calc(var(--resident-control) - 1px);
+    background: transparent;
+    box-shadow: none;
+}
+.resident-report .report-incident-group .p-autocomplete-dropdown {
+    flex: none;
+    min-width: 2rem;
+    width: 2rem;
+    border: 0;
+    border-left: 1px solid var(--resident-line);
+    border-radius: 0 calc(var(--resident-control) - 1px) calc(var(--resident-control) - 1px) 0;
+    background: transparent;
+    color: var(--resident-muted);
+}
+.resident-report .report-incident-group .p-autocomplete-dropdown:focus-visible {
+    background: var(--resident-wash);
+    color: var(--resident-blue);
+}
+.resident-report .report-incident-group .p-autocomplete-dropdown:active {
+    background: var(--p-primary-100);
+    color: var(--resident-navy);
+}
+.resident-report .report-incident-group .p-autocomplete-overlay {
+    width: calc(100% + 2px);
+    margin-left: -1px;
+    border-color: var(--p-form-field-border-color);
+    border-radius: var(--resident-control);
+}
+@media (hover: hover) and (pointer: fine) {
+    .resident-report .report-incident-group:hover:not(:focus-within):not(.is-invalid) {
+        border-color: var(--p-slate-400);
+    }
+    .resident-report .report-incident-group .p-autocomplete-dropdown:hover {
+        background: var(--resident-wash);
+        color: var(--resident-blue);
+    }
+}
+.resident-report .p-textarea {
+    resize: none;
+    line-height: 1.6;
+}
+.resident-report .report-field-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-height: 1rem;
+}
+.resident-report .resident-wizard-count {
+    margin-left: auto;
+    font-weight: 400;
+    white-space: nowrap;
+}
+.resident-report .report-field-note,
+.resident-report .report-pin-field > p {
+    margin: 0;
+    color: var(--resident-muted);
+    font-size: 0.75rem;
+}
+.resident-report .report-pin-field {
+    display: grid;
+    gap: 0.625rem;
+}
+.resident-wizard.resident-report .pin-canvas {
+    height: 20rem;
+    min-height: 20rem;
+}
+.resident-wizard.resident-report .pin-actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+.resident-wizard.resident-report .pin-actions .p-button {
+    width: auto;
+    min-height: 2rem;
+}
+.resident-report .pin-message {
+    font-size: 0.75rem;
+    color: var(--resident-muted);
+}
+.resident-report .pin-message svg {
+    color: var(--resident-blue);
+    width: 1rem;
+}
+.resident-report .pin-fallback {
+    padding: 1rem;
+    margin: 0;
+    background: var(--resident-canvas);
+    border-radius: var(--resident-control);
+    font-size: 0.8125rem;
+}
+.resident-wizard.resident-report .pin-expand {
+    min-height: 2rem;
+    width: 2rem;
+    height: 2rem;
+    padding: 0.375rem;
+}
+.resident-wizard.resident-report:has(.pin-map.is-wide) .resident-wizard-layout {
+    grid-template-columns: minmax(0, 1fr);
+}
+.resident-report:has(.pin-map.is-wide) .report-context {
+    display: none;
+}
+.resident-wizard.resident-report .pin-map.is-wide .pin-canvas {
+    height: 65vh;
+    min-height: 22rem;
+}
+.resident-report .report-building {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem;
+    border: 1px solid var(--resident-line);
+    border-radius: var(--resident-control);
+    background: var(--resident-canvas);
+}
+.resident-report .report-building dl {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 2rem;
+    margin: 0;
+}
+.resident-report .report-building dt {
+    color: var(--resident-muted);
+    font-size: var(--report-meta-size);
+}
+.resident-report .report-building dd {
+    margin: 0.25rem 0 0;
+    font-size: 0.8125rem;
+    overflow-wrap: anywhere;
+}
+.resident-report .resident-check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 1.5rem;
+    font-size: 0.75rem;
+    font-weight: 400;
+    cursor: pointer;
+}
+.resident-report .report-reporter {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    border-top: 1px solid var(--resident-line);
+    padding-top: 1rem;
+    margin: 0;
+    color: var(--resident-muted);
+    font-size: 0.75rem;
+}
+.resident-report .report-reporter > svg {
+    width: 1rem;
+    height: 1rem;
+}
+.resident-report .report-reporter strong {
+    color: var(--resident-ink);
+    font-weight: 500;
+}
+.resident-report .report-reporter small {
+    display: block;
+    margin-top: 0.125rem;
+    font-size: var(--report-meta-size);
+    overflow-wrap: anywhere;
+}
+.resident-wizard.resident-report .p-button {
+    min-height: 2rem;
+    border-radius: var(--resident-control);
+    padding: 0.375rem 0.625rem;
+    font-size: 0.8125rem;
+    line-height: 1.25;
+    box-shadow: none;
+}
+.resident-report .p-button svg {
+    width: 0.9375rem;
+    height: 0.9375rem;
+}
+.resident-report .p-button-label {
+    font-weight: 500;
+}
+.resident-wizard.resident-report .resident-wizard-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+}
+.resident-report .report-forward-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+.resident-report .report-context {
+    position: sticky;
+    top: 6.5rem;
+    display: grid;
+    gap: 1.25rem;
+    padding: 0.375rem 0;
+}
+.resident-report .report-context-identity {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+}
+.resident-report .report-context-identity > svg {
+    width: 1.125rem;
+    height: 1.125rem;
+    margin-top: 0.125rem;
+    color: var(--resident-blue);
+}
+.resident-report .report-context-identity div {
+    display: grid;
+    gap: 0.25rem;
+}
+.resident-report .report-context-identity span {
+    font-size: var(--report-meta-size);
+    color: var(--resident-muted);
+}
+.resident-report .report-context-identity strong {
+    font-size: 0.9375rem;
+    font-weight: 600;
+}
+.resident-report .report-context-identity small {
+    max-width: 12rem;
+    font-size: var(--report-meta-size);
+    color: var(--resident-muted);
+}
+.resident-report .report-context section {
+    border-top: 1px solid var(--resident-line);
+    padding-top: 1rem;
+}
+.resident-report .report-requirements {
+    display: grid;
+    gap: 1rem;
+    padding: 0;
+    margin: 1rem 0 0;
+    list-style: none;
+}
+.resident-report .report-requirements li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    color: var(--resident-ink);
+    font-size: 0.75rem;
+}
+.resident-report .report-requirements svg {
+    width: 1rem;
+    height: 1rem;
+    margin-top: 0.125rem;
+    color: var(--resident-muted);
+    flex: none;
+}
+.resident-report .report-requirements .is-complete svg {
+    color: var(--resident-blue);
+}
+.resident-report .report-requirements small {
+    display: block;
+    margin-top: 0.25rem;
+    color: var(--resident-muted);
+    font-size: var(--report-meta-size);
+    line-height: 1.6;
+}
+.resident-report .report-context-note p {
+    margin: 0.375rem 0 0;
+    color: var(--resident-muted);
+    font-size: 0.75rem;
+}
+.resident-report .report-photo-guide {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin: 0 0 1.25rem;
+}
+.resident-report .report-photo-guide > div {
+    display: flex;
+    gap: 0.625rem;
+    align-items: flex-start;
+}
+.resident-report .report-photo-guide svg {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: var(--resident-blue);
+    flex: none;
+}
+.resident-report .report-photo-guide span {
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+.resident-report .report-photo-guide small {
+    display: block;
+    margin-top: 0.25rem;
+    color: var(--resident-muted);
+    font-size: 0.75rem;
+    font-weight: 400;
+}
+.resident-report .report-upload {
+    border: 1px dashed var(--resident-line);
+    border-radius: var(--resident-control);
+}
+.resident-report .report-upload .p-fileupload-header {
+    justify-content: center;
+    padding: 1.25rem 1rem 0;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.resident-report .report-upload .p-fileupload-content {
+    padding: 1rem;
+}
+.resident-report .report-upload-empty {
+    display: grid;
+    justify-items: center;
+    gap: 0.375rem;
+    padding: 0.5rem 0;
+    text-align: center;
+}
+.resident-report .report-upload-empty > svg {
+    width: 1.5rem;
+    height: 1.5rem;
+    margin-bottom: 0.25rem;
+    color: var(--resident-muted);
+}
+.resident-report .report-upload-empty strong {
+    font-size: 0.8125rem;
+    font-weight: 400;
+}
+.resident-report .report-upload-empty small {
+    color: var(--resident-muted);
+    font-size: var(--report-meta-size);
+}
+.resident-report .resident-wizard-counter {
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+.resident-report .resident-photo-list {
+    grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+}
+.resident-report .resident-photo-list li {
+    display: grid;
+    gap: 0.375rem;
+    align-content: start;
+    min-width: 0;
+}
+.resident-report .report-photo-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.75rem;
+}
+.resident-report .report-photo-row-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.25rem;
+}
+.resident-report .p-progressbar {
+    height: 1rem;
+    font-size: var(--report-meta-size);
+}
+.resident-report .resident-review {
+    display: grid;
+    gap: 1rem;
+}
+.resident-report .resident-review .report-step-intro {
+    margin-bottom: 0;
+}
+.resident-report .resident-review article {
+    padding-top: 1rem;
+}
+.resident-report .resident-review article h3,
+.resident-report .resident-signature h3 {
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+.resident-report .resident-review article p {
+    margin: 0.375rem 0 0;
+    font-size: 0.8125rem;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+.resident-report .resident-review article header {
+    gap: 0.5rem;
+}
+.resident-report .resident-signature {
+    border-top: 1px solid var(--resident-line);
+    padding-top: 1rem;
+    margin-top: 0;
+}
+.resident-report .resident-signature .resident-lead {
+    font-size: 0.75rem;
+}
+.resident-wizard.resident-report .resident-signature canvas {
+    height: 10rem;
+    border: 1px solid var(--resident-line);
+    border-radius: var(--resident-control);
+}
+.resident-report .p-message {
+    margin-top: 0.75rem;
+    font-size: 0.8125rem;
+}
+.resident-report .report-load-state {
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: 1rem;
+    min-height: 22rem;
+}
+.resident-report .report-load-state .p-progressspinner {
+    width: 2rem;
+    height: 2rem;
+}
+.resident-report .report-success {
+    display: grid;
+    justify-items: center;
+    gap: 1rem;
+    padding: 3rem 1.5rem;
+    border: 1px solid var(--resident-line);
+    border-radius: var(--resident-radius);
+    background: var(--resident-card);
+    text-align: center;
+}
+.resident-report .report-success > svg {
+    width: 2.5rem;
+    height: 2.5rem;
+    color: var(--resident-blue);
+}
+.resident-report .report-success h3,
+.resident-report .report-success p {
+    margin: 0;
+}
+.resident-report .report-success h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+.resident-report .report-reference {
+    font-size: 1rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+}
+/* User requested no outer focus rings. Border and fill still identify keyboard focus. */
+.resident-report :is(button, input, textarea, .p-select, .p-checkbox-box):focus-visible,
+.resident-report .p-select.p-focus,
+.resident-report .p-checkbox.p-focus .p-checkbox-box {
+    outline: none;
+    box-shadow: none;
+    border-color: var(--resident-blue);
+}
+.resident-report .p-button:focus-visible,
+.resident-report .p-step-header:focus-visible {
+    filter: brightness(0.9);
+    border-color: var(--resident-blue);
+}
+.resident-report .resident-step-heading:focus {
+    outline: none;
+}
+.resident-report-overlay {
+    --p-datepicker-date-width: 2rem;
+    --p-datepicker-date-height: 2rem;
+    --p-focus-ring-width: 0;
+    --p-focus-ring-shadow: none;
+    --p-form-field-focus-ring-width: 0;
+    --p-form-field-focus-ring-shadow: none;
+    --p-button-border-radius: 8px;
+    font-family: Roboto, Arial, sans-serif;
+    font-size: 0.8125rem;
+}
+.resident-report-overlay :focus-visible {
+    outline: none;
+    box-shadow: none;
+}
+.resident-report-overlay .p-autocomplete-option,
+.resident-report-overlay .p-select-option {
+    padding: 0.5rem 0.625rem;
+    font-size: 0.8125rem;
+    overflow-wrap: anywhere;
+}
+.resident-report .resident-report-calendar {
+    --p-datepicker-date-width: 1.75rem;
+    --p-datepicker-date-height: 1.75rem;
+    width: 18rem;
+    min-width: 0;
+    max-width: calc(100vw - 2rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.625rem;
+    border-radius: var(--resident-radius);
+    font-size: 0.8125rem;
+}
+.resident-report-calendar .p-datepicker-header {
+    min-height: 2rem;
+    padding: 0 0 0.5rem;
+}
+.resident-report-calendar .p-datepicker-title {
+    gap: 0.25rem;
+    line-height: 1.5;
+}
+.resident-report-calendar :is(.p-datepicker-select-month, .p-datepicker-select-year) {
+    min-height: 1.75rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: var(--resident-control);
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+.resident-wizard.resident-report .resident-report-calendar .p-button {
+    width: 1.75rem;
+    min-height: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border-radius: var(--resident-control);
+}
+.resident-report-calendar .p-button svg {
+    width: 0.75rem;
+    height: 0.75rem;
+}
+.resident-report-calendar .p-datepicker-day-view {
+    margin: 0.375rem 0;
+    font-size: 0.8125rem;
+}
+.resident-report-calendar .p-datepicker-weekday-cell {
+    padding: 0.25rem 0;
+    color: var(--resident-muted);
+    font-size: 0.6875rem;
+    font-weight: 500;
+}
+.resident-report-calendar .p-datepicker-day-cell {
+    padding: 0.0625rem 0;
+}
+.resident-report-calendar .p-datepicker-day {
+    margin: 0 auto;
+    border-radius: var(--resident-control);
+    font-variant-numeric: tabular-nums;
+}
+.resident-report-calendar :is(.p-datepicker-month-view, .p-datepicker-year-view) {
+    margin: 0.5rem 0 0;
+}
+.resident-report-calendar :is(.p-datepicker-month, .p-datepicker-year) {
+    padding: 0.5rem 0.25rem;
+    border-radius: var(--resident-control);
+    font-size: 0.8125rem;
+}
+.resident-report-calendar .p-datepicker-time-picker {
+    justify-content: flex-end;
+    gap: 0.375rem;
+    padding: 0.5rem 0 0;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+}
+.resident-report-calendar .p-datepicker-time-picker::before {
+    content: 'Time (24h)';
+    margin-right: auto;
+    color: var(--resident-muted);
+    font-size: 0.75rem;
+}
+.resident-report-calendar :is(.p-datepicker-hour-picker, .p-datepicker-minute-picker) {
+    display: grid;
+    grid-template-columns: 2rem 1.5rem;
+    grid-template-rows: repeat(2, 1.5rem);
+    gap: 0;
+    align-items: center;
+    padding: 0;
+}
+.resident-report-calendar :is(.p-datepicker-hour-picker, .p-datepicker-minute-picker) > span {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    text-align: center;
+    font-weight: 500;
+}
+.resident-wizard.resident-report
+    .resident-report-calendar
+    :is(.p-datepicker-increment-button, .p-datepicker-decrement-button) {
+    grid-column: 2;
+    width: 1.5rem;
+    height: 1.5rem;
+    min-height: 1.5rem;
+}
+.resident-report-calendar .p-datepicker-increment-button {
+    grid-row: 1;
+}
+.resident-report-calendar .p-datepicker-decrement-button {
+    grid-row: 2;
+}
+.resident-report-calendar
+    :is(
+        .p-datepicker-day:not(.p-datepicker-day-selected),
+        .p-datepicker-select-month,
+        .p-datepicker-select-year
+    ):focus-visible {
+    background: var(--resident-wash);
+    color: var(--resident-navy);
+}
+.resident-report-dialog {
+    width: min(44rem, calc(100vw - 2rem));
+}
+.resident-report-dialog .p-button {
+    min-height: 2rem;
+    border-radius: 8px;
+    font-size: 0.8125rem;
+}
+.resident-report-dialog img {
+    display: block;
+    width: 100%;
+    max-height: 65vh;
+    object-fit: contain;
+    border-radius: 8px;
+}
+.resident-report-dialog :focus-visible {
+    outline: none;
+    box-shadow: none;
+    border-color: var(--p-primary-color);
+}
+@media (max-width: 1199px) {
+    .resident-wizard.resident-report .resident-wizard-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .resident-report .report-context {
+        position: static;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        padding: 0;
+    }
+    .resident-report .report-context-identity {
+        display: none;
+    }
+}
+@media (max-width: 639px) {
+    .resident-report .report-page-header {
+        margin-bottom: 1rem;
+    }
+    .resident-report .report-page-header h2 {
+        font-size: 1.25rem;
+    }
+    .resident-report .report-page-header p {
+        font-size: 0.75rem;
+    }
+    .resident-wizard.resident-report .resident-wizard-steps {
+        padding: 0.75rem 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .resident-report .p-step {
+        gap: 0.375rem;
+    }
+    .resident-report .p-step-header {
+        gap: 0.375rem;
+    }
+    .resident-report .p-step-number {
+        min-width: 1.5rem;
+        width: 1.5rem;
+        height: 1.5rem;
+        font-size: var(--report-meta-size);
+    }
+    .resident-report .p-step-title {
+        font-size: 0.75rem;
+    }
+    .resident-report .report-step-label small {
+        display: none;
+    }
+    .resident-report .p-stepper-separator {
+        margin-right: 0.375rem;
+    }
+    .resident-report .resident-wizard-main {
+        padding: 1rem;
+    }
+    .resident-report .resident-field-pair,
+    .resident-report .report-context {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .resident-report .report-context {
+        gap: 1rem;
+    }
+    .resident-report .report-section-heading {
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+    .resident-wizard.resident-report .pin-canvas {
+        height: 17rem;
+        min-height: 17rem;
+    }
+    .resident-report .report-forward-actions {
+        gap: 0.375rem;
+    }
+    .resident-report .report-forward-actions .p-button {
+        font-size: 0.75rem;
+    }
+    .resident-wizard.resident-report .resident-wizard-bar > * {
+        width: auto;
+    }
+    .resident-report .report-photo-guide {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .resident-report *,
+    .resident-report-overlay *,
+    .resident-report-dialog * {
+        transition: none;
+        scroll-behavior: auto;
+    }
+}
+
+.resident-report .pin-actions .p-button:not(.p-button-outlined) {
+    background: var(--resident-blue);
+    border-color: var(--resident-blue);
+    color: var(--resident-card);
+}
+.resident-report .pin-actions .p-button:not(.p-button-outlined):hover {
+    background: var(--resident-blue-hover);
+}
+
+.resident-report .p-checkbox:has(input:focus-visible) .p-checkbox-box {
+    outline: none;
+    box-shadow: none;
+    border-color: var(--resident-blue);
+    filter: brightness(0.9);
+}

@@ -78,6 +78,7 @@ class ReportAssignmentService
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
     }
 
     /**
@@ -100,7 +101,7 @@ class ReportAssignmentService
         $status = (string) ($assessment->assessment_status ?? '');
         $stage = (string) ($assessment->workflow_stage ?? '');
         if (in_array($status, ['submitted', 'signed'], true)
-            || in_array($stage, ['pending_admin_verification', 'pending_city_assessor', 'forwarded_cdrrmo'], true)) {
+            || in_array($stage, ['pending_admin_verification', 'pending_city_assessor', 'ready_for_consolidation', 'forwarded_cdrrmo'], true)) {
             abort(422, 'This assessment has already been submitted for verification. Use the return or correction workflow instead of reassignment.');
         }
 
@@ -111,6 +112,73 @@ class ReportAssignmentService
                 ->exists()) {
             abort(422, 'This assessment has already been signed by the assigned assessor. Use the return or correction workflow instead of reassignment.');
         }
+    }
+
+    /**
+     * @param  list<int>  $barangayIds
+     * @return array{total: int, with_active: int, without_active: int, personnel: list<array<string, mixed>>}
+     */
+    public function assessorSummary(array $barangayIds, string $assignmentRole = 'rdana'): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $barangayIds)));
+        if ($ids === [] || ! Schema::hasTable('user_barangay_assignments') || ! Schema::hasTable('roles')) {
+            return ['total' => 0, 'with_active' => 0, 'without_active' => 0, 'personnel' => []];
+        }
+
+        $columns = [
+            'users.id',
+            'users.first_name',
+            'users.last_name',
+            'assignments.barangay_id',
+            'barangays.barangay_name',
+        ];
+        if (Schema::hasColumn('users', 'job_title')) {
+            $columns[] = 'users.job_title';
+        }
+
+        $people = DB::table('user_barangay_assignments as assignments')
+            ->join('users', 'users.id', '=', 'assignments.user_id')
+            ->join('roles', 'roles.id', '=', 'users.role_id')
+            ->leftJoin('barangays', 'barangays.id', '=', 'assignments.barangay_id')
+            ->where('roles.code', $assignmentRole)
+            ->whereIn('assignments.barangay_id', $ids)
+            ->whereNull('assignments.revoked_at')
+            ->where('users.account_status', 'active')
+            ->orderBy('users.last_name')
+            ->get($columns);
+
+        $byUser = [];
+        foreach ($people as $row) {
+            $userId = (int) $row->id;
+            if (! isset($byUser[$userId])) {
+                $workload = $this->workload($userId, $assignmentRole);
+                $byUser[$userId] = [
+                    'id' => $userId,
+                    'name' => trim($row->first_name.' '.$row->last_name),
+                    'job_title' => Schema::hasColumn('users', 'job_title') ? ($row->job_title ?? null) : null,
+                    'barangays' => [],
+                    'active_count' => $workload['active'],
+                    'pending_count' => $workload['pending'],
+                    'assessing_count' => $workload['assessing'] ?? 0,
+                    'completed_count' => $workload['completed'] ?? ($workload['reviewed'] ?? 0),
+                    'has_active_assignment' => $workload['active'] > 0,
+                ];
+            }
+            $byUser[$userId]['barangays'][] = [
+                'id' => (int) $row->barangay_id,
+                'name' => $row->barangay_name ?? 'Barangay',
+            ];
+        }
+
+        $personnel = array_values($byUser);
+        $withActive = count(array_filter($personnel, fn (array $row) => $row['has_active_assignment']));
+
+        return [
+            'total' => count($personnel),
+            'with_active' => $withActive,
+            'without_active' => count($personnel) - $withActive,
+            'personnel' => $personnel,
+        ];
     }
 
     /**
@@ -251,7 +319,7 @@ class ReportAssignmentService
         }
 
         $stage = (string) ($assessment->workflow_stage ?? '');
-        if (in_array($stage, ['pending_admin_verification', 'pending_city_assessor', 'forwarded_cdrrmo'], true)) {
+        if (in_array($stage, ['pending_admin_verification', 'pending_city_assessor', 'ready_for_consolidation', 'forwarded_cdrrmo'], true)) {
             return 'completed';
         }
         if (in_array($status, ['signed', 'submitted'], true)) {
@@ -308,9 +376,8 @@ class ReportAssignmentService
         if ($needsReason && trim((string) $replacedReason) === '') {
             abort(422, 'A reason is required when replacing the assigned officer.');
         }
-
-        foreach ($ids as $reportId) {
-            if ($needsReason) {
+        if ($needsReason) {
+            foreach ($ids as $reportId) {
                 $this->assertBarangayReportReassignable($reportId);
             }
         }

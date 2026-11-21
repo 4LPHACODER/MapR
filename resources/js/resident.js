@@ -2,15 +2,20 @@ import './bootstrap';
 import { createApp } from 'vue';
 import { createRouter, createWebHistory } from 'vue-router';
 import ResidentApp from './resident/App.vue';
+import { installPrimeVue } from './shared/ui/installPrimeVue';
 import DashboardPage from './resident/pages/DashboardPage.vue';
 import HazardMapPage from './resident/pages/HazardMapPage.vue';
 import ReportWizardPage from './resident/pages/ReportWizardPage.vue';
 import ReportsPage from './resident/pages/ReportsPage.vue';
 import ReportDetailPage from './resident/pages/ReportDetailPage.vue';
-import ReportTrackPage from './resident/pages/ReportTrackPage.vue';
 import ProfilePage from './resident/pages/ProfilePage.vue';
 import '../css/shared/workspace.css';
 import '../css/resident/app.css';
+import '../css/resident/reports.css';
+import '../css/resident/dashboard.css';
+import '../css/resident/map.css';
+import '../css/resident/report.css';
+import '../css/resident/profile.css';
 
 const root = document.getElementById('resident-app');
 
@@ -28,20 +33,20 @@ if (root) {
             { path: '/map', component: HazardMapPage, meta: { title: 'Map' } },
             { path: '/report/:id?', component: ReportWizardPage, meta: { title: 'Report', wizard: true } },
             { path: '/reports', component: ReportsPage, meta: { title: 'My Reports' } },
-            { path: '/reports/:id', component: ReportDetailPage, meta: { title: 'Report' } },
-            { path: '/reports/:id/track', component: ReportTrackPage, meta: { title: 'Status' } },
+            { path: '/reports/:id', component: ReportDetailPage, meta: { title: 'Resident Report' } },
+            { path: '/reports/:id/track', name: 'resident-report-track', component: ReportDetailPage, meta: { title: 'Report Progress' } },
             { path: '/profile', component: ProfilePage, meta: { title: 'Profile' } },
         ],
     });
 
-    createApp(ResidentApp, {
+    installPrimeVue(createApp(ResidentApp, {
         userName: root.dataset.userName || '',
         userEmail: root.dataset.userEmail || '',
         jobTitle: root.dataset.jobTitle || 'Resident',
         logoutUrl: root.dataset.logoutUrl || '/logout',
         homeUrl: root.dataset.homeUrl || '/',
         csrfToken: token || '',
-    })
+    }))
         .use(router)
         .provide('apiBase', '/resident/api')
         .provide('mapboxToken', root.dataset.mapboxToken || '')

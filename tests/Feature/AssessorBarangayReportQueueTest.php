@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Auth\User;
+use App\Services\ReportWorkflow;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -55,8 +56,8 @@ class AssessorBarangayReportQueueTest extends TestCase
         $reference = DB::table('barangay_reports')->where('id', $reportId)->value('report_reference');
         $this->assertSame('draft', DB::table('barangay_reports')->where('id', $reportId)->value('report_status'));
 
-        $secretary = $this->user('barangay_secretary', 'Leonida Lagunda', $mabua);
-        $captain = $this->user('barangay_captain', 'Rocky Pimentel', $mabua);
+        $secretary = $this->user('barangay_secretary', 'Test Secretary', $mabua);
+        $captain = $this->user('barangay_captain', 'Test Captain', $mabua);
         foreach ([$secretary, $captain] as $person) {
             DB::table('user_barangay_assignments')->insert([
                 'assigned_at' => now(),
@@ -86,7 +87,7 @@ class AssessorBarangayReportQueueTest extends TestCase
             ->assertJsonPath('data.0.id', $reportId)
             ->assertJsonPath('data.0.reference', $reference);
 
-        $admin = $this->user('rdana_admin_officer', 'Mark Merillo', $mabua);
+        $admin = $this->user('rdana_admin_officer', 'Test Assessor', $mabua);
         DB::table('user_barangay_assignments')->insert([
             'assigned_at' => now(),
             'user_id' => $admin->id,
@@ -268,7 +269,7 @@ class AssessorBarangayReportQueueTest extends TestCase
         $mabua = $this->barangay('166819008', 'Mabua');
         $telaje = $this->barangay('166819022', 'Telaje');
         $officer = $this->officer($mabua);
-        $assessor = $this->user('rdana', 'Mark Merillo');
+        $assessor = $this->user('rdana', 'Test Assessor');
         $incident = $this->incident($mabua, 'Demo flood event');
         $reportId = DB::table('barangay_reports')->insertGetId([
             'report_reference' => 'BR-2026-L1BZ22',
@@ -312,7 +313,7 @@ class AssessorBarangayReportQueueTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $withoutAssignment = app(\App\Services\ReportWorkflow::class)->backfillAssessorAssignmentsForReviewQueue();
+        $withoutAssignment = app(ReportWorkflow::class)->backfillAssessorAssignmentsForReviewQueue();
         $this->assertSame(0, $withoutAssignment['linked']);
         $this->assertSame(1, $withoutAssignment['missing_assessor']);
 
@@ -327,7 +328,7 @@ class AssessorBarangayReportQueueTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $backfill = app(\App\Services\ReportWorkflow::class)->backfillAssessorAssignmentsForReviewQueue();
+        $backfill = app(ReportWorkflow::class)->backfillAssessorAssignmentsForReviewQueue();
         $this->assertSame(1, $backfill['linked']);
         $this->assertSame(1, DB::table('field_assessments')->where('barangay_report_id', $reportId)->where('assigned_assessor_id', $assessor->id)->count());
 
@@ -650,7 +651,7 @@ class AssessorBarangayReportQueueTest extends TestCase
         return $user->fresh('role');
     }
 
-    private function assessor(array $barangayIds, string $name = 'Mark Merillo'): User
+    private function assessor(array $barangayIds, string $name = 'Test Assessor'): User
     {
         $user = $this->user('rdana', $name);
         foreach ($barangayIds as $barangayId) {

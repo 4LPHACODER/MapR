@@ -1,10 +1,12 @@
 <script setup>
 import { inject, onBeforeUnmount, onMounted, ref } from 'vue';
+import Button from 'primevue/button';
+import Message from 'primevue/message';
 
 const props = defineProps({
     recorded: { type: Boolean, default: false },
     manual: { type: Boolean, default: false },
-    label: { type: String, default: 'Resident Electronic Signature' },
+    label: { type: String, default: 'Your signature' },
     lead: { type: String, default: 'Draw your signature below using your finger, mouse, or stylus.' },
 });
 const emit = defineEmits(['ready', 'busy']);
@@ -14,11 +16,16 @@ const canvas = ref(null);
 const saving = ref(false);
 const status = ref('');
 const error = ref('');
+const strokeCount = ref(0);
 let strokes = [];
 let current = null;
 let drawing = false;
 let loaded = null;
 let observer = null;
+
+function syncStrokeCount() {
+    strokeCount.value = strokes.length;
+}
 
 function hasInk() {
     return strokes.some((stroke) => stroke.length > 1);
@@ -69,6 +76,7 @@ function start(event) {
     loaded = null;
     current = [point(event)];
     strokes.push(current);
+    syncStrokeCount();
     paint();
 }
 
@@ -90,6 +98,7 @@ async function drawPreview(url) {
     const bitmap = await createImageBitmap(response.data);
     loaded = bitmap;
     strokes = [];
+    syncStrokeCount();
     paint();
 }
 
@@ -122,7 +131,18 @@ function clearDrawing() {
     loaded = null;
     status.value = '';
     error.value = '';
+    syncStrokeCount();
     emit('ready', false);
+    paint();
+}
+
+function undoLastStroke() {
+    if (!strokes.length) return;
+    strokes.pop();
+    current = null;
+    drawing = false;
+    syncStrokeCount();
+    if (!hasInk()) emit('ready', false);
     paint();
 }
 
@@ -150,6 +170,7 @@ defineExpose({
     hasInk: () => hasInk(),
     exportPng,
     clearDrawing,
+    undoLastStroke,
 });
 
 onMounted(async () => {
@@ -182,6 +203,7 @@ onBeforeUnmount(() => {
         <h3 id="resident-signature-label">{{ label }}</h3>
         <p class="resident-lead">{{ lead }}</p>
         <p v-if="recorded" class="resident-muted">The original signature remains on record.</p>
+        <!-- native-ok: canvas captures signature strokes and exports the saved PNG. -->
         <canvas
             ref="canvas"
             :aria-label="label"
@@ -191,11 +213,13 @@ onBeforeUnmount(() => {
             @pointercancel="end"
         ></canvas>
         <div class="resident-signature-actions">
-            <button type="button" class="resident-secondary" :disabled="saving" @click="clearPad">Clear Signature</button>
-            <button v-if="error" type="button" class="resident-primary" :disabled="saving" @click="save">Retry</button>
+            <Button size="small" type="button" label="Undo" severity="secondary" variant="outlined" class="resident-secondary" :disabled="saving || strokeCount < 1" @click="undoLastStroke" />
+            <Button size="small" type="button" label="Clear signature" severity="secondary" variant="outlined" class="resident-secondary" :disabled="saving" @click="clearPad" />
+            <slot name="actions" />
+            <Button size="small" v-if="error" type="button" label="Retry" class="resident-primary" :disabled="saving" @click="save" />
         </div>
         <p v-if="saving" class="resident-muted" role="status">Saving signature…</p>
-        <p v-else-if="status" class="resident-ok" role="status">{{ status }}</p>
-        <p v-if="error" class="resident-error" role="alert">{{ error }}</p>
+        <Message v-else-if="status" severity="success" :closable="false" role="status">{{ status }}</Message>
+        <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
     </section>
 </template>

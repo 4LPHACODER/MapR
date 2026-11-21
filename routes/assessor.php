@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Assessor\AssessmentController;
 use App\Http\Controllers\Assessor\BuildingDamageAssessmentController;
+use App\Http\Controllers\Assessor\FieldConsolidationController;
 use App\Http\Controllers\Assessor\PageController;
 use App\Http\Controllers\Assessor\ResidentController;
 use App\Http\Controllers\Bdrrm\BarangayReportController;
@@ -38,6 +39,7 @@ Route::middleware(['auth', 'role:rdana,rdana_admin_officer,rdana_city_assessor',
     Route::get('api/damage-classes', [AssessmentController::class, 'damageClasses']);
     Route::get('api/buildings', [BarangayReportController::class, 'buildings']);
     Route::get('api/barangay-reports', [AssessmentController::class, 'barangayReports']);
+    Route::get('api/barangay-reports/export', [AssessmentController::class, 'exportBarangayReports']);
     Route::get('api/barangay-reports/{report}', [BarangayReportController::class, 'show']);
     Route::get('api/barangay-reports/{report}/damage-assessment', [BuildingDamageAssessmentController::class, 'show']);
     Route::get('api/barangay-reports/{report}/damage-assessment/history', [BuildingDamageAssessmentController::class, 'history']);
@@ -58,6 +60,14 @@ Route::middleware(['auth', 'role:rdana,rdana_admin_officer,rdana_city_assessor',
     Route::post('api/barangay-reports/{report}/damage-assessment/revise', [BuildingDamageAssessmentController::class, 'revise']);
     Route::post('api/barangay-reports/{report}/return', [AssessmentController::class, 'returnReport']);
     Route::get('api/assessments', [AssessmentController::class, 'index']);
+    Route::get('api/field-consolidation', [FieldConsolidationController::class, 'dashboard']);
+    Route::get('api/field-consolidation/reports', [FieldConsolidationController::class, 'reports']);
+    Route::get('api/field-consolidation/map', [FieldConsolidationController::class, 'map']);
+    Route::get('api/field-consolidation/history', [FieldConsolidationController::class, 'history']);
+    Route::get('api/field-consolidation/export', [FieldConsolidationController::class, 'export']);
+    Route::get('api/field-consolidation/exports/{export}/download', [FieldConsolidationController::class, 'downloadExport']);
+    Route::post('api/field-consolidation/submit/preview', [FieldConsolidationController::class, 'previewSubmit']);
+    Route::post('api/field-consolidation/submit', [FieldConsolidationController::class, 'submit']);
     Route::get('api/assessments/{assessment}', [AssessmentController::class, 'show']);
     Route::get('assessments/{assessment}/preview', [PreviewController::class, 'assessment']);
     Route::get('api/reports/{report}/photos/{photo}', [PhotoController::class, 'show']);

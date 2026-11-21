@@ -1,5 +1,6 @@
 import './bootstrap';
 import { createApp } from 'vue';
+import { installPrimeVue } from './shared/ui/installPrimeVue';
 import { createRouter, createWebHistory } from 'vue-router';
 import FieldApp from './bdrrm/App.vue';
 import DashboardPage from './bdrrm/pages/DashboardPage.vue';
@@ -16,7 +17,8 @@ import '../css/shared/workspace.css';
 import '../css/bdrrm/submissions.css';
 import '../css/bdrrm/dashboard.css';
 import '../css/bdrrm/map.css';
-import '../css/bdrrm/buildings.css';
+import '../css/cdrrmo/residents.css';
+import '../css/bdrrm/residents.css';
 import '../css/bdrrm/reports.css';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
@@ -59,14 +61,14 @@ if (root) {
         return true;
     });
 
-    createApp(FieldApp, {
+    installPrimeVue(createApp(FieldApp, {
         userName: root.dataset.userName || '',
         userEmail: root.dataset.userEmail || '',
         jobTitle: root.dataset.jobTitle || '',
         logoutUrl: root.dataset.logoutUrl || '/logout',
         homeUrl: root.dataset.homeUrl || '/',
         csrfToken: token || '',
-    })
+    }))
         .use(router)
         .provide('apiBase', '/bdrrm/api')
         .provide('roleCode', roleCode)

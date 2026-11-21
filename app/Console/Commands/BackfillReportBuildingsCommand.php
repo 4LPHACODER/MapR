@@ -66,6 +66,7 @@ class BackfillReportBuildingsCommand extends Command
                 if (count($candidates) !== 1) {
                     $skipped++;
                     $this->line("Skip {$report->report_reference}: unambiguous building not found (".count($candidates).' candidates).');
+
                     continue;
                 }
                 $buildingId = $candidates[0];
@@ -78,12 +79,14 @@ class BackfillReportBuildingsCommand extends Command
             if (! $valid) {
                 $skipped++;
                 $this->line("Skip {$report->report_reference}: building {$buildingId} not in report barangay.");
+
                 continue;
             }
 
             if ($dryRun) {
                 $this->info("[dry-run] Would link {$report->report_reference} → building {$buildingId}");
                 $linked++;
+
                 continue;
             }
 

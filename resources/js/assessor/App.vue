@@ -1,8 +1,8 @@
 <script setup>
-import { computed, onMounted, onUnmounted, provide, reactive, ref } from 'vue';
+import { provide, reactive } from 'vue';
 import { useRoute } from 'vue-router';
-import FieldSidebar from './components/FieldSidebar.vue';
-import FieldHeader from './components/FieldHeader.vue';
+import WorkspaceLayout from '../shared/layouts/WorkspaceLayout.vue';
+import '../../css/rdana/workspace.css';
 
 defineProps({
     userName: { type: String, default: '' },
@@ -14,9 +14,6 @@ defineProps({
 });
 
 const route = useRoute();
-const drawerOpen = ref(false);
-const sidebarCollapsed = ref(false);
-const title = computed(() => route.meta.title || 'Workspace');
 const areaState = reactive({
     hasPolygon: false,
     coordinates: null,
@@ -52,42 +49,10 @@ provide('reportContext', {
         router.push({ path: '/residents' });
     },
 });
-
-function onKeydown(event) {
-    if (event.key === 'Escape') drawerOpen.value = false;
-}
-
-onMounted(() => window.addEventListener('keydown', onKeydown));
-onUnmounted(() => window.removeEventListener('keydown', onKeydown));
 </script>
 
 <template>
-    <div class="cdrrmo-app" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
-        <button v-if="drawerOpen" type="button" class="cdrrmo-sidebar-backdrop" aria-label="Close navigation menu" @click="drawerOpen = false" />
-        <div class="cdrrmo-layout">
-            <FieldSidebar
-                :home-url="homeUrl"
-                :user-name="userName"
-                :user-email="userEmail"
-                :job-title="jobTitle"
-                :logout-url="logoutUrl"
-                :csrf-token="csrfToken"
-                :open="drawerOpen"
-                :collapsed="sidebarCollapsed"
-                @close="drawerOpen = false"
-                @toggle-collapse="sidebarCollapsed = !sidebarCollapsed"
-            />
-            <div class="cdrrmo-main">
-                <FieldHeader
-                    :title="title"
-                    :user-name="userName"
-                    :job-title="jobTitle"
-                    @open-menu="drawerOpen = true"
-                />
-                <main class="cdrrmo-content">
-                    <router-view />
-                </main>
-            </div>
-        </div>
-    </div>
+    <WorkspaceLayout v-bind="$props" workspace="assessor" :class="{ 'rdana-compact': route.meta.compact }">
+        <router-view />
+    </WorkspaceLayout>
 </template>

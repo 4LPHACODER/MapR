@@ -25,7 +25,8 @@ class ActivityLogController extends Controller
         $query = DB::table('activity_events as e')
             ->join('users as u', 'u.id', '=', 'e.user_id')
             ->when($request->filled('action_type'), fn ($q) => $q->where('e.action_type', $request->string('action_type')))
-            ->orderByDesc('e.created_at');
+            ->orderByDesc('e.created_at')
+            ->orderByDesc('e.id');
 
         $total = (clone $query)->count();
         $rows = $query

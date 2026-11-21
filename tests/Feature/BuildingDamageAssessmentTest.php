@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Auth\User;
 use App\Services\BuildingCostEstimator;
 use App\Services\DamageInferenceClient;
+use App\Services\ReportAssignmentService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -609,7 +610,7 @@ class BuildingDamageAssessmentTest extends TestCase
         $this->assertSame('returned', $row->assessment_status);
         $this->assertSame('assessor_draft', $row->workflow_stage);
         $this->assertSame(0, DB::table('report_signatures')->where('field_assessment_id', $fieldAssessmentId)->count());
-        $this->assertSame('draft', app(\App\Services\ReportAssignmentService::class)->assessmentBucket($reportId));
+        $this->assertSame('draft', app(ReportAssignmentService::class)->assessmentBucket($reportId));
     }
 
     /**
@@ -947,7 +948,7 @@ class BuildingDamageAssessmentTest extends TestCase
         return $user->fresh('role');
     }
 
-    private function assessor(array $barangayIds, string $name = 'Mark Merillo'): User
+    private function assessor(array $barangayIds, string $name = 'Test Assessor'): User
     {
         $user = $this->user('rdana', $name);
         foreach ($barangayIds as $barangayId) {

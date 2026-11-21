@@ -1,0 +1,52 @@
+name: Testing
+
+on:
+  pull_request:
+    branches: [testing]
+  push:
+    branches: [testing]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-suite:
+    name: Full test suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: bcmath, exif, gd, intl, mbstring, pcntl, pdo_mysql, pdo_sqlite, zip
+          tools: composer:v2
+          coverage: none
+      - name: Install LibreOffice for DOCX preview tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-writer fonts-crosextra-carlito fonts-dejavu-core fonts-liberation
+          sudo mkdir -p /usr/share/fonts/google-carlito-fonts
+          sudo ln -sfn /usr/share/fonts/truetype/crosextra/Carlito-Regular.ttf /usr/share/fonts/google-carlito-fonts/Carlito-Regular.ttf
+          sudo ln -sfn /usr/share/fonts/truetype/crosextra/Carlito-Bold.ttf /usr/share/fonts/google-carlito-fonts/Carlito-Bold.ttf
+          test -x /usr/bin/soffice
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: npm ci
+      - run: npm run test:map
+      - run: npm run test:pwa
+      - run: npm run build
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate --ansi
+      - run: composer test
+
+  build:
+    uses: ./.github/workflows/build.yml

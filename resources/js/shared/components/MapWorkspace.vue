@@ -1,6 +1,10 @@
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, useId, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import Button from 'primevue/button';
+import Checkbox from 'primevue/checkbox';
+import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
 import mapboxgl from 'mapbox-gl';
 import MapboxDraw from '@mapbox/mapbox-gl-draw';
 import AreaSummaryPanel from './AreaSummaryPanel.vue';
@@ -10,6 +14,7 @@ import MapActionsMenu from '../../bdrrm/components/MapActionsMenu.vue';
 import { createCommunityLayers } from '../../bdrrm/communityLayers.js';
 
 const props = defineProps({
+    compact: { type: Boolean, default: false },
     embedded: { type: Boolean, default: false },
     apiBase: { type: String, default: '/cdrrmo/api' },
     allowImpact: { type: Boolean, default: true },
@@ -24,6 +29,7 @@ const props = defineProps({
 });
 
 const route = useRoute();
+const controlId = useId();
 const router = useRouter();
 const emit = defineEmits(['select-report']);
 const mapboxToken = inject('mapboxToken');
@@ -31,6 +37,8 @@ const mapboxStyle = inject('mapboxStyle');
 const reportContext = inject('reportContext');
 
 const mapEl = ref(null);
+const mapFrame = ref(null);
+const fullscreen = ref(false);
 const error = ref('');
 const loading = ref(true);
 const mapMeta = ref({ eligible_marker_count: 0, message_if_zero: '' });
@@ -39,6 +47,12 @@ const incidents = ref([]);
 const selectedBarangay = ref(props.preview ? String(props.barangayId || '') : (route.query.barangay_id || ''));
 const selectedIncident = ref(route.query.incident_id || '');
 const searchRef = ref(route.query.search || '');
+const searchInput = ref(null);
+function clearMapSearch() {
+    searchRef.value = '';
+    searchOpen.value = false;
+    searchInput.value?.$el?.focus();
+}
 const searchOpen = ref(false);
 const layersOpen = ref(false);
 const layers = ref({
@@ -77,8 +91,23 @@ const selection = reactive({
 });
 
 const mapMissing = computed(() => !mapboxToken);
+const isCdrrmoMap = computed(() => route.path === '/map'
+    && props.apiBase === '/cdrrmo/api'
+    && !props.compact
+    && !props.embedded
+    && !props.preview);
+const isAssessorMap = computed(() => props.actionMenu && props.apiBase === '/rdana/api');
+const controlSize = computed(() => props.compact || props.actionMenu ? 'small' : undefined);
+const filterPanelClass = computed(() => {
+    if (isAssessorMap.value) return 'rdana-map-select';
+    if (props.actionMenu) return 'bdrrm-map-select';
+    if (props.compact) return 'cdrrmo-dashboard-overlay';
+    if (isCdrrmoMap.value) return 'cdrrmo-map-overlay';
+    return undefined;
+});
 const barangayEmptyLabel = computed(() => {
     if (!props.scopeBarangays) return 'All four barangays';
+    if (props.actionMenu) return barangays.value.length ? 'All assigned' : 'None assigned';
     return barangays.value.length ? 'All assigned barangays' : 'No assigned barangay';
 });
 const summary = computed(() => reportContext.state.summary);
@@ -92,6 +121,12 @@ const searchMatches = computed(() => householdFeatures.value.slice(0, 8));
 const styleUrls = {
     satellite: 'mapbox://styles/mapbox/satellite-streets-v12',
     streets: 'mapbox://styles/mapbox/streets-v12',
+};
+const markerColors = {
+    household: '#0d9488',
+    building: '#6d28d9',
+    report: '#1e3a8a',
+    preliminary: '#f59e0b',
 };
 
 let map;
@@ -267,13 +302,14 @@ function applyHighlight() {
         paintResidentSelection();
         return;
     }
-    const householdId = selection.featureType === 'household' ? String(selection.featureId ?? '') : '';
-    const buildingId = selection.featureType === 'building' ? String(selection.featureId ?? '') : '';
-    const clauses = [];
-    if (householdId) clauses.push(['==', ['to-string', ['get', 'household_id']], householdId]);
-    if (buildingId) clauses.push(['==', ['to-string', ['get', 'building_id']], buildingId]);
-    const selected = clauses.length === 0 ? ['==', ['literal', 1], ['literal', 0]] : clauses.length === 1 ? clauses[0] : ['any', ...clauses];
-    map.setPaintProperty('household-points', 'circle-stroke-color', ['case', selected, '#f59e0b', '#0f172a']);
+    const householdId = selection.featureType === 'household' ? String(selection.featureId ?? -1) : '-1';
+    const buildingId = selection.featureType === 'building' ? String(selection.featureId ?? -1) : '-1';
+    // Mapbox needs a data-driven expression even when the selection is empty.
+    const selected = ['any',
+        ['==', ['to-string', ['get', 'household_id']], householdId],
+        ['==', ['to-string', ['get', 'building_id']], buildingId],
+    ];
+    map.setPaintProperty('household-points', 'circle-stroke-color', ['case', selected, '#f59e0b', props.actionMenu ? '#fff' : '#0f172a']);
     map.setPaintProperty('household-points', 'circle-stroke-width', ['case', selected, 4, 1]);
     map.setPaintProperty('household-points', 'circle-radius', ['case', selected, 11, 7]);
     paintResidentSelection();
@@ -282,9 +318,8 @@ function applyHighlight() {
 function paintResidentSelection() {
     if (!map?.getLayer('resident-submission-points')) return;
     const reportId = selection.featureType === 'resident-report' ? String(selection.featureId ?? '') : '';
-    const reportSelected = reportId
-        ? ['==', ['to-string', ['get', 'id']], reportId]
-        : ['==', ['literal', 1], ['literal', 0]];
+    // Keep the paint expression data-driven when clearing the selection.
+    const reportSelected = ['==', ['to-string', ['get', 'id']], reportId];
     map.setPaintProperty('resident-submission-points', 'circle-stroke-color', ['case', reportSelected, '#f59e0b', '#ffffff']);
     map.setPaintProperty('resident-submission-points', 'circle-stroke-width', ['case', reportSelected, 4, 2]);
     map.setPaintProperty('resident-submission-points', 'circle-radius', ['case', reportSelected, 11, 8]);
@@ -587,8 +622,8 @@ function ensureMapLayers() {
 
     map.addLayer({ id: 'flood-fill', type: 'fill', source: 'flood', paint: { 'fill-color': '#38bdf8', 'fill-opacity': 0.25 } });
     map.addLayer({ id: 'boundary-line', type: 'line', source: 'boundaries', paint: { 'line-color': '#2563eb', 'line-width': 2 } });
-    map.addLayer({ id: 'field-damage-points', type: 'circle', source: 'field-damage', paint: { 'circle-color': ['coalesce', ['get', 'damage_color'], '#64748b'], 'circle-radius': 8, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1 } });
-    map.addLayer({ id: 'ai-prediction-points', type: 'circle', source: 'ai-predictions', paint: { 'circle-color': '#f59e0b', 'circle-radius': 6, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1 } });
+    map.addLayer({ id: 'field-damage-points', type: 'circle', source: 'field-damage', paint: { 'circle-color': ['coalesce', ['get', 'damage_color'], '#64748b'], 'circle-radius': props.actionMenu ? 11 : 8, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1 } });
+    map.addLayer({ id: 'ai-prediction-points', type: 'circle', source: 'ai-predictions', paint: { 'circle-color': markerColors.preliminary, 'circle-radius': props.actionMenu ? 9 : 6, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1 } });
     map.addLayer({ id: 'household-clusters', type: 'circle', source: 'households', filter: ['has', 'point_count'], paint: { 'circle-color': '#0d9488', 'circle-radius': 18 } });
     map.addLayer({ id: 'household-count', type: 'symbol', source: 'households', filter: ['has', 'point_count'], layout: { 'text-field': ['get', 'point_count'], 'text-size': 12 }, paint: { 'text-color': '#fff' } });
     map.addLayer({
@@ -596,7 +631,14 @@ function ensureMapLayers() {
         type: 'circle',
         source: 'households',
         filter: ['!', ['has', 'point_count']],
-        paint: { 'circle-color': '#0d9488', 'circle-stroke-color': '#0f172a', 'circle-stroke-width': 1, 'circle-radius': 7 },
+        paint: {
+            'circle-color': props.actionMenu
+                ? ['case', ['>', ['to-number', ['get', 'household_count_at_building'], 0], 1], markerColors.building, markerColors.household]
+                : markerColors.household,
+            'circle-stroke-color': props.actionMenu ? '#fff' : '#0f172a',
+            'circle-stroke-width': 1,
+            'circle-radius': 7,
+        },
     });
     if (props.residentSubmissions) {
         map.addSource('resident-submissions', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -604,7 +646,7 @@ function ensureMapLayers() {
             id: 'resident-submission-points',
             type: 'circle',
             source: 'resident-submissions',
-            paint: { 'circle-color': '#1e3a8a', 'circle-radius': 8, 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 },
+            paint: { 'circle-color': markerColors.report, 'circle-radius': 8, 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 },
         });
     }
     map.addSource('selection-highlight', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -907,18 +949,75 @@ function runMapAction(command) {
     else if (command === 'filters') clearFilters();
 }
 
+// Layer disclosure is the compact map's occasional state transition.
+// Filters, keyboard toggles, and default-density map instances stay instant.
+let animateLayers = false;
+let layerAnimation;
+
+function toggleLayers(event) {
+    animateLayers = props.compact && event.detail > 0;
+    layersOpen.value = !layersOpen.value;
+}
+
+function prepareLayerMotion(element) {
+    const height = element.getBoundingClientRect().height;
+    const opacity = height ? getComputedStyle(element).opacity : '0';
+    if (layerAnimation) {
+        layerAnimation.onfinish = null;
+        layerAnimation.cancel();
+        layerAnimation = null;
+    }
+    element.style.height = `${height}px`;
+    element.style.opacity = opacity;
+}
+
+function transitionLayers(element, done, opening) {
+    if (!animateLayers || !element.animate) {
+        element.style.height = '';
+        element.style.opacity = '';
+        done();
+        return;
+    }
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const styles = getComputedStyle(element);
+    const content = element.firstElementChild;
+    const targetHeight = content.getBoundingClientRect().height + parseFloat(getComputedStyle(content).marginBottom);
+    if (reduced) element.style.height = '';
+    const frames = reduced
+        ? [{ opacity: element.style.opacity }, { opacity: opening ? 1 : 0 }]
+        : [{ height: element.style.height, opacity: element.style.opacity }, { height: `${opening ? targetHeight : 0}px`, opacity: opening ? 1 : 0 }];
+    const durationToken = reduced ? '--cdrrmo-dash-motion-reduced' : opening ? '--cdrrmo-dash-motion-expand' : '--cdrrmo-dash-motion-collapse';
+    const animation = element.animate(frames, {
+        duration: parseFloat(styles.getPropertyValue(durationToken)),
+        easing: styles.getPropertyValue('--resident-sidebar-ease').trim(),
+    });
+    layerAnimation = animation;
+    animation.onfinish = () => {
+        layerAnimation = null;
+        element.style.height = '';
+        element.style.opacity = '';
+        done();
+    };
+}
+
 function onKeydown(event) {
     if (event.key !== 'Escape') return;
+    if (props.actionMenu && (event.defaultPrevented || event.target.closest?.('.bdrrm-community'))) return;
     if (actionsOpen.value) return;
     if (searchOpen.value) {
         searchOpen.value = false;
         return;
     }
     if (layersOpen.value) {
+        animateLayers = false;
         layersOpen.value = false;
         return;
     }
     if (selection.featureType) clearFeatureSelection();
+}
+
+function syncFullscreen() {
+    fullscreen.value = document.fullscreenElement === mapFrame.value;
 }
 
 onMounted(async () => {
@@ -952,7 +1051,7 @@ onMounted(async () => {
     } else {
         map.addControl(new mapboxgl.NavigationControl(), 'top-right');
         map.addControl(new mapboxgl.ScaleControl({ maxWidth: 120 }), 'bottom-left');
-        map.addControl(new mapboxgl.FullscreenControl(), 'top-right');
+        map.addControl(new mapboxgl.FullscreenControl(props.actionMenu ? { container: mapFrame.value } : undefined), 'top-right');
         draw = new MapboxDraw({ displayControlsDefault: false });
         map.addControl(draw);
         map.on('draw.create', onDrawChange);
@@ -981,6 +1080,11 @@ watch(() => props.barangayId, (value) => {
     if (!props.preview) return;
     previewShouldFit = true;
     selectedBarangay.value = value ? String(value) : '';
+});
+watch(() => [route.query.incident_id, route.query.barangay_id], ([incidentId, barangayId]) => {
+    if (!props.compact || props.preview) return;
+    selectedIncident.value = typeof incidentId === 'string' ? incidentId : '';
+    selectedBarangay.value = typeof barangayId === 'string' ? barangayId : '';
 });
 watch(selectedBarangay, async () => {
     const ticket = ++barangayTicket;
@@ -1023,6 +1127,7 @@ watch(() => route.query.building_id, (buildingId) => {
 watch(() => reportContext.state.coordinates, () => refreshOutsideFlag());
 
 onBeforeUnmount(() => {
+    layerAnimation?.cancel();
     clearTimeout(searchTimer);
     resizeObserver?.disconnect();
     window.removeEventListener('keydown', onKeydown);
@@ -1032,101 +1137,151 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="map-workspace" :class="{ 'is-embedded': embedded, 'is-preview': preview, 'community-open': communityOpen }">
-        <div v-if="preview" class="map-preview-tools">
-            <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" @click="resetPreview"><MapIcon name="reset" /> Reset view</button>
-        </div>
-        <div v-else class="map-toolbar">
-            <div class="map-toolbar-group">
-                <span class="map-toolbar-label">Filters</span>
-                <div class="map-mode-toggle" role="group" aria-label="Basemap">
-                    <button type="button" :class="{ 'is-active': mapStyleMode === 'satellite' }" @click="switchMapStyle('satellite')">Satellite</button>
-                    <button type="button" :class="{ 'is-active': mapStyleMode === 'streets' }" @click="switchMapStyle('streets')">Map</button>
+    <div class="map-workspace" :class="{ 'is-compact': compact, 'is-embedded': embedded, 'is-preview': preview, 'is-cdrrmo-map': isCdrrmoMap }">
+        <header v-if="!preview && actionMenu && !isAssessorMap" class="bdrrm-map-heading flex items-start justify-between gap-3">
+            <slot name="heading" />
+            <MapActionsMenu
+                v-model:open="actionsOpen"
+                :has-polygon="hasPolygon"
+                :registry-open="layersOpen"
+                :map-layers-open="communityOpen"
+                :has-map-layers="!!community"
+                @command="runMapAction"
+            />
+        </header>
+        <div v-if="!preview" class="map-toolbar">
+            <div class="map-toolbar-group is-filters" role="group" aria-label="Map filters">
+                <div v-if="isCdrrmoMap" class="map-filter-heading">
+                    <span class="map-toolbar-label">Map filters</span>
+                    <Button size="small" severity="secondary" text type="button" class="map-filter-reset" @click="clearFilters"><MapIcon name="filter-reset" /> Clear filters</Button>
                 </div>
-                <select v-model="selectedIncident" aria-label="Incident or registry view">
-                    <option value="">Registry view</option>
-                    <option v-for="inc in incidents" :key="inc.id" :value="String(inc.id)">{{ inc.incident_name }}</option>
-                </select>
-                <select v-model="selectedBarangay" aria-label="Barangay">
-                    <option value="">{{ barangayEmptyLabel }}</option>
-                    <option v-for="b in barangays" :key="b.id" :value="String(b.id)">{{ b.name }}</option>
-                </select>
-                <div class="map-search">
-                    <input
-                        v-model="searchRef"
-                        type="search"
-                        placeholder="Household or building reference"
-                        aria-label="Search household or building reference"
-                        @focus="searchOpen = !!searchRef.trim() && householdFeatures.length > 1"
-                    >
-                    <ul v-if="searchOpen && searchRef.trim() && searchMatches.length" class="map-search-results" @mousedown.prevent>
-                        <li v-for="feature in searchMatches" :key="feature.properties.household_id">
-                            <button type="button" @click="chooseSearchFeature(feature)">
-                                {{ feature.properties.household_reference }}
-                                <span v-if="feature.properties.building_reference"> · {{ feature.properties.building_reference }}</span>
-                            </button>
-                        </li>
-                        <li v-if="householdFeatures.length > searchMatches.length" class="cdrrmo-muted">Showing {{ searchMatches.length }} of {{ householdFeatures.length }} matches.</li>
-                    </ul>
+                <span v-else-if="!actionMenu" class="map-toolbar-label">{{ compact ? 'Map view' : 'Filters' }}</span>
+                <div class="map-control-field map-basemap-field">
+                    <span v-if="isCdrrmoMap || actionMenu" class="map-control-field-label">Basemap</span>
+                    <div class="map-mode-toggle" role="group" aria-label="Basemap">
+                        <Button :size="controlSize" severity="secondary" outlined type="button" :aria-pressed="mapStyleMode === 'satellite'" :class="{ 'is-active': mapStyleMode === 'satellite' }" @click="switchMapStyle('satellite')">Satellite</Button>
+                        <Button :size="controlSize" severity="secondary" outlined type="button" :aria-pressed="mapStyleMode === 'streets'" :class="{ 'is-active': mapStyleMode === 'streets' }" @click="switchMapStyle('streets')">Map</Button>
+                    </div>
                 </div>
-                <label class="map-inline-check" :class="{ 'is-disabled': !selectedIncident }">
-                    <input v-model="incidentLinkedOnly" type="checkbox" :disabled="!selectedIncident">
-                    Incident-linked records only
+                <div v-if="!compact" class="map-control-field">
+                    <label v-if="isCdrrmoMap || actionMenu" class="map-control-field-label" :for="`${controlId}-incident-filter`">Incident</label>
+                    <Select :input-id="`${controlId}-incident-filter`" v-model="selectedIncident" :options="[{ label: actionMenu ? 'Registry view' : 'Registry view (all incidents)', value: '' }, ...incidents.map((row) => ({ label: row.incident_name, value: String(row.id) }))]" option-label="label" option-value="value" aria-label="Incident or registry view" placeholder="Registry view" :size="controlSize" :pt="compact || actionMenu ? { transition: { css: false } } : undefined" :panel-class="filterPanelClass" />
+                </div>
+                <div v-if="!compact" class="map-control-field">
+                    <label v-if="isCdrrmoMap || actionMenu" class="map-control-field-label" :for="`${controlId}-barangay-filter`">Barangay</label>
+                    <Select :input-id="`${controlId}-barangay-filter`" v-model="selectedBarangay" :options="[{ label: barangayEmptyLabel, value: '' }, ...barangays.map((row) => ({ label: row.name, value: String(row.id) }))]" option-label="label" option-value="value" aria-label="Barangay" :placeholder="barangayEmptyLabel" :size="controlSize" :pt="compact || actionMenu ? { transition: { css: false } } : undefined" :panel-class="filterPanelClass" />
+                </div>
+                <div class="map-control-field map-search-field">
+                    <label v-if="isCdrrmoMap || actionMenu" class="map-control-field-label" :for="`${controlId}-household-search`">{{ isAssessorMap ? 'Household or building reference' : 'Search records' }}</label>
+                    <div class="map-search">
+                        <MapIcon v-if="actionMenu" name="search" class="bdrrm-map-search-icon" />
+                        <InputText :size="controlSize"
+                            ref="searchInput"
+                            :id="`${controlId}-household-search`"
+                            v-model="searchRef"
+                            type="search"
+                            :placeholder="isAssessorMap ? 'Search by reference' : 'Household or building reference'"
+                            aria-label="Search household or building reference"
+                            @focus="searchOpen = !!searchRef.trim() && householdFeatures.length > 1"
+                        />
+                        <Button v-if="searchRef" :size="controlSize" severity="secondary" text type="button" class="map-search-clear" aria-label="Clear map search" @click="clearMapSearch"><MapIcon name="x" /></Button>
+                        <ul v-if="searchOpen && searchRef.trim() && searchMatches.length" class="map-search-results" @mousedown.prevent>
+                            <li v-for="feature in searchMatches" :key="feature.properties.household_id">
+                                <Button :size="controlSize" severity="secondary" outlined type="button" @click="chooseSearchFeature(feature)">
+                                    {{ feature.properties.household_reference }}
+                                    <span v-if="feature.properties.building_reference"> · {{ feature.properties.building_reference }}</span>
+                                </Button>
+                            </li>
+                            <li v-if="householdFeatures.length > searchMatches.length" class="cdrrmo-muted">Showing {{ searchMatches.length }} of {{ householdFeatures.length }} matches.</li>
+                        </ul>
+                    </div>
+                </div>
+                <label v-if="!(isCdrrmoMap || isAssessorMap) || selectedIncident" class="map-inline-check" :class="{ 'is-disabled': !selectedIncident }">
+                    <Checkbox v-model="incidentLinkedOnly" binary :size="controlSize" :disabled="!selectedIncident" />
+                    {{ isCdrrmoMap ? 'Only show households linked to this incident' : 'Incident-linked records only' }}
                 </label>
             </div>
-            <div v-if="actionMenu" class="map-toolbar-group is-actions">
-                <MapActionsMenu
-                    v-model:open="actionsOpen"
-                    :has-polygon="hasPolygon"
-                    :registry-open="layersOpen"
-                    :map-layers-open="communityOpen"
-                    :has-map-layers="!!community"
-                    @command="runMapAction"
-                />
-            </div>
-            <div v-else class="map-toolbar-group">
+            <MapActionsMenu
+                v-if="isAssessorMap"
+                v-model:open="actionsOpen"
+                :has-polygon="hasPolygon"
+                :registry-open="layersOpen"
+                panel-class="rdana-map-actions-menu"
+                @command="runMapAction"
+            />
+            <div v-if="!actionMenu" class="map-toolbar-group is-actions" role="group" aria-label="Map actions">
                 <span class="map-toolbar-label">Map actions</span>
-                <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" @click="startDraw"><MapIcon name="polygon" /> Draw area</button>
-                <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" :disabled="!hasPolygon" @click="editDraw"><MapIcon name="pencil" /> Edit area</button>
-                <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" :disabled="!hasPolygon" @click="clearPolygon"><MapIcon name="eraser" /> Clear area</button>
-                <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" :disabled="!hasPolygon" @click="fitToSelection"><MapIcon name="focus" /> Fit to area</button>
-                <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" :aria-expanded="layersOpen" @click="layersOpen = !layersOpen"><MapIcon name="layers" /> Layers</button>
-                <button v-if="community" type="button" class="mapr-button mapr-button-secondary map-tool-btn" :aria-expanded="communityOpen" @click="communityOpen = !communityOpen"><MapIcon name="layers" /> Hazard map</button>
-                <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" @click="resetStudyArea"><MapIcon name="reset" /> Reset view</button>
-                <button type="button" class="mapr-button mapr-button-secondary map-tool-btn" @click="clearFilters"><MapIcon name="filter-reset" /> Clear filters</button>
+                <Button :size="controlSize" severity="secondary" outlined type="button" class="map-tool-btn" @click="startDraw"><MapIcon name="polygon" /> Draw area</Button>
+                <Button :size="controlSize" severity="secondary" outlined type="button" class="map-tool-btn" :disabled="!hasPolygon" @click="editDraw"><MapIcon name="pencil" /> Edit area</Button>
+                <Button :size="controlSize" severity="secondary" outlined type="button" class="map-tool-btn" :disabled="!hasPolygon" @click="clearPolygon"><MapIcon name="eraser" /> Clear area</Button>
+                <Button :size="controlSize" severity="secondary" outlined type="button" class="map-tool-btn" :disabled="!hasPolygon" @click="fitToSelection"><MapIcon name="focus" /> Fit to area</Button>
+                <Button :size="controlSize" severity="secondary" outlined type="button" class="map-tool-btn" :aria-expanded="layersOpen" :aria-controls="`${controlId}-layers`" @click="toggleLayers"><MapIcon name="layers" /> Layers</Button>
+                <Button :size="controlSize" severity="secondary" outlined v-if="community" type="button" class="map-tool-btn" :aria-expanded="communityOpen" @click="communityOpen = !communityOpen"><MapIcon name="layers" /> Hazard map</Button>
+                <Button :size="controlSize" severity="secondary" outlined type="button" class="map-tool-btn" @click="resetStudyArea"><MapIcon name="reset" /> Reset view</Button>
+                <Button v-if="!isCdrrmoMap" :size="controlSize" severity="secondary" outlined type="button" class="map-tool-btn" @click="clearFilters"><MapIcon name="filter-reset" /> Clear filters</Button>
             </div>
         </div>
-        <div v-if="!preview && layersOpen" class="cdrrmo-filters layer-panel">
-            <label><input v-model="layers.boundaries" type="checkbox"> Barangay boundaries</label>
-            <label><input v-model="layers.households" type="checkbox"> Source-recorded households</label>
-            <label><input v-model="layers.flood" type="checkbox"> Flood hazard (historical)</label>
-            <label><input v-model="layers.fieldDamage" type="checkbox"> Field-verified damage</label>
-            <label><input v-model="layers.aiPredictions" type="checkbox"> Preliminary AI classification</label>
-            <label v-if="residentSubmissions"><input v-model="layers.residentSubmissions" type="checkbox"> Resident-reported points (not field verified)</label>
-        </div>
-        <p v-if="loading">Loading map layers…</p>
-        <p v-if="error" class="cdrrmo-error">
+        <Transition
+            :css="false"
+            @before-enter="prepareLayerMotion"
+            @enter="(element, done) => transitionLayers(element, done, true)"
+            @enter-cancelled="prepareLayerMotion"
+            @before-leave="prepareLayerMotion"
+            @leave="(element, done) => transitionLayers(element, done, false)"
+            @leave-cancelled="prepareLayerMotion"
+        >
+            <div
+                v-if="!preview"
+                v-show="layersOpen"
+                :id="`${controlId}-layers`"
+                class="map-layer-disclosure"
+                :inert="!layersOpen"
+                :aria-hidden="!layersOpen"
+            >
+                <div class="cdrrmo-filters layer-panel" role="group" aria-label="Registry layers">
+                    <label><Checkbox v-model="layers.boundaries" binary :size="controlSize" /> Barangay boundaries</label>
+                    <label><Checkbox v-model="layers.households" binary :size="controlSize" /> Source-recorded households</label>
+                    <label><Checkbox v-model="layers.flood" binary :size="controlSize" /> Flood hazard (historical)</label>
+                    <label><Checkbox v-model="layers.fieldDamage" binary :size="controlSize" /> Field-verified damage</label>
+                    <label><Checkbox v-model="layers.aiPredictions" binary :size="controlSize" /> Preliminary AI classification</label>
+                    <label v-if="residentSubmissions"><Checkbox v-model="layers.residentSubmissions" binary :size="controlSize" /> Resident-reported points (not field verified)</label>
+                </div>
+            </div>
+        </Transition>
+        <p v-if="!actionMenu && loading">Loading map layers…</p>
+        <p v-if="!actionMenu && error" class="cdrrmo-error">
             {{ error }}
-            <button v-if="preview" type="button" class="mapr-button mapr-button-secondary map-tool-btn" @click="refreshLayers">Retry</button>
+            <Button :size="controlSize" severity="secondary" outlined v-if="preview" type="button" class="map-tool-btn" @click="refreshLayers">Retry</Button>
         </p>
         <div class="map-layout">
-            <div class="map-canvas-wrap">
+            <div ref="mapFrame" class="map-canvas-wrap" @fullscreenchange="syncFullscreen">
+                <div v-if="preview" class="map-preview-tools">
+                    <Button size="small" severity="secondary" outlined type="button" class="map-tool-btn" @click="resetPreview"><MapIcon name="reset" /> Reset view</Button>
+                </div>
                 <div ref="mapEl" class="map-canvas" :class="{ 'map-canvas-embedded': embedded }" />
-                <MapLayersPanel v-if="community" :community="community" :open="communityOpen" @update:open="communityOpen = $event" />
-                <div v-if="!preview && !loading && (mapMeta.total ?? mapMeta.eligible_marker_count) === 0" class="map-empty-overlay">
+                <MapLayersPanel v-if="community" :community="community" :open="communityOpen" :overlay-target="fullscreen ? mapFrame : null" @update:open="communityOpen = $event" />
+                <div v-if="actionMenu" class="bdrrm-map-status" role="status">
+                    <p v-if="error" class="is-error">{{ error }}</p>
+                    <p v-else-if="loading">Loading map layers…</p>
+                    <p v-else-if="(mapMeta.total ?? mapMeta.eligible_marker_count) === 0">{{ mapMeta.message_if_zero || mapMeta.message_if_empty || 'No source-recorded household locations are available.' }}</p>
+                </div>
+                <div v-else-if="!preview && !loading && (mapMeta.total ?? mapMeta.eligible_marker_count) === 0" class="map-empty-overlay">
                     <p>{{ mapMeta.message_if_zero || mapMeta.message_if_empty || 'No source-recorded household locations are available.' }}</p>
                 </div>
             </div>
             <AreaSummaryPanel
                 v-if="!preview || selection.featureType === 'resident-report'"
+                :compact="compact || actionMenu"
                 :resident-reports="residentSubmissions"
                 :summary="summary"
                 :summary-loading="summaryLoading"
                 :has-polygon="hasPolygon"
                 :area-name="areaName"
+                :area-note="actionMenu ? summary?.note : undefined"
                 :selection="selection"
                 :show-impact="allowImpact"
                 :single-clear="singleClear"
+                :show-linked-area-records="!isAssessorMap"
                 @preview-report="previewReport"
                 @view-records="viewLinkedRecords"
                 @view-households="viewLinkedRecords"
@@ -1137,11 +1292,36 @@ onBeforeUnmount(() => {
                 @open-residents="openSelectedResidents"
                 @choose-report="chooseLinkedReport"
                 @set-tab="(tab) => { selection.tab = tab; }"
-            />
+            >
+                <template v-if="actionMenu" #empty>
+                    <p v-if="isAssessorMap" class="rdana-map-empty-selection">Select a marker, choose a barangay, or draw an area to inspect it here.</p>
+                    <div v-else class="bdrrm-map-no-selection">
+                        <MapIcon name="pin" />
+                        <h4>{{ selectedBarangay ? areaName : 'No location selected' }}</h4>
+                        <p v-if="selectedBarangay">Select a marker or draw an area within this view.</p>
+                        <p v-else>Select a marker, choose a barangay, or draw an area from Map Actions.</p>
+                    </div>
+                </template>
+            </AreaSummaryPanel>
+            <footer v-if="actionMenu" class="bdrrm-map-key" aria-label="Map legend">
+                <ul class="flex flex-wrap items-center gap-x-3 gap-y-1" aria-label="Map markers">
+                    <li :style="{ '--marker-color': markerColors.household }">Household</li>
+                    <li :style="{ '--marker-color': markerColors.building }">Shared building</li>
+                    <li v-if="residentSubmissions" :style="{ '--marker-color': markerColors.report }">Resident report</li>
+                    <li v-if="community" style="--marker-color: #9a3412">Evacuation site</li>
+                    <li class="is-assessment">Field-verified damage</li>
+                    <li :style="{ '--marker-color': markerColors.preliminary }">Preliminary AI</li>
+                    <li class="is-selected">Selected location</li>
+                </ul>
+                <p><template v-if="residentSubmissions">Resident reports are unverified. </template>Field damage colors reflect the selected incident’s assessments.</p>
+                <p v-if="!isAssessorMap || (!loading && !error)" class="min-h-lh tabular-nums">
+                    <span v-if="!loading && !error">Showing {{ mapMeta.returned ?? mapMeta.source_marker_count ?? 0 }} of {{ mapMeta.total ?? mapMeta.source_marker_count ?? 0 }} source-recorded households.</span>
+                </p>
+            </footer>
         </div>
         <p v-if="preview && !loading && previewEmpty" class="map-preview-empty">No reported locations to display.</p>
         <p v-if="preview" class="cdrrmo-muted map-legend">Navy circles are reported locations, not field-verified damage.</p>
-        <p v-else class="cdrrmo-muted map-legend">
+        <p v-else-if="!actionMenu" class="cdrrmo-muted map-legend">
             Showing {{ mapMeta.returned ?? mapMeta.source_marker_count ?? 0 }} of {{ mapMeta.total ?? mapMeta.source_marker_count ?? 0 }} source-recorded households.
             Teal markers are for browsing. An amber outline marks the selection. Damage colors apply only when an assessment exists for the selected incident.
             <template v-if="residentSubmissions"> Navy circles are resident-reported locations and are not field verified.</template>

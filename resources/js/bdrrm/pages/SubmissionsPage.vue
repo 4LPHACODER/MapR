@@ -1,6 +1,20 @@
 <script setup>
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { computed, inject, nextTick, ref, watch } from 'vue';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
+import Button from 'primevue/button';
+import Checkbox from 'primevue/checkbox';
+import DatePicker from 'primevue/datepicker';
+import Dialog from 'primevue/dialog';
+import IconField from 'primevue/iconfield';
+import InputIcon from 'primevue/inputicon';
+import InputText from 'primevue/inputtext';
+import Menu from 'primevue/menu';
+import Message from 'primevue/message';
+import Paginator from 'primevue/paginator';
+import Select from 'primevue/select';
+import SelectButton from 'primevue/selectbutton';
+import Tag from 'primevue/tag';
+import { dateToIso, isoToDate } from '../../shared/ui/dates';
 import MapIcon from '../../shared/components/MapIcon.vue';
 
 const apiBase = inject('apiBase');
@@ -19,11 +33,12 @@ const page = ref(1);
 const perPage = ref(10);
 const phase = ref('loading');
 const error = ref('');
-const openMenu = ref(null);
+const rowMenu = ref(null);
+const menuRow = ref(null);
 const selectedIds = ref([]);
 const assignOpen = ref(false);
 const assignees = ref([]);
-const assigneeId = ref('');
+const assigneeId = ref(null);
 const assignRemarks = ref('');
 const replacedReason = ref('');
 const assignError = ref('');
@@ -86,7 +101,7 @@ const summaryCards = computed(() => {
             icon: 'clipboard-check',
             title: officeQueueLabel.value,
             value: isCaptain.value ? (counts.value.checked || counts.value.reviewed) : counts.value.reviewed,
-            note: isCaptain.value ? 'Checked and signed by the Barangay Secretary.' : 'Reviewed by BDRRM and awaiting Secretary checking.',
+            note: isCaptain.value ? 'Signed by the secretary' : 'Awaiting secretary check',
             tone: 'reviewed',
         },
         { key: 'total', icon: 'files', title: 'Total Submissions', value: counts.value.total, note: 'In your barangay', tone: 'total' },
@@ -186,7 +201,7 @@ async function load() {
 
 async function pushQuery(resetPage) {
     if (resetPage) page.value = 1;
-    openMenu.value = null;
+    rowMenu.value?.hide();
     const query = queryFromState();
     const target = router.resolve({ path: '/submissions', query }).fullPath;
     if (route.fullPath === target) {
@@ -198,6 +213,12 @@ async function pushQuery(resetPage) {
     applying = false;
     readRoute();
     await load();
+}
+
+function clearSearch() {
+    search.value = '';
+    document.getElementById('submission-search')?.focus();
+    pushQuery(true);
 }
 
 function clearFilters() {
@@ -212,52 +233,16 @@ function detailQuery(extra = {}) {
     return { ...route.query, ...extra };
 }
 
-function closeMenu(restore = true) {
-    const current = openMenu.value;
-    openMenu.value = null;
-    if (!restore || current == null) return;
-    document.getElementById(`submission-menu-${current}`)?.focus();
-}
-
-async function toggleMenu(id) {
-    if (openMenu.value === id) {
-        closeMenu();
-        return;
+async function toggleMenu(event, row) {
+    const target = event.currentTarget;
+    if (menuRow.value) {
+        const sameRow = menuRow.value.id === row.id;
+        rowMenu.value.hide();
+        if (sameRow) return;
+        await nextTick();
     }
-    openMenu.value = id;
-    await nextTick();
-    document.querySelector(`#submission-menu-panel-${id} [role="menuitem"]`)?.focus();
-}
-
-function onMenuKeydown(event) {
-    const items = [...event.currentTarget.querySelectorAll('[role="menuitem"]:not(:disabled)')];
-    const index = items.indexOf(document.activeElement);
-    if (event.key === 'Escape') {
-        event.preventDefault();
-        closeMenu();
-        return;
-    }
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-    event.preventDefault();
-    if (!items.length) return;
-    const next = event.key === 'ArrowDown' ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
-    items[next]?.focus();
-}
-
-function onDocumentPointer(event) {
-    if (openMenu.value == null) return;
-    const panel = document.getElementById(`submission-menu-panel-${openMenu.value}`);
-    const button = document.getElementById(`submission-menu-${openMenu.value}`);
-    if (panel?.contains(event.target) || button?.contains(event.target)) return;
-    closeMenu(false);
-}
-
-function onDocumentKey(event) {
-    if (event.key === 'Escape' && assignOpen.value) {
-        assignOpen.value = false;
-        return;
-    }
-    if (event.key === 'Escape' && openMenu.value != null) closeMenu();
+    menuRow.value = row;
+    rowMenu.value.show(event, target);
 }
 
 watch(() => route.fullPath, async () => {
@@ -288,12 +273,10 @@ function setQueue(next) {
     pushQuery(true);
 }
 
-function badgeStatus(row) {
-    if (row.status === 'returned') return 'returned';
-    if (row.review_state === 'next_office' || row.review_state === 'secretary_checked' || row.status === 'reviewed') return 'reviewed';
-    if (row.review_state === 'reviewing') return 'under_review';
-    if (row.review_state === 'not_opened') return 'submitted';
-    return 'submitted';
+function badgeSeverity(row) {
+    if (row.status === 'returned' || row.review_state === 'unassigned') return 'warn';
+    if (row.review_state === 'next_office' || row.review_state === 'secretary_checked' || row.status === 'reviewed') return 'success';
+    return 'info';
 }
 
 function badgeLabel(row) {
@@ -328,11 +311,11 @@ function primaryIcon() {
 }
 
 function emptyCopy() {
-    if (filtersActive.value) return 'No results matching these filters.';
-    if (isPersonnel.value) return 'No reports are currently assigned to you.';
+    if (filtersActive.value) return 'Clear filters or try a different search.';
+    if (isPersonnel.value) return queue.value === 'reviewed' ? 'Reports you finish reviewing will appear here.' : 'New assignments will appear here.';
     if (queue.value === 'checked') return 'No secretary-checked reports are awaiting endorsement.';
     if (queue.value === 'reviewed') return 'No reviewed resident reports are awaiting Secretary checking.';
-    if (queue.value === 'unassigned') return 'All eligible resident submissions have been assigned.';
+    if (queue.value === 'unassigned') return 'New reports appear here until a reviewer is assigned.';
     return 'No resident submissions are awaiting BDRRM review.';
 }
 
@@ -348,7 +331,7 @@ async function openAssign(row) {
     if (row) selectedIds.value = [row.id];
     if (!selectedIds.value.length) return;
     assignError.value = '';
-    assigneeId.value = '';
+    assigneeId.value = null;
     assignRemarks.value = '';
     replacedReason.value = '';
     loadingAssignees.value = true;
@@ -366,6 +349,7 @@ async function openAssign(row) {
 }
 
 async function saveAssign() {
+    if (assigning.value || loadingAssignees.value || !assigneeId.value || (needsReason.value && !replacedReason.value)) return;
     assignError.value = '';
     assigning.value = true;
     try {
@@ -385,292 +369,243 @@ async function saveAssign() {
     }
 }
 
-onMounted(() => {
-    document.addEventListener('pointerdown', onDocumentPointer);
-    document.addEventListener('keydown', onDocumentKey);
+const queueOptions = computed(() => summaryCards.value
+    .filter((card) => card.key !== 'total')
+    .map((card) => ({ ...card, label: card.key === 'unassigned' ? 'Unassigned' : card.title })));
+const assigneeOptions = computed(() => assignees.value.map((person) => ({
+    id: person.id,
+    label: `${person.name} · ${person.pending_count} pending · ${person.reviewed_count} reviewed`,
+})));
+const menuItems = computed(() => {
+    const row = menuRow.value;
+    if (!row) return [];
+    return [
+        { label: row.has_point ? 'View reported location' : 'No reported map point', icon: 'pin', disabled: !row.has_point,
+            to: row.has_point ? { path: '/map', query: { lng: String(row.longitude), lat: String(row.latitude) } } : null },
+        { label: 'Flag an issue', icon: 'flag', to: { path: `/submissions/${row.id}`, query: detailQuery({ panel: 'flag' }) } },
+        { label: 'Return for correction', icon: 'undo', visible: row.reviewable,
+            to: { path: `/submissions/${row.id}`, query: detailQuery({ panel: 'return' }) } },
+    ];
 });
-
-onBeforeUnmount(() => {
-    document.removeEventListener('pointerdown', onDocumentPointer);
-    document.removeEventListener('keydown', onDocumentKey);
-});
+const overlay = { transition: { css: false } };
+const selectPt = { ...overlay, overlay: { class: 'submission-select-overlay' } };
+const calendarButtons = { size: 'small', severity: 'secondary', text: true };
+const pageSizes = [10, 25, 50];
 </script>
 
 <template>
-    <section class="bdrrm-submissions">
-        <header class="submission-heading">
-            <div class="submission-heading-title">
-                <span class="submission-heading-icon" aria-hidden="true"><MapIcon name="clipboard-list" /></span>
-                <div>
-                    <h2>{{ isPersonnel ? 'My Assigned Resident Submissions' : 'Resident Submissions' }}</h2>
-                    <p>{{ isPersonnel ? 'Reports assigned to you for review.' : 'Assign, monitor, and review disaster incident reports submitted by residents.' }}</p>
+    <section class="bdrrm-submissions grid min-w-0 gap-4">
+        <header class="flex flex-wrap items-end justify-between gap-x-5 gap-y-3">
+            <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <h2 class="text-2xl leading-8 font-bold">{{ isPersonnel ? 'My Assigned Resident Submissions' : 'Resident Submissions' }}</h2>
+                    <Tag v-if="phase === 'ready' || phase === 'refreshing'" :value="countLabel" severity="secondary" />
                 </div>
+                <p class="mt-0.5 text-surface-600">{{ isPersonnel ? 'Review and track resident incident reports assigned to you.' : 'Assign, review, and track disaster incident reports submitted by residents.' }}</p>
             </div>
-            <div class="submission-heading-actions">
-                <p v-if="phase === 'ready' || phase === 'refreshing'" class="submission-count">{{ countLabel }}</p>
-                <button type="button" class="submission-quiet" :disabled="phase === 'loading'" @click="load">
-                    <MapIcon name="refresh" /> Refresh
-                </button>
-                <button
-                    v-if="canAssign"
-                    type="button"
-                    class="submission-primary"
-                    :disabled="!selectedIds.length"
-                    :title="selectedIds.length ? 'Assign the selected reports' : 'Select reports to assign'"
-                    @click="openAssign()"
-                >
-                    <MapIcon name="user-round-plus" /> Assign BDRRM Personnel
-                </button>
+            <div class="submission-heading-actions flex flex-wrap items-center gap-2">
+                <Button label="Refresh" size="small" severity="secondary" outlined :loading="phase === 'refreshing'" :disabled="phase === 'loading'" @click="load">
+                    <template #icon><MapIcon name="refresh" /></template>
+                </Button>
+                <Button v-if="canAssign" label="Assign BDRRM Personnel" size="small" :disabled="!selectedIds.length"
+                    :title="selectedIds.length ? 'Assign the selected reports' : 'Select reports to assign'" @click="openAssign()">
+                    <template #icon><MapIcon name="user-round-plus" /></template>
+                </Button>
             </div>
         </header>
 
-        <div v-if="summaryCards.length" class="submission-summaries" :class="{ 'is-pair': summaryCards.length === 2 }">
-            <button
-                v-for="card in summaryCards"
-                :key="card.key"
-                type="button"
-                class="submission-summary"
-                :data-tone="card.tone"
-                :aria-pressed="card.key !== 'total' && queue === card.key"
-                :disabled="card.key === 'total'"
-                @click="setQueue(card.key)"
-            >
-                <span class="submission-summary-icon" aria-hidden="true"><MapIcon :name="card.icon" /></span>
-                <span>
-                    <span class="submission-summary-label">{{ card.title }}</span>
-                    <strong>{{ card.value }}</strong>
-                    <span class="submission-summary-note">{{ card.note }}</span>
-                </span>
-            </button>
+        <div v-if="summaryCards.length" class="submission-summaries grid grid-cols-2 gap-2.5" :class="{ 'is-pair': summaryCards.length === 2 }">
+            <component v-for="card in summaryCards" :key="card.key" :is="card.key === 'total' ? 'div' : 'button'"
+                :type="card.key === 'total' ? undefined : 'button'" class="submission-summary"
+                :data-tone="card.tone" :aria-pressed="card.key === 'total' ? undefined : queue === card.key" @click="setQueue(card.key)">
+                <span class="submission-summary-label font-medium">{{ card.title }}</span>
+                <span class="submission-summary-icon"><MapIcon :name="card.icon" /></span>
+                <strong class="text-2xl leading-7 tabular-nums">{{ card.value }}</strong>
+                <span class="submission-summary-note text-xs text-surface-600">{{ card.note }}</span>
+            </component>
         </div>
 
-        <div class="submission-queues" role="tablist" :aria-label="isPersonnel ? 'My review queues' : 'Submission queues'">
-            <button v-if="canAssign" type="button" role="tab" :aria-selected="queue === 'unassigned'" :class="{ 'is-active': queue === 'unassigned' }" @click="setQueue('unassigned')">
-                Unassigned <span>{{ counts.unassigned }}</span>
-            </button>
-            <button type="button" role="tab" :aria-selected="queue === 'pending'" :class="{ 'is-active': queue === 'pending' }" @click="setQueue('pending')">
-                {{ isPersonnel ? 'My Pending Reviews' : 'Pending Review' }} <span>{{ counts.pending }}</span>
-            </button>
-            <button
-                v-if="isPersonnel || isSecretary"
-                type="button"
-                role="tab"
-                :aria-selected="queue === 'reviewed'"
-                :class="{ 'is-active': queue === 'reviewed' }"
-                @click="setQueue('reviewed')"
-            >
-                {{ isPersonnel ? 'My Reviewed Reports' : 'Reviewed Reports' }} <span>{{ counts.reviewed }}</span>
-            </button>
-            <button
-                v-if="isCaptain"
-                type="button"
-                role="tab"
-                :aria-selected="queue === 'checked'"
-                :class="{ 'is-active': queue === 'checked' }"
-                @click="setQueue('checked')"
-            >
-                Checked Reports <span>{{ counts.checked || counts.reviewed }}</span>
-            </button>
-        </div>
-
-        <form class="submission-filter-bar" @submit.prevent="pushQuery(true)">
-            <label class="submission-search">
-                <span>Search</span>
-                <span class="submission-search-field">
-                    <MapIcon name="search" />
-                    <input v-model="search" type="search" maxlength="80" autocomplete="off" placeholder="Search report reference, resident name, or incident...">
-                </span>
-            </label>
-            <label v-if="showStatus && statusChoices.length" class="submission-status-filter">
-                <span>Status</span>
-                <span class="submission-search-field">
-                    <MapIcon name="list-filter" />
-                    <select v-model="status" @change="pushQuery(true)">
-                        <option v-for="choice in statusChoices" :key="choice.value || 'all'" :value="choice.value">{{ choice.label }}</option>
-                    </select>
-                </span>
-            </label>
-            <details class="submission-dates">
-                <summary><MapIcon name="calendar-days" /> Submission date</summary>
-                <div>
-                    <label>
-                        <span>From</span>
-                        <input v-model="submittedFrom" type="date" @change="pushQuery(true)">
-                    </label>
-                    <label>
-                        <span>To</span>
-                        <input v-model="submittedTo" type="date" @change="pushQuery(true)">
-                    </label>
+        <div class="submission-controls">
+            <div class="border-b border-surface-200 px-3 pt-2.5 sm:px-4">
+                <span id="submission-queues-label" class="sr-only">{{ isPersonnel ? 'My review queues' : 'Submission queues' }}</span>
+                <SelectButton class="submission-queues" :model-value="queue" :options="queueOptions" option-label="label"
+                    option-value="key" :allow-empty="false" aria-labelledby="submission-queues-label" size="small" @update:model-value="setQueue">
+                    <template #option="{ option }">
+                        <span>{{ option.label }}</span>
+                        <Tag :value="String(option.value)" severity="secondary" />
+                    </template>
+                </SelectButton>
+            </div>
+            <form class="submission-filter-bar flex flex-wrap items-end gap-x-3 gap-y-2.5 px-3 py-3 sm:px-4" novalidate @submit.prevent="pushQuery(true)">
+                <div class="submission-search grid min-w-0 gap-1">
+                    <label for="submission-search">Search reports</label>
+                    <IconField>
+                        <InputIcon><MapIcon name="search" /></InputIcon>
+                        <InputText id="submission-search" v-model="search" size="small" class="w-full" type="search" maxlength="80"
+                            autocomplete="off" placeholder="Reference, resident, or incident" :class="{ 'has-query': search }" />
+                        <Button v-if="search" class="absolute inset-y-0 end-0" type="button" aria-label="Clear search"
+                            size="small" severity="secondary" text @click="clearSearch">
+                            <template #icon><MapIcon name="x" /></template>
+                        </Button>
+                    </IconField>
                 </div>
-            </details>
-            <button type="submit" class="submission-primary"><MapIcon name="search" /> Search</button>
-            <button v-if="filtersActive" type="button" class="submission-quiet" @click="clearFilters"><MapIcon name="x" /> Clear filters</button>
-        </form>
+                <div v-if="showStatus && statusChoices.length" class="submission-status-filter grid min-w-0 gap-1">
+                    <label id="submission-status-filter-label" for="submission-status-filter">Status</label>
+                    <Select v-model="status" input-id="submission-status-filter" aria-labelledby="submission-status-filter-label" size="small" :options="statusChoices"
+                        option-label="label" option-value="value" :pt="selectPt" @change="pushQuery(true)" />
+                </div>
+                <fieldset class="submission-dates min-w-0">
+                    <legend class="mb-1">Submission date</legend>
+                    <div class="grid grid-cols-2 gap-2">
+                        <DatePicker input-id="submission-date-from" :model-value="isoToDate(submittedFrom)" size="small" fluid
+                            date-format="M d, yy" placeholder="From date" aria-label="Submitted from"
+                            show-icon icon-display="input" :manual-input="false" show-button-bar :today-button-props="calendarButtons"
+                            :clear-button-props="calendarButtons" :navigator-button-props="calendarButtons" panel-class="submission-calendar" :pt="overlay"
+                            @update:model-value="submittedFrom = dateToIso($event); pushQuery(true)" />
+                        <DatePicker input-id="submission-date-to" :model-value="isoToDate(submittedTo)" size="small" fluid
+                            date-format="M d, yy" placeholder="To date" aria-label="Submitted to"
+                            show-icon icon-display="input" :manual-input="false" show-button-bar :today-button-props="calendarButtons"
+                            :clear-button-props="calendarButtons" :navigator-button-props="calendarButtons" panel-class="submission-calendar" :pt="overlay"
+                            @update:model-value="submittedTo = dateToIso($event); pushQuery(true)" />
+                    </div>
+                </fieldset>
+                <div class="flex flex-wrap items-center gap-2">
+                    <Button type="submit" size="small" label="Search" />
+                    <Button v-if="filtersActive" type="button" size="small" label="Clear filters" severity="secondary" text @click="clearFilters" />
+                </div>
+            </form>
+        </div>
 
-        <div v-if="canAssign && (selectedIds.length || rows.length)" class="submission-toolbar">
-            <button type="button" class="submission-quiet" :disabled="!rows.length" @click="togglePage">{{ pageSelected ? 'Clear page' : 'Select page' }}</button>
+        <div v-if="canAssign && rows.length" class="submission-toolbar flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <label class="inline-flex cursor-pointer items-center gap-2 font-medium">
+                <Checkbox :model-value="pageSelected" binary size="small" :indeterminate="!!selectedIds.length && !pageSelected"
+                    @update:model-value="togglePage" />
+                Select page
+            </label>
+            <span v-if="selectedIds.length" class="font-semibold" role="status">{{ selectedLabel }}</span>
             <template v-if="selectedIds.length">
-                <strong>{{ selectedLabel }}</strong>
-                <button type="button" class="submission-primary" @click="openAssign()"><MapIcon name="user-round-plus" /> Assign Personnel</button>
-                <button type="button" class="submission-quiet" @click="selectedIds = []">Clear selection</button>
+                <Button size="small" label="Assign Personnel" @click="openAssign()">
+                    <template #icon><MapIcon name="user-round-plus" /></template>
+                </Button>
+                <Button size="small" label="Clear selection" severity="secondary" text @click="selectedIds = []" />
             </template>
         </div>
 
-        <div v-if="phase === 'loading'" class="submission-list" aria-busy="true">
-            <p class="visually-hidden">Loading submissions…</p>
-            <article v-for="slot in 3" :key="slot" class="submission-card submission-skeleton" aria-hidden="true">
-                <span class="submission-card-main">
-                    <span class="submission-skeleton-icon"></span>
-                    <span class="submission-skeleton-copy"><span></span><span></span><span></span></span>
-                </span>
-            </article>
+        <div v-if="phase === 'loading'" class="submission-state" role="status">
+            <MapIcon name="files" />
+            <p class="font-medium">Loading submissions…</p>
         </div>
-        <div v-else-if="phase === 'error'" class="submission-status" role="alert">
-            <p>{{ error }}</p>
-            <button type="button" class="submission-primary" @click="load">Retry</button>
+        <div v-else-if="phase === 'error'" class="submission-state" role="alert">
+            <MapIcon name="alert-circle" />
+            <p class="font-medium">{{ error }}</p>
+            <Button size="small" label="Retry" outlined severity="secondary" @click="load" />
         </div>
-        <div v-else-if="rows.length === 0" class="submission-status">
-            <p>{{ emptyCopy() }}</p>
+        <div v-else-if="rows.length === 0" class="submission-state" role="status">
+            <MapIcon name="clipboard-list" />
+            <h3 class="text-base font-semibold">{{ filtersActive ? 'No matching submissions' : 'No submissions in this queue' }}</h3>
+            <p class="text-surface-600">{{ emptyCopy() }}</p>
+            <Button v-if="filtersActive" size="small" label="Clear filters" outlined severity="secondary" @click="clearFilters" />
         </div>
-        <ul v-else class="submission-list" :aria-busy="phase === 'refreshing'">
+        <ul v-else class="grid gap-2.5" :aria-busy="phase === 'refreshing'" aria-label="Resident submissions">
             <li v-for="row in rows" :key="row.id">
-                <article class="submission-card">
-                    <div class="submission-card-main">
-                        <label v-if="canAssign" class="submission-check">
-                            <input type="checkbox" :checked="selectedIds.includes(row.id)" :aria-label="`Select ${row.reference}`" @change="toggleRow(row.id)">
-                        </label>
-                        <div class="submission-card-icon" aria-hidden="true"><MapIcon name="file-text" /></div>
-                        <div class="submission-card-copy">
-                            <h3>{{ row.reference }}</h3>
-                            <p class="submission-resident">{{ row.resident_name || 'Name unavailable' }}</p>
-                            <p class="submission-incident">{{ row.incident_name || 'Incident' }}</p>
-                            <p class="submission-meta">
-                                <span><MapIcon name="pin" /> {{ row.barangay_name || 'Assigned barangay' }}<template v-if="row.reported_location"> · {{ row.reported_location }}</template></span>
-                                <span><MapIcon name="calendar-days" /> Submitted {{ formatWhen(row.submitted_at) }}</span>
-                                <span v-if="row.review_state !== 'unassigned'"><MapIcon name="user-round" /> {{ reviewerLine(row) }}</span>
-                                <span v-if="checkerLine(row)"><MapIcon name="pen-line" /> {{ checkerLine(row) }}</span>
-                            </p>
-                            <p v-if="row.open_flags > 0" class="submission-flag"><MapIcon name="flag" /> Open flag</p>
+                <article class="submission-card" :class="{ 'is-selected': selectedIds.includes(row.id) }">
+                    <Checkbox v-if="canAssign" class="submission-row-check" :model-value="selectedIds.includes(row.id)"
+                        binary size="small" :aria-label="`Select ${row.reference}`" @update:model-value="toggleRow(row.id)" />
+                    <div class="submission-card-copy grid min-w-0 gap-1">
+                        <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                            <h3 class="font-semibold text-deep tabular-nums">{{ row.reference }}</h3>
+                            <Tag :value="badgeLabel(row)" :severity="badgeSeverity(row)" />
+                            <Tag v-if="row.open_flags > 0" value="Open flag" severity="danger">
+                                <MapIcon name="flag" /> Open flag
+                            </Tag>
+                        </div>
+                        <p class="text-sm">
+                            <strong class="font-semibold">{{ row.resident_name || 'Name unavailable' }}</strong>
+                            <span class="text-surface-600"> · {{ row.incident_name || 'Incident' }}</span>
+                        </p>
+                        <div class="submission-meta flex flex-wrap gap-x-4 gap-y-1 text-xs text-surface-600">
+                            <span><MapIcon name="pin" /> <span>{{ row.barangay_name || 'Assigned barangay' }}<template v-if="row.reported_location"> · {{ row.reported_location }}</template></span></span>
+                            <span><MapIcon name="calendar-days" /> <span>Submitted {{ formatWhen(row.submitted_at) }}</span></span>
+                        </div>
+                        <div v-if="row.review_state !== 'unassigned' || checkerLine(row)" class="submission-meta flex flex-wrap gap-x-4 gap-y-1 text-xs text-surface-600">
+                            <span v-if="row.review_state !== 'unassigned'"><MapIcon name="user-round" /> <span>{{ reviewerLine(row) }}</span></span>
+                            <span v-if="checkerLine(row)"><MapIcon name="pen-line" /> <span>{{ checkerLine(row) }}</span></span>
                         </div>
                     </div>
-                    <span class="submission-badge" :data-status="badgeStatus(row)">{{ badgeLabel(row) }}</span>
-                    <div class="submission-card-actions">
-                        <button
-                            v-if="showAssignAction(row)"
-                            type="button"
-                            class="submission-primary"
-                            title="Assign BDRRM personnel"
-                            @click="openAssign(row)"
-                        >
-                            <MapIcon name="user-round-plus" /> Assign Personnel
-                        </button>
-                        <button
-                            v-if="showReassignAction(row)"
-                            type="button"
-                            class="submission-quiet"
-                            title="Reassign BDRRM personnel"
-                            @click="openAssign(row)"
-                        >
-                            <MapIcon name="user-round-pen" /> Reassign
-                        </button>
-                        <RouterLink
-                            :class="showAssignAction(row) ? 'submission-quiet' : 'submission-primary'"
-                            :to="{ path: `/submissions/${row.id}`, query: detailQuery() }"
-                            :title="primaryLabel()"
-                        >
-                            <MapIcon :name="primaryIcon()" /> {{ primaryLabel() }}
-                        </RouterLink>
-                        <div class="submission-overflow">
-                            <button
-                                :id="`submission-menu-${row.id}`"
-                                type="button"
-                                class="submission-quiet submission-icon-button"
-                                aria-label="More actions"
-                                title="More actions"
-                                aria-haspopup="menu"
-                                :aria-expanded="openMenu === row.id"
-                                :aria-controls="`submission-menu-panel-${row.id}`"
-                                @click="toggleMenu(row.id)"
-                            >
-                                <MapIcon name="more" />
-                            </button>
-                            <div
-                                v-if="openMenu === row.id"
-                                :id="`submission-menu-panel-${row.id}`"
-                                class="submission-menu"
-                                role="menu"
-                                @keydown="onMenuKeydown"
-                            >
-                                <button v-if="showReassignAction(row)" type="button" role="menuitem" @click="openAssign(row); closeMenu(false)">
-                                    <MapIcon name="user-round-pen" /> Reassign personnel
-                                </button>
-                                <RouterLink v-if="row.has_point" role="menuitem" :to="{ path: '/map', query: { lng: String(row.longitude), lat: String(row.latitude) } }" @click="closeMenu(false)">
-                                    <MapIcon name="pin" /> View reported location
-                                </RouterLink>
-                                <p v-else class="submission-disabled">No reported map point</p>
-                                <RouterLink role="menuitem" :to="{ path: `/submissions/${row.id}`, query: detailQuery({ panel: 'flag' }) }" @click="closeMenu(false)">
-                                    <MapIcon name="flag" /> Flag an issue
-                                </RouterLink>
-                                <RouterLink v-if="row.reviewable" role="menuitem" :to="{ path: `/submissions/${row.id}`, query: detailQuery({ panel: 'return' }) }" @click="closeMenu(false)">
-                                    <MapIcon name="undo" /> Return for correction
-                                </RouterLink>
-                            </div>
-                        </div>
+                    <div class="submission-card-actions flex min-w-0 flex-wrap items-center gap-1.5">
+                        <Button v-if="showAssignAction(row)" label="Assign Personnel" size="small" @click="openAssign(row)">
+                            <template #icon><MapIcon name="user-round-plus" /></template>
+                        </Button>
+                        <Button v-if="showReassignAction(row)" label="Reassign" size="small" severity="secondary" outlined @click="openAssign(row)">
+                            <template #icon><MapIcon name="user-round-pen" /></template>
+                        </Button>
+                        <Button :as="RouterLink" :to="{ path: `/submissions/${row.id}`, query: detailQuery() }" :label="primaryLabel()"
+                            size="small" :outlined="showAssignAction(row)" :severity="showAssignAction(row) ? 'secondary' : undefined">
+                            <template #icon><MapIcon :name="primaryIcon()" /></template>
+                        </Button>
+                        <Button aria-label="More actions" v-tooltip.top="'More actions'" size="small" severity="secondary" text
+                            aria-haspopup="menu" :aria-expanded="menuRow?.id === row.id" aria-controls="submission-row-menu"
+                            @click="toggleMenu($event, row)">
+                            <template #icon><MapIcon name="more" /></template>
+                        </Button>
                     </div>
                 </article>
             </li>
         </ul>
 
-        <div v-if="phase !== 'loading' && phase !== 'error' && meta.total > 0" class="submission-pager">
-            <div class="submission-pager-meta">
-                <span>Showing {{ rangeStart }}–{{ rangeEnd }} of {{ meta.total }} reports</span>
-                <label>
-                    <span>Rows</span>
-                    <select v-model.number="perPage" @change="pushQuery(true)">
-                        <option :value="10">10</option>
-                        <option :value="25">25</option>
-                        <option :value="50">50</option>
-                    </select>
-                </label>
-            </div>
-            <div class="submission-pager-nav">
-                <button type="button" class="submission-quiet" :disabled="meta.current_page <= 1" @click="page = meta.current_page - 1; pushQuery(false)">Previous</button>
-                <span>Page {{ meta.current_page }} of {{ meta.last_page }}</span>
-                <button type="button" class="submission-quiet" :disabled="meta.current_page >= meta.last_page" @click="page = meta.current_page + 1; pushQuery(false)">Next</button>
-            </div>
-        </div>
-
-        <div v-if="assignOpen" class="assign-modal" role="presentation" @click.self="assignOpen = false">
-            <form class="assign-panel" role="dialog" aria-modal="true" aria-labelledby="assign-title" @submit.prevent="saveAssign">
-                <h2 id="assign-title">Assign BDRRM Personnel</h2>
-                <p>{{ selectedRows.length }} {{ selectedRows.length === 1 ? 'report' : 'reports' }} selected</p>
-                <ul>
-                    <li v-for="row in selectedRows" :key="row.id">{{ row.reference }} · {{ row.resident_name || 'Resident' }}</li>
-                </ul>
-                <p v-if="loadingAssignees" class="submission-note">Loading personnel…</p>
-                <label>
-                    <span>BDRRM personnel</span>
-                    <select v-model="assigneeId" :disabled="loadingAssignees" required>
-                        <option value="">Select one officer</option>
-                        <option v-for="person in assignees" :key="person.id" :value="person.id">
-                            {{ person.name }} · {{ person.pending_count }} pending · {{ person.reviewed_count }} reviewed
-                        </option>
-                    </select>
-                </label>
-                <label>
-                    <span>Remarks</span>
-                    <input v-model="assignRemarks" maxlength="500" placeholder="Optional">
-                </label>
-                <label v-if="needsReason">
-                    <span>Reason for replacing the current reviewer</span>
-                    <input v-model="replacedReason" maxlength="500" required>
-                </label>
-                <p v-if="assignError" class="submission-alert" role="alert">{{ assignError }}</p>
-                <div class="bdrrm-dialog-actions">
-                    <button type="button" class="submission-quiet" @click="assignOpen = false">Cancel</button>
-                    <button type="submit" class="submission-primary" :disabled="!assigneeId || assigning || loadingAssignees">{{ assigning ? 'Assigning…' : 'Confirm Assignment' }}</button>
+        <footer v-if="phase !== 'loading' && phase !== 'error' && meta.total > 0" class="submission-pager flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <p class="text-surface-600 tabular-nums" role="status">Showing {{ rangeStart }}–{{ rangeEnd }} of {{ meta.total }} reports</p>
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <Paginator :first="(meta.current_page - 1) * meta.per_page" :rows="meta.per_page" :total-records="meta.total"
+                    template="PrevPageLink CurrentPageReport NextPageLink" current-page-report-template="Page {currentPage} of {totalPages}"
+                    @page="page = $event.page + 1; pushQuery(false)" />
+                <div class="flex items-center gap-2">
+                    <label id="submission-page-size-label" for="submission-page-size">Rows per page</label>
+                    <Select v-model="perPage" input-id="submission-page-size" aria-labelledby="submission-page-size-label" size="small" :options="pageSizes" :pt="selectPt" @change="pushQuery(true)" />
                 </div>
-            </form>
-        </div>
+            </div>
+        </footer>
+
+        <Menu id="submission-row-menu" ref="rowMenu" :model="menuItems" class="submission-action-menu" :pt="overlay"
+            aria-label="Report actions" popup @hide="menuRow = null">
+            <template #item="{ item, props }">
+                <RouterLink v-if="item.to" v-bind="props.action" :to="item.to"><MapIcon :name="item.icon" /> {{ item.label }}</RouterLink>
+                <span v-else v-bind="props.action"><MapIcon :name="item.icon" /> {{ item.label }}</span>
+            </template>
+        </Menu>
+
+        <Dialog v-if="canAssign" v-model:visible="assignOpen" modal :dismissable-mask="!assigning" :closable="!assigning" :close-on-escape="!assigning"
+            header="Assign BDRRM Personnel" class="submission-assignment" :close-button-props="{ size: 'small', severity: 'secondary', text: true }" :pt="overlay">
+            <template #default>
+                <form id="submission-assignment-form" class="grid gap-3" novalidate @submit.prevent="saveAssign">
+                    <div class="rounded-md border border-surface-200 bg-surface-50 px-3 py-2">
+                        <p class="font-semibold">{{ selectedLabel }}</p>
+                        <ul class="mt-1 max-h-28 space-y-1 overflow-auto text-xs text-surface-600">
+                            <li v-for="row in selectedRows" :key="row.id">{{ row.reference }} · {{ row.resident_name || 'Resident' }}</li>
+                        </ul>
+                    </div>
+                    <div class="grid min-w-0 gap-1">
+                        <label id="submission-assignee-label" for="submission-assignee">BDRRM personnel</label>
+                        <Select v-model="assigneeId" input-id="submission-assignee" aria-labelledby="submission-assignee-label" size="small" :options="assigneeOptions" option-label="label"
+                            option-value="id" placeholder="Select one officer" :loading="loadingAssignees" :disabled="loadingAssignees || assigning"
+                            :pt="selectPt" :aria-required="true" />
+                    </div>
+                    <div class="grid min-w-0 gap-1">
+                        <label for="submission-assignment-remarks">Remarks</label>
+                        <InputText id="submission-assignment-remarks" v-model="assignRemarks" size="small" maxlength="500" placeholder="Optional" :disabled="assigning" />
+                    </div>
+                    <div v-if="needsReason" class="grid min-w-0 gap-1">
+                        <label for="submission-assignment-reason">Reason for replacing the current reviewer</label>
+                        <InputText id="submission-assignment-reason" v-model="replacedReason" size="small" maxlength="500" required :disabled="assigning" />
+                    </div>
+                    <Message v-if="assignError" severity="error" size="small" :closable="false">{{ assignError }}</Message>
+                </form>
+            </template>
+            <template #footer>
+                <Button size="small" label="Cancel" severity="secondary" outlined :disabled="assigning" @click="assignOpen = false" />
+                <Button size="small" label="Confirm Assignment" type="submit" form="submission-assignment-form" :loading="assigning"
+                    :disabled="!assigneeId || loadingAssignees || (needsReason && !replacedReason)" />
+            </template>
+        </Dialog>
     </section>
 </template>

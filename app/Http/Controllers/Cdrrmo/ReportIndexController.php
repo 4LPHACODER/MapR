@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\Cdrrmo;
 
-use App\Http\Controllers\Controller;
-use App\Http\Controllers\Bdrrm\BarangayReportController;
 use App\Http\Controllers\Assessor\AssessmentController;
+use App\Http\Controllers\Bdrrm\BarangayReportController;
+use App\Http\Controllers\Controller;
 use App\Http\Controllers\Shared\ReportFlagController;
 use App\Services\ReportWorkflow;
 use Illuminate\Http\JsonResponse;
@@ -57,10 +57,9 @@ class ReportIndexController extends Controller
         $approved = $authenticated->contains(fn ($signature) => $signature->signature_role === 'approved_by');
         $summary = trim((string) ($row->report_summary ?? '')) !== '';
         $openFlags = collect($flags)->where('status', 'open')->count();
-        $user = $request->user();
-        $email = strtolower((string) $user?->email);
-        $canNote = in_array($email, ['lestertalan@mapr_admin.com', 'lestertalan@mapr.com'], true);
-        $canApprove = $email === 'reyveen.geli@mapr.test';
+        $capacity = app(ReportWorkflow::class)->consolidatedCapacity($request->user());
+        $canNote = $capacity === 'noted_by';
+        $canApprove = $capacity === 'approved_by';
 
         return response()->json(['data' => [
             'id' => $row->id,
@@ -123,6 +122,7 @@ class ReportIndexController extends Controller
 
         return response()->json([
             'data' => $this->present($rows, $type),
+            'signing_capacity' => $type === 'consolidated' ? app(ReportWorkflow::class)->consolidatedCapacity($request->user()) : null,
             'meta' => [
                 'total' => $total,
                 'current_page' => $page,
