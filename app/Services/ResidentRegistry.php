@@ -130,7 +130,7 @@ class ResidentRegistry
             'last_name' => ['required', 'string', 'max:191'],
             'household_id' => ['required', 'integer'],
             'sex' => ['nullable', 'string', 'max:32'],
-            'birth_date' => ['nullable', 'date'],
+            'birth_date' => ['nullable', 'date', 'before_or_equal:today'],
             'record_source' => ['required', 'string', 'max:191'],
             'confirm_duplicate' => ['sometimes', 'boolean'],
         ]);
@@ -175,7 +175,7 @@ class ResidentRegistry
             'last_name' => ['sometimes', 'string', 'max:191'],
             'household_id' => ['sometimes', 'integer'],
             'sex' => ['nullable', 'string', 'max:32'],
-            'birth_date' => ['nullable', 'date'],
+            'birth_date' => ['nullable', 'date', 'before_or_equal:today'],
         ]);
 
         $stored = $resident->updated_at?->utc()->format('Y-m-d H:i:s');
@@ -617,13 +617,16 @@ class ResidentRegistry
                     ->whereIn('households.id', $householdIds)
                     ->whereNotNull('households.building_id')
                     ->when($incidentId, fn ($query) => $query->where('reports.disaster_incident_id', $incidentId))
-                    ->when(Schema::hasColumn('barangay_reports', 'supersedes_id'), function ($query) {
-                        $query->whereNotExists(function ($newer) {
-                            $newer->selectRaw('1')->from('barangay_reports as newer')->whereColumn('newer.supersedes_id', 'reports.id');
-                        });
-                    })
                     ->groupBy('households.id')
-                    ->selectRaw('households.id as household_id, COUNT(DISTINCT reports.report_reference) as aggregate')
+                    ->select('households.id as household_id');
+                $hasFieldAssessments = Schema::hasTable('field_assessments');
+                if ($hasFieldAssessments) {
+                    $building->leftJoin('field_assessments as assessments', 'assessments.barangay_report_id', '=', 'reports.id');
+                }
+                $aggregate = $hasFieldAssessments
+                    ? 'COUNT(DISTINCT reports.id) + COUNT(DISTINCT assessments.id)'
+                    : 'COUNT(DISTINCT reports.id)';
+                $building = $building->selectRaw($aggregate.' as aggregate')
                     ->pluck('aggregate', 'household_id');
                 foreach ($residents as $resident) {
                     $counts[$resident->id] = ($counts[$resident->id] ?? 0) + (int) ($building[$resident->household_id] ?? 0);
