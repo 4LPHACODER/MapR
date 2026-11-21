@@ -23,6 +23,10 @@ class AuthenticationTest extends TestCase
             ->assertOk()
             ->assertSee('Welcome back to MapR')
             ->assertSee('Sign in to access your assessment workspace.')
+            ->assertSee('rel="manifest" href="/manifest.webmanifest"', false)
+            ->assertSee('name="theme-color" content="#123b70"', false)
+            ->assertSee('rel="apple-touch-icon" href="/images/mapr-icon-180.png"', false)
+            ->assertSee('/pwa', false)
             ->assertDontSee('Forgot password')
             ->assertDontSee('Login as')
             ->assertDontSee('name="role"', false)
@@ -48,6 +52,8 @@ class AuthenticationTest extends TestCase
 
             $this->get($path)
                 ->assertOk()
+                ->assertSee('rel="manifest" href="/manifest.webmanifest"', false)
+                ->assertSee('/pwa', false)
                 ->assertSee($user->email);
 
             $this->post('/logout')->assertRedirect('/');
