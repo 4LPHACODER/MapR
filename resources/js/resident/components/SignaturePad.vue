@@ -215,6 +215,7 @@ onBeforeUnmount(() => {
         <div class="resident-signature-actions">
             <Button size="small" type="button" label="Undo" severity="secondary" variant="outlined" class="resident-secondary" :disabled="saving || strokeCount < 1" @click="undoLastStroke" />
             <Button size="small" type="button" label="Clear signature" severity="secondary" variant="outlined" class="resident-secondary" :disabled="saving" @click="clearPad" />
+            <slot name="actions" />
             <Button size="small" v-if="error" type="button" label="Retry" class="resident-primary" :disabled="saving" @click="save" />
         </div>
         <p v-if="saving" class="resident-muted" role="status">Saving signature…</p>

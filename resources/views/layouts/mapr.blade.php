@@ -9,7 +9,10 @@
             <meta name="description" content="@yield('description')">
         @endif
         <link rel="icon" href="/images/mapr-logo.png" type="image/png">
-        @vite(['resources/css/app.css'])
+        <link rel="manifest" href="/manifest.webmanifest">
+        <link rel="apple-touch-icon" href="/images/mapr-icon-180.png">
+        <meta name="theme-color" content="#123b70">
+        @vite(['resources/css/app.css', 'resources/js/pwa.js'])
         @stack('head')
     </head>
     <body>

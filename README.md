@@ -162,7 +162,7 @@ npm run build
 
 On a fresh database, all eight accounts use `password`. The seeder creates accounts only in `local` and `testing` and preserves existing accounts on reruns.
 
-| Display name | Email |
+| Role | Email |
 | --- | --- |
 | Resident | `resident@mapr.test` |
 | BDRRM Personnel | `bdrrm@mapr.test` |
@@ -211,11 +211,20 @@ composer validate --strict
 composer check-platform-reqs
 composer test
 npm run test:map
+npm run test:pwa
 npm run build
 python3 -B -m unittest discover -s tests/ci -v
 ```
 
 PHPUnit is configured to use in-memory SQLite and test-specific settings. Passing these tests does not independently verify MySQL spatial migrations or the full geospatial import.
+
+## Install MapR
+
+Serve the production build from the domain root over HTTPS. For local testing, use a production build on localhost. Open MapR and choose **Install** in Chrome or **Add to Home Screen** from the Share menu in iOS Safari. MapR opens the sign-in page and sends signed-in users to their workspace.
+
+After the service worker activates, a failed navigation shows an offline page. Select **Try again** after reconnecting. Sign-in, maps, reports, and submissions need a connection.
+
+When changing a file listed in the service worker’s cache, increment the cache version in `public/sw.js`. An updated worker activates after the old MapR tabs and app windows close.
 
 ## Troubleshooting
 

@@ -16,6 +16,10 @@ const props = defineProps({
     },
     /** When true, require draw/upload (or saved profile signature) before confirm. */
     captureSignature: { type: Boolean, default: false },
+    /** BDRRM endorse path: parent-provided saved signature preview URL enables ink capture. */
+    signaturePreviewUrl: { type: String, default: '' },
+    busy: { type: Boolean, default: false },
+    serverError: { type: String, default: '' },
 });
 const emit = defineEmits(['close', 'confirm']);
 
@@ -37,8 +41,28 @@ const savedPreviewUrl = ref('');
 const signingAt = ref('');
 let objectUrls = [];
 
+const needsInk = computed(() => props.captureSignature || Boolean(props.signaturePreviewUrl));
+const emitFormData = computed(() => Boolean(props.signaturePreviewUrl) && !props.captureSignature);
+const requirePassword = computed(() => !emitFormData.value);
+const dialogTitle = computed(() => {
+    if (step.value === 'confirm' && needsInk.value) return 'Confirm Electronic Signature';
+    if (props.signaturePreviewUrl && !props.captureSignature) return 'Endorse and sign';
+    return props.title;
+});
+const dialogSubtitle = computed(() => {
+    if (step.value === 'confirm' && needsInk.value) {
+        return 'Review your signature and authorize its application to this report.';
+    }
+    if (props.signaturePreviewUrl && !props.captureSignature) {
+        return 'Endorsing sends this report to RDANA for assessment.';
+    }
+    return props.subtitle;
+});
+const alertError = computed(() => error.value || props.serverError || '');
+const working = computed(() => props.busy);
+
 const canContinue = computed(() => {
-    if (!props.captureSignature) return true;
+    if (!needsInk.value) return true;
     if (useSaved.value && hasSavedSignature.value) return true;
     if (tab.value === 'draw') return Boolean(pad.value?.hasInk?.());
     return Boolean(uploadFile.value);
@@ -70,7 +94,7 @@ watch(() => props.open, async (open) => {
     uploadPreview.value = '';
     previewUrl.value = '';
     signingAt.value = '';
-    if (props.captureSignature) {
+    if (needsInk.value) {
         await loadSavedSignature();
         await nextTick();
         pad.value?.clearDrawing?.();
@@ -80,6 +104,11 @@ watch(() => props.open, async (open) => {
 async function loadSavedSignature() {
     hasSavedSignature.value = false;
     savedPreviewUrl.value = '';
+    if (props.signaturePreviewUrl) {
+        hasSavedSignature.value = true;
+        savedPreviewUrl.value = props.signaturePreviewUrl;
+        return;
+    }
     if (!apiBase) return;
     try {
         const { data } = await window.axios.get(`${apiBase}/signature`);
@@ -105,7 +134,7 @@ function resetState() {
 }
 
 function onKeydown(event) {
-    if (!props.open) return;
+    if (!props.open || working.value) return;
     if (event.key === 'Escape') {
         event.preventDefault();
         emit('close');
@@ -160,7 +189,7 @@ function removeUpload() {
 
 async function goPreview() {
     error.value = '';
-    if (!props.captureSignature) {
+    if (!needsInk.value) {
         step.value = 'confirm';
         return;
     }
@@ -197,20 +226,39 @@ async function goPreview() {
 }
 
 async function submit() {
-    if (!confirmed.value || password.value === '') {
-        error.value = 'Confirm the statement and enter your account password.';
+    if (working.value) return;
+
+    if (requirePassword.value) {
+        if (!confirmed.value || password.value === '') {
+            error.value = 'Confirm the statement and enter your account password.';
+            return;
+        }
+    } else if (!confirmed.value) {
+        error.value = 'Confirm that you reviewed the report before signing.';
         return;
     }
-    if (props.captureSignature && !canContinue.value && step.value === 'capture') {
+
+    if (needsInk.value && !canContinue.value && step.value === 'capture') {
         error.value = 'Draw a signature, upload an image, or use your saved signature.';
         return;
     }
-    if (props.captureSignature && step.value === 'capture') {
+    if (needsInk.value && step.value === 'capture') {
         await goPreview();
         if (step.value !== 'confirm') return;
     }
-    if (props.captureSignature && step.value === 'confirm' && !useSaved.value && !uploadFile.value && !pad.value?.hasInk?.()) {
+    if (needsInk.value && step.value === 'confirm' && !useSaved.value && !uploadFile.value && !pad.value?.hasInk?.()) {
         error.value = 'A signature image is required.';
+        return;
+    }
+
+    if (emitFormData.value) {
+        const body = new FormData();
+        body.append('confirmed', '1');
+        body.append('use_saved_signature', useSaved.value ? '1' : '0');
+        if (!useSaved.value && uploadFile.value) {
+            body.append('signature', uploadFile.value, uploadFile.value.name || 'signature.png');
+        }
+        emit('confirm', body);
         return;
     }
 
@@ -234,18 +282,18 @@ function backToEdit() {
     <div
         v-if="open"
         class="residents-dialog-backdrop"
-        @click.self="emit('close')"
+        @click.self="!working && emit('close')"
     >
         <section
             class="cdrrmo-panel review-sign-dialog"
-            :class="{ 'review-sign-dialog--wide': captureSignature }"
+            :class="{ 'review-sign-dialog--wide': needsInk }"
             role="dialog"
             aria-modal="true"
             aria-labelledby="review-sign-title"
         >
             <header class="review-sign-dialog__header">
-                <h3 id="review-sign-title">{{ step === 'confirm' ? 'Confirm Electronic Signature' : title }}</h3>
-                <p>{{ step === 'confirm' ? 'Review your signature and authorize its application to this report.' : subtitle }}</p>
+                <h3 id="review-sign-title">{{ dialogTitle }}</h3>
+                <p>{{ dialogSubtitle }}</p>
             </header>
 
             <dl class="review-sign-dialog__meta">
@@ -267,12 +315,12 @@ function backToEdit() {
                 </div>
             </dl>
 
-            <template v-if="captureSignature && step === 'capture'">
+            <template v-if="needsInk && step === 'capture'">
                 <div class="review-sign-dialog__tabs" role="tablist">
-                    <button type="button" role="tab" :aria-selected="tab === 'draw'" @click="selectTab('draw')">
+                    <button type="button" role="tab" :aria-selected="tab === 'draw'" :disabled="working" @click="selectTab('draw')">
                         <MapIcon name="pen-line" /> Draw Signature
                     </button>
-                    <button type="button" role="tab" :aria-selected="tab === 'upload'" @click="selectTab('upload')">
+                    <button type="button" role="tab" :aria-selected="tab === 'upload'" :disabled="working" @click="selectTab('upload')">
                         <MapIcon name="download" /> Upload Signature
                     </button>
                 </div>
@@ -294,14 +342,14 @@ function backToEdit() {
                         accept="image/png,image/jpeg,image/jpg"
                         @change="onFileChange"
                     >
-                    <button type="button" class="review-sign-dialog__drop" @click="fileInput?.click()">
+                    <button type="button" class="review-sign-dialog__drop" :disabled="working" @click="fileInput?.click()">
                         <MapIcon name="file" />
                         <strong>Choose signature image</strong>
                         <span>PNG or JPEG · Up to 2 MB · Transparent PNG preferred</span>
                     </button>
                     <img v-if="uploadPreview" :src="uploadPreview" alt="Uploaded signature preview" class="signature-preview">
                     <div class="review-sign-dialog__inline-actions">
-                        <button v-if="uploadFile" type="button" class="mapr-button mapr-button-secondary" @click="removeUpload">Remove Image</button>
+                        <button v-if="uploadFile" type="button" class="mapr-button mapr-button-secondary" :disabled="working" @click="removeUpload">Remove Image</button>
                     </div>
                 </div>
 
@@ -311,6 +359,7 @@ function backToEdit() {
                         type="button"
                         class="mapr-button mapr-button-secondary"
                         :aria-pressed="useSaved"
+                        :disabled="working"
                         @click="chooseSaved"
                     >
                         Use saved signature
@@ -319,27 +368,28 @@ function backToEdit() {
                 </div>
             </template>
 
-            <template v-if="!captureSignature || step === 'confirm'">
-                <div v-if="captureSignature" class="review-sign-dialog__preview-block">
+            <template v-if="!needsInk || step === 'confirm'">
+                <div v-if="needsInk" class="review-sign-dialog__preview-block">
                     <h4>Signature Preview</h4>
                     <img v-if="previewUrl" :src="previewUrl" alt="Signature preview" class="signature-preview">
                     <p class="review-sign-dialog__saved-note">Signed at {{ signingAt || '—' }}</p>
                 </div>
 
                 <label class="bdrrm-confirm review-sign-dialog__confirm">
-                    <input v-model="confirmed" type="checkbox">
+                    <input v-model="confirmed" type="checkbox" :disabled="working">
                     <span>
                         I confirm that this is my electronic signature and authorize its application to the specified report in my assigned signing capacity.
                     </span>
                 </label>
 
-                <label class="review-sign-dialog__password">
+                <label v-if="requirePassword" class="review-sign-dialog__password">
                     <span>Account password</span>
                     <div class="review-sign-dialog__password-row">
                         <input
                             v-model="password"
                             :type="showPassword ? 'text' : 'password'"
                             autocomplete="current-password"
+                            :disabled="working"
                             @keydown.enter.prevent="submit"
                         >
                         <button
@@ -347,6 +397,7 @@ function backToEdit() {
                             class="review-sign-dialog__toggle"
                             :aria-label="showPassword ? 'Hide password' : 'Show password'"
                             :aria-pressed="showPassword"
+                            :disabled="working"
                             @click="showPassword = !showPassword"
                         >
                             <MapIcon name="eye" />
@@ -355,22 +406,24 @@ function backToEdit() {
                 </label>
             </template>
 
-            <p v-if="error" class="cdrrmo-error" role="alert">{{ error }}</p>
+            <p v-if="alertError" class="cdrrmo-error" role="alert">{{ alertError }}</p>
 
             <div class="cdrrmo-actions review-sign-dialog__actions">
-                <button type="button" class="mapr-button mapr-button-secondary" @click="emit('close')">Cancel</button>
+                <button type="button" class="mapr-button mapr-button-secondary" :disabled="working" @click="emit('close')">Cancel</button>
                 <button
-                    v-if="captureSignature && step === 'confirm'"
+                    v-if="needsInk && step === 'confirm'"
                     type="button"
                     class="mapr-button mapr-button-secondary"
+                    :disabled="working"
                     @click="backToEdit"
                 >
                     Back to Edit
                 </button>
                 <button
-                    v-if="captureSignature && step === 'capture'"
+                    v-if="needsInk && step === 'capture'"
                     type="button"
                     class="mapr-button mapr-button-primary"
+                    :disabled="working"
                     @click="goPreview"
                 >
                     Preview Signature
@@ -379,9 +432,10 @@ function backToEdit() {
                     v-else
                     type="button"
                     class="mapr-button mapr-button-primary"
+                    :disabled="working"
                     @click="submit"
                 >
-                    {{ captureSignature ? 'Confirm & Sign' : 'Review and Sign' }}
+                    {{ needsInk ? 'Confirm & Sign' : 'Review and Sign' }}
                 </button>
             </div>
         </section>

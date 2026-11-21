@@ -144,3 +144,341 @@
 /* Measured accordion height is the deliberate layout-animation exception.
    WAAPI owns timing and resumes from the current painted height on reversal. */
 .reports-date-disclosure { overflow: hidden; }
+
+.resident-report-detail {
+    container: resident-report-detail / inline-size;
+    display: grid;
+    gap: 1rem;
+    width: 100%;
+    max-width: 84rem;
+    margin-inline: auto;
+    color: var(--resident-ink);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+.resident-report-detail .p-button {
+    --p-button-border-radius: var(--resident-control);
+    min-height: 2rem;
+}
+
+.resident-report-detail .cdrrmo-icon {
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+}
+
+.report-detail-back {
+    grid-area: back;
+    justify-self: start;
+    margin-inline-start: -0.5rem;
+}
+
+.report-detail-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "back back" "heading actions";
+    align-items: end;
+    gap: 0.75rem 1rem;
+}
+
+.report-detail-heading {
+    grid-area: heading;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem 0.625rem;
+    min-width: 0;
+}
+
+.report-detail-heading p {
+    margin: 0;
+    color: var(--resident-navy);
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.report-detail-heading h2 {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: clamp(1.375rem, 3cqi, 1.75rem);
+    font-weight: 650;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    overflow-wrap: anywhere;
+}
+
+.report-detail-actions {
+    grid-area: actions;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.report-detail-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 1.25rem;
+    border-bottom: 1px solid var(--resident-line);
+}
+
+.report-detail-nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.5rem;
+    margin-bottom: -1px;
+    padding: 0.375rem 0.125rem;
+    color: var(--p-slate-600, #475569);
+    border-bottom: 2px solid transparent;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.report-detail-nav a:hover,
+.report-detail-nav .is-current {
+    color: var(--resident-blue-hover);
+}
+
+.report-detail-nav .is-current {
+    border-bottom-color: var(--resident-blue);
+}
+
+.report-detail-layout {
+    display: grid;
+    align-items: start;
+    gap: 1rem;
+}
+
+.report-detail-summary,
+.report-detail-progress,
+.report-detail-preview,
+.report-detail-state {
+    min-width: 0;
+    border: 1px solid var(--resident-line);
+    border-radius: var(--resident-radius);
+    background: var(--resident-card);
+}
+
+.report-detail-summary h3,
+.report-detail-progress h3,
+.report-preview-bar h3 {
+    margin: 0;
+    color: var(--resident-navy);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.report-detail-summary h3,
+.report-detail-progress h3 {
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid var(--resident-line);
+}
+
+.report-detail-summary dl {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.625rem 0.75rem;
+    margin: 0;
+    padding: 0.875rem 1rem;
+}
+
+.report-detail-summary dt {
+    color: var(--p-slate-600, #475569);
+    font-size: 0.75rem;
+}
+
+.report-detail-summary dd {
+    margin: 0.125rem 0 0;
+    font-weight: 600;
+}
+
+.report-detail-summary dd,
+.report-detail-progress li {
+    overflow-wrap: anywhere;
+}
+
+.report-detail-location {
+    grid-column: 1 / -1;
+}
+
+.report-detail-lock {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--resident-line);
+    border-radius: 0 0 var(--resident-radius) var(--resident-radius);
+    background: var(--resident-wash);
+    color: var(--resident-navy);
+    font-size: 0.75rem;
+}
+
+.report-detail-lock .cdrrmo-icon { margin-top: 0.0625rem; }
+
+.report-detail-progress .resident-stages {
+    gap: 0;
+    padding: 0.75rem 1rem 1rem;
+}
+
+.report-detail-progress .resident-stages li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 0.125rem 0.5rem;
+    padding: 0.625rem 0.625rem 0.625rem 0.75rem;
+}
+
+.report-detail-progress .resident-stages .is-current {
+    background: var(--resident-wash);
+}
+
+.report-detail-progress .resident-stages time,
+.report-detail-progress .resident-stages p {
+    grid-column: 1 / -1;
+    margin: 0;
+}
+
+.report-detail-preview {
+    display: block;
+}
+
+.report-preview-bar {
+    position: sticky;
+    top: var(--resident-header-height, 4rem);
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem 0.625rem;
+    min-height: 3rem;
+    padding: 0.375rem 0.75rem;
+    border-bottom: 1px solid var(--resident-line);
+    border-radius: var(--resident-radius) var(--resident-radius) 0 0;
+    background: var(--resident-card);
+}
+
+.report-preview-bar h3 {
+    margin-inline-end: auto;
+}
+
+.report-preview-pager,
+.report-preview-scale {
+    display: flex;
+    align-items: center;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.report-preview-pager span {
+    min-width: 6ch;
+    color: var(--p-slate-600, #475569);
+    text-align: center;
+}
+
+.report-preview-bar .p-button {
+    padding-inline: 0.375rem;
+}
+
+.report-preview-scale .p-button[aria-pressed="true"] {
+    color: var(--resident-blue-hover);
+}
+
+.report-detail-preview .resident-report-host {
+    max-height: none;
+    padding: clamp(0.375rem, 1.8cqi, 1.5rem);
+    border-radius: 0 0 var(--resident-radius) var(--resident-radius);
+    background: var(--p-slate-100, #f1f5f9);
+    scrollbar-color: var(--p-slate-400, #94a3b8) var(--p-slate-100, #f1f5f9);
+    scroll-margin-top: calc(var(--resident-header-height, 4rem) + 7rem);
+}
+
+.report-detail-preview .resident-report-stage {
+    width: max-content;
+    min-width: 100%;
+}
+
+.report-detail-preview .resident-report-sheet {
+    max-width: none;
+}
+
+.report-detail-preview .resident-report-host:focus-visible {
+    outline-offset: -2px;
+}
+
+.resident-report-detail :focus-visible {
+    outline: 2px solid var(--resident-blue);
+    outline-offset: 2px;
+}
+
+.report-detail-state,
+.report-detail-preview .resident-report-host:has([role="status"]) {
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 0.75rem;
+    min-height: 12rem;
+    padding: 1rem;
+}
+
+.report-detail-preview .report-detail-state {
+    border: 0;
+}
+
+@container resident-report-detail (min-width: 53rem) {
+    .report-detail-layout {
+        grid-template-columns: minmax(0, 1fr) minmax(15rem, 22%);
+        grid-template-areas: "main summary";
+    }
+
+    .report-detail-summary { grid-area: summary; }
+    .report-detail-progress,
+    .report-detail-preview { grid-area: main; }
+
+    .report-detail-summary dl {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@container resident-report-detail (max-width: 28rem) {
+    .report-detail-header {
+        grid-template-areas: "back actions" "heading heading";
+        align-items: center;
+    }
+
+    .report-detail-header:has(.report-detail-edit) {
+        grid-template-areas: "back back" "heading heading" "actions actions";
+    }
+
+    .report-detail-summary dl:has(.report-detail-location) {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+
+    .report-detail-summary dl:where(:has(.report-detail-location)) > div { grid-column: span 3; }
+    .report-detail-summary .report-detail-location { grid-column: 1 / span 4; }
+    .report-detail-summary .report-detail-location + div { grid-column: 5 / -1; }
+
+    .report-preview-bar { gap: 0.1875rem 0.75rem; }
+    .report-preview-bar h3 { flex-basis: 100%; }
+    .report-preview-scale { margin-inline-start: auto; }
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+    .resident-report-detail .p-button,
+    .report-detail-nav a {
+        min-height: 2.75rem;
+    }
+
+    .report-preview-bar .p-button {
+        min-width: 2.75rem;
+    }
+}
+
+@container resident-report-detail (max-width: 19rem) {
+    .report-preview-bar { padding-inline: 0.375rem; column-gap: 0.25rem; }
+    .report-preview-bar h3 { flex-basis: auto; }
+    .report-preview-pager span { font-size: 0.75rem; }
+}

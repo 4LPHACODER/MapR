@@ -111,6 +111,10 @@ async function load() {
 }
 
 function goBack() {
+    if (window.history.state?.fromResidentRegistry && window.history.state.back === route.query.return) {
+        router.back();
+        return;
+    }
     router.push(route.query.return || listPath.value);
 }
 
@@ -218,7 +222,7 @@ watch([kind, () => route.params.id], () => {
         </header>
         <header v-else class="report-document-header">
             <div>
-                <button type="button" class="resident-action resident-action-secondary" @click="route.query.return ? router.push(route.query.return) : router.push(listPath)">Back to Reports</button>
+                <button type="button" class="resident-action resident-action-secondary" @click="goBack">Back to Reports</button>
                 <h2>{{ title }}</h2>
                 <p>{{ record?.reference || 'Loading report…' }}</p>
             </div>

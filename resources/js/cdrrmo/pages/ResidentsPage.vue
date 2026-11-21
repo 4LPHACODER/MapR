@@ -64,10 +64,12 @@ const filters = reactive({
     status: 'active',
     per_page: 25,
     page: 1,
+    ...window.history.state?.residentRegistryFilters,
 });
 
 const selectedList = computed(() => Object.values(selected.value));
 const selectedIds = computed(() => selectedList.value.map((row) => row.id));
+const selectionHasLocation = computed(() => selectedList.value.some((row) => row.map_available));
 const pageRows = computed(() => page.value?.data || []);
 const incidentName = computed(() => incidents.value.find((item) => String(item.id) === String(filters.incident_id))?.incident_name || '');
 const selectedBarangays = computed(() => [...new Set(selectedList.value.map((row) => row.barangay).filter(Boolean))]);
@@ -320,7 +322,16 @@ const reportsEmpty = computed(() => reportGroups.value.every(([, rows]) => rows.
 
 function openReport(item) {
     if (!item.open_path) return;
-    router.push({ path: item.open_path, query: { return: route.fullPath } });
+    rememberFilters();
+    router.push({
+        path: item.open_path,
+        query: { return: route.fullPath },
+        state: { fromResidentRegistry: true },
+    });
+}
+
+function rememberFilters() {
+    window.history.replaceState({ ...window.history.state, residentRegistryFilters: { ...filters } }, '');
 }
 
 function startArchive(row, trigger) {
@@ -435,6 +446,10 @@ async function loadOptions() {
     } catch { optionsError.value = 'Some filter options could not be loaded. Refresh to try again.'; }
 }
 function refresh() { loadOptions(); reloadAll(); }
+
+watch(filters, () => {
+    if (route.path === '/residents' && window.history.state?.residentRegistryFilters) rememberFilters();
+});
 
 watch(() => filters.search, () => {
     if (!ready.value || composing) return;
