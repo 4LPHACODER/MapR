@@ -7,7 +7,7 @@ import WorkspaceSidebar from '../components/WorkspaceSidebar.vue';
 import WorkspaceHeader from '../components/WorkspaceHeader.vue';
 import MapIcon from '../components/MapIcon.vue';
 import MaprFeedbackHost from '../ui/MaprFeedbackHost.vue';
-import { isNavigationActive, workspaceNavigation } from '../navigation';
+import { flattenNavigation, isNavigationActive, workspaceNavigation } from '../navigation';
 import '../../../css/shared/layout.css';
 
 const props = defineProps({
@@ -24,8 +24,15 @@ const drawerOpen = ref(false);
 const keyboardOpen = ref(false);
 const badges = ref({});
 const config = computed(() => workspaceNavigation(props.workspace, roleCode));
-const navigation = computed(() => config.value.items.map(item => ({ ...item, active: isNavigationActive(item, route) })));
-const mobile = computed(() => config.value.mobile.map(path => navigation.value.find(item => item.to === path)));
+const navigation = computed(() => config.value.items.map((item) => {
+    if (item.children?.length) {
+        const children = item.children.map((child) => ({ ...child, active: isNavigationActive(child, route) }));
+        return { ...item, children, active: children.some((child) => child.active) };
+    }
+    return { ...item, active: isNavigationActive(item, route) };
+}));
+const flatLinks = computed(() => flattenNavigation(navigation.value));
+const mobile = computed(() => config.value.mobile.map((path) => flatLinks.value.find((item) => item.to === path)));
 const title = computed(() => route.meta.title || `${config.value.label} workspace`);
 const isWizard = computed(() => route.meta.wizard === true);
 const sidebarProps = computed(() => ({

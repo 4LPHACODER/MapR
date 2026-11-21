@@ -17,4 +17,19 @@ return [
 
     'damage_inference_url' => env('MAPR_DAMAGE_INFERENCE_URL', ''),
 
+    'field_consolidation_barangays' => [
+        'Bag-ong Lungsod',
+        'Bungtod',
+        'Mabua',
+        'Telaje',
+    ],
+
+    /*
+    | Display name => alternate registry names / PSGC codes used when resolving barangays.
+    | Display labels stay in field_consolidation_barangays; matching uses these aliases.
+    */
+    'field_consolidation_barangay_aliases' => [
+        'Bungtod' => ['Bongtud', 'Bongtod', '166819005'],
+    ],
+
 ];

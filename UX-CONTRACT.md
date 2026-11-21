@@ -15,6 +15,8 @@ Scope: `/resident/reports` and its existing report create, detail, and tracking 
 
 Status labels come from the server presentation contract. Filtering never changes lifecycle or edit permissions. Loading, empty, no-result, fetch error, and mutation feedback use the existing shared PrimeVue controls and resident EmptyState. Detail and tracking links preserve filter context. Keep changes scoped to the reports workflow; sibling screens retain their established behavior.
 
+The detail and tracking routes share the incident heading, report summary, and links between the two views. The summary precedes the selected view on narrow screens. The resident variant of `ReportPdfViewer.vue` shows one page at a time with labeled page and zoom controls. Document scrolling is vertical, and horizontal scrolling stays within the preview when zoomed. Residents can retry either a failed report request or a failed PDF preview in place.
+
 
 ## Resident profile
 

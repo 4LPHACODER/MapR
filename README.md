@@ -162,7 +162,7 @@ npm run build
 
 On a fresh database, all eight accounts use `password`. The seeder creates accounts only in `local` and `testing` and preserves existing accounts on reruns.
 
-| Display name | Email |
+| Role | Email |
 | --- | --- |
 | Resident | `resident@mapr.test` |
 | BDRRM Personnel | `bdrrm@mapr.test` |

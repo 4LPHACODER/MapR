@@ -102,6 +102,170 @@ class RdanaBarangayAssignmentQueueTest extends TestCase
         $this->assertNotEmpty($personnel->json('data'));
         $names = collect($personnel->json('data'))->pluck('name')->all();
         $this->assertContains('James Tan', $names);
+
+        $adminCompleted = $this->actingAs($admin)->getJson('/rdana/api/barangay-reports?queue=completed')->assertOk();
+        $this->assertContains($reportA, collect($adminCompleted->json('data'))->pluck('id')->all());
+        $this->assertSame(1, (int) $adminCompleted->json('counts.completed'));
+
+        $cityVerified = $this->actingAs($city)->getJson('/rdana/api/barangay-reports?queue=verified')->assertOk();
+        $this->assertSame(0, (int) $cityVerified->json('counts.verified'));
+        $this->assertSame('verified', $cityVerified->json('queue'));
+    }
+
+    public function test_supervisor_reassigns_pending_report_and_transfers_field_assessment(): void
+    {
+        $barangay = $this->barangay();
+        $admin = $this->member('rdana_admin_officer', 'Admin Officer', $barangay);
+        $first = $this->member('rdana', 'First Assessor', $barangay);
+        $second = $this->member('rdana', 'Second Assessor', $barangay);
+        $officer = $this->member('bdrrm', 'Bdrrm Officer', $barangay);
+        $incident = DB::table('disaster_incidents')->insertGetId([
+            'incident_name' => 'Reassign flood',
+            'occurred_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $reportId = $this->handedOffReport('BR-REASSIGN', $barangay, $incident, $officer->id);
+
+        $this->actingAs($admin)->postJson('/rdana/api/barangay-reports/'.$reportId.'/assign', [
+            'assignee_user_id' => $first->id,
+        ])->assertOk();
+
+        $assessmentId = (int) DB::table('field_assessments')->where('barangay_report_id', $reportId)->value('id');
+        DB::table('field_assessments')->where('id', $assessmentId)->update([
+            'findings' => 'Draft roof damage notes',
+            'assessment_status' => 'draft',
+            'workflow_stage' => 'assessor_draft',
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($first)->postJson('/rdana/api/barangay-reports/'.$reportId.'/assign', [
+            'assignee_user_id' => $second->id,
+            'replaced_reason' => 'Workload balancing',
+        ])->assertForbidden();
+
+        $this->actingAs($admin)->postJson('/rdana/api/barangay-reports/'.$reportId.'/assign', [
+            'assignee_user_id' => $second->id,
+        ])->assertStatus(422);
+
+        $this->actingAs($admin)->postJson('/rdana/api/barangay-reports/'.$reportId.'/assign', [
+            'assignee_user_id' => $second->id,
+            'replaced_reason' => 'Original assessor unavailable for field work.',
+        ])->assertOk();
+
+        $this->assertSame(1, DB::table('report_assignments')
+            ->where('subject_id', $reportId)
+            ->where('assignee_user_id', $first->id)
+            ->where('is_active', false)
+            ->count());
+        $this->assertSame(1, DB::table('report_assignments')
+            ->where('subject_id', $reportId)
+            ->where('assignee_user_id', $second->id)
+            ->where('is_active', true)
+            ->count());
+        $this->assertSame(1, DB::table('field_assessments')->where('barangay_report_id', $reportId)->count());
+        $this->assertSame($second->id, (int) DB::table('field_assessments')->where('id', $assessmentId)->value('assigned_assessor_id'));
+        $this->assertSame('Draft roof damage notes', DB::table('field_assessments')->where('id', $assessmentId)->value('findings'));
+
+        $pending = $this->actingAs($admin)->getJson('/rdana/api/barangay-reports?queue=pending')->assertOk();
+        $row = collect($pending->json('data'))->firstWhere('id', $reportId);
+        $this->assertNotNull($row);
+        $this->assertTrue((bool) ($row['can_reassign'] ?? false));
+        $this->assertArrayHasKey('assessors', $pending->json());
+        $this->assertGreaterThanOrEqual(2, (int) $pending->json('assessors.total'));
+    }
+
+    public function test_bulk_reassign_blocks_submitted_and_supports_same_barangay(): void
+    {
+        $barangay = $this->barangay();
+        $admin = $this->member('rdana_admin_officer', 'Bulk Admin', $barangay);
+        $first = $this->member('rdana', 'Bulk First', $barangay);
+        $second = $this->member('rdana', 'Bulk Second', $barangay);
+        $officer = $this->member('bdrrm', 'Bulk Officer', $barangay);
+        $incident = DB::table('disaster_incidents')->insertGetId([
+            'incident_name' => 'Bulk reassign',
+            'occurred_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $reportA = $this->handedOffReport('BR-BULK-A', $barangay, $incident, $officer->id);
+        $reportB = $this->handedOffReport('BR-BULK-B', $barangay, $incident, $officer->id);
+
+        $this->actingAs($admin)->postJson('/rdana/api/barangay-reports/assign', [
+            'assignee_user_id' => $first->id,
+            'report_ids' => [$reportA, $reportB],
+        ])->assertOk();
+
+        $this->actingAs($admin)->postJson('/rdana/api/barangay-reports/assign', [
+            'assignee_user_id' => $second->id,
+            'report_ids' => [$reportA, $reportB],
+        ])->assertStatus(422);
+
+        DB::table('field_assessments')->where('barangay_report_id', $reportB)->update([
+            'assessment_status' => 'submitted',
+            'workflow_stage' => 'pending_admin_verification',
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->postJson('/rdana/api/barangay-reports/assign', [
+            'assignee_user_id' => $second->id,
+            'report_ids' => [$reportA, $reportB],
+            'replaced_reason' => 'Should fail because one is submitted.',
+        ])->assertStatus(422);
+
+        DB::table('field_assessments')->where('barangay_report_id', $reportB)->update([
+            'assessment_status' => 'draft',
+            'workflow_stage' => 'assessor_draft',
+            'findings' => 'Keep me',
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->postJson('/rdana/api/barangay-reports/assign', [
+            'assignee_user_id' => $second->id,
+            'report_ids' => [$reportA, $reportB],
+            'replaced_reason' => 'Rebalance pending assessments.',
+        ])->assertOk();
+
+        $this->assertSame($second->id, (int) DB::table('field_assessments')->where('barangay_report_id', $reportB)->value('assigned_assessor_id'));
+        $this->assertSame('Keep me', DB::table('field_assessments')->where('barangay_report_id', $reportB)->value('findings'));
+        $this->assertSame(1, DB::table('field_assessments')->where('barangay_report_id', $reportB)->count());
+    }
+
+    public function test_city_assessor_verified_queue_and_export_authorization(): void
+    {
+        $barangay = $this->barangay();
+        $admin = $this->member('rdana_admin_officer', 'Verify Admin', $barangay);
+        $city = $this->member('rdana_city_assessor', 'Review City', $barangay);
+        $assessor = $this->member('rdana', 'Field Assessor', $barangay);
+        $officer = $this->member('bdrrm', 'Handoff Officer', $barangay);
+        $incident = DB::table('disaster_incidents')->insertGetId([
+            'incident_name' => 'Verified queue',
+            'occurred_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $reportId = $this->handedOffReport('BR-VERIFIED', $barangay, $incident, $officer->id);
+
+        $this->actingAs($admin)->postJson('/rdana/api/barangay-reports/'.$reportId.'/assign', [
+            'assignee_user_id' => $assessor->id,
+        ])->assertOk();
+
+        DB::table('field_assessments')->where('barangay_report_id', $reportId)->update([
+            'workflow_stage' => 'pending_city_assessor',
+            'assessment_status' => 'draft',
+            'updated_at' => now(),
+        ]);
+
+        $verified = $this->actingAs($city)->getJson('/rdana/api/barangay-reports?queue=verified')->assertOk();
+        $this->assertContains($reportId, collect($verified->json('data'))->pluck('id')->all());
+        $row = collect($verified->json('data'))->firstWhere('id', $reportId);
+        $this->assertTrue((bool) ($row['can_review_report'] ?? false));
+
+        $adminCompleted = $this->actingAs($admin)->getJson('/rdana/api/barangay-reports?queue=completed')->assertOk();
+        $this->assertNotContains($reportId, collect($adminCompleted->json('data'))->pluck('id')->all());
+
+        $this->actingAs($assessor)->get('/rdana/api/barangay-reports/export?queue=pending')->assertForbidden();
+        $this->actingAs($admin)->get('/rdana/api/barangay-reports/export?queue=pending')->assertOk();
     }
 
     public function test_bdrrm_personnel_cannot_access_residents_registry(): void

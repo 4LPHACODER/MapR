@@ -20,8 +20,12 @@ const formElement = ref(null);
 const discardOpen = ref(false);
 const chosenHousehold = ref(null);
 const householdError = ref('');
+const householdEmpty = ref(false);
 let householdTicket = 0;
 let householdComposing = false;
+let birthDateAccepted = false;
+const invalidBirthDate = ref('');
+const invalidBirthDateMessage = 'Enter a valid birth date, for example 24 Jan 1990.';
 const saving = ref(false);
 const error = ref('');
 const fieldErrors = ref({});
@@ -41,11 +45,12 @@ const form = reactive({
 });
 
 const editing = computed(() => !!props.resident?.id);
+const birthDate = computed(() => isoToDate(form.birth_date));
 const title = computed(() => (editing.value ? 'Edit Resident' : 'Add resident'));
 let initialSnapshot = '';
 
 function snapshot() {
-    return JSON.stringify({ ...form, householdQuery: householdQuery.value });
+    return JSON.stringify({ ...form, householdQuery: householdQuery.value, invalidBirthDate: invalidBirthDate.value });
 }
 
 function fillFromResident(resident) {
@@ -55,6 +60,7 @@ function fillFromResident(resident) {
     form.household_id = resident?.household_id ? String(resident.household_id) : '';
     form.sex = resident?.sex || '';
     form.birth_date = resident?.birth_date || '';
+    invalidBirthDate.value = '';
     form.record_source = '';
     form.reason = '';
     householdQuery.value = resident?.household_reference || '';
@@ -64,6 +70,7 @@ function fillFromResident(resident) {
     chosenHousehold.value = householdOptions.value[0] || null;
     discardOpen.value = false;
     householdError.value = '';
+    householdEmpty.value = false;
     duplicateMatches.value = [];
     error.value = '';
     fieldErrors.value = {};
@@ -86,6 +93,7 @@ async function searchHouseholds() {
     if (!props.open || householdComposing) return;
     const ticket = ++householdTicket;
     householdError.value = '';
+    householdEmpty.value = false;
     const term = householdQuery.value.trim();
     if (term.length < 2) {
         householdOptions.value = form.household_id ? householdOptions.value.slice(0, 1) : [];
@@ -93,7 +101,9 @@ async function searchHouseholds() {
     }
     try {
         const { data } = await window.axios.get('/cdrrmo/api/households/search', { params: { search: term } });
-        if (ticket === householdTicket) householdOptions.value = data.data || [];
+        if (ticket !== householdTicket) return;
+        householdOptions.value = data.data || [];
+        householdEmpty.value = householdOptions.value.length === 0;
     } catch {
         if (ticket === householdTicket) { householdOptions.value = []; householdError.value = 'Households could not be loaded. Try searching again.'; }
     }
@@ -102,7 +112,11 @@ async function searchHouseholds() {
 watch(householdQuery, () => {
     clearTimeout(householdTimer.value);
     householdTicket++;
-    if (props.open && !householdComposing) householdTimer.value = setTimeout(searchHouseholds, 300);
+    householdEmpty.value = false;
+    householdError.value = '';
+    if (!props.open || householdQuery.value === chosenHousehold.value?.household_reference) return;
+    householdOptions.value = [];
+    if (!householdComposing) householdTimer.value = setTimeout(searchHouseholds, 300);
 });
 
 // A corrected field no longer carries the previous validation message.
@@ -119,6 +133,27 @@ function chooseHousehold(option) {
     householdQuery.value = option.household_reference;
 }
 
+function updateBirthDate(value) {
+    birthDateAccepted = true;
+    invalidBirthDate.value = '';
+    form.birth_date = dateToIso(value);
+    delete fieldErrors.value.birth_date;
+}
+
+function captureBirthDate(event) {
+    // DatePicker emits its model update before the input event when it accepts typed text.
+    if (!birthDateAccepted) invalidBirthDate.value = event.target.value.trim();
+}
+
+async function onBirthDateBlur({ originalEvent }) {
+    const draft = invalidBirthDate.value;
+    if (!draft) return;
+    fieldErrors.value.birth_date = [invalidBirthDateMessage];
+    // DatePicker restores its last accepted value after emitting blur.
+    await nextTick();
+    if (invalidBirthDate.value === draft) originalEvent.target.value = draft;
+}
+
 async function focusFirstError() {
     await nextTick();
     formElement.value?.querySelector('[aria-invalid="true"]')?.focus();
@@ -132,6 +167,7 @@ async function save(confirmDuplicate = false) {
     if (!form.first_name.trim()) errors.first_name = ['Enter the first name.'];
     if (!form.last_name.trim()) errors.last_name = ['Enter the last name.'];
     if (!form.household_id) errors.household_id = ['Choose an active household.'];
+    if (invalidBirthDate.value) errors.birth_date = [invalidBirthDateMessage];
     if (!editing.value && !form.record_source.trim()) errors.record_source = ['Enter the authorized record source.'];
     if (editing.value && form.reason.trim().length < 3) errors.reason = ['Enter a correction reason of at least 3 characters.'];
     fieldErrors.value = errors;
@@ -149,7 +185,7 @@ async function save(confirmDuplicate = false) {
                 last_name: form.last_name,
                 household_id: Number(form.household_id),
                 sex: form.sex || null,
-                birth_date: form.birth_date || null,
+                ...(form.birth_date !== (props.resident.birth_date || '') ? { birth_date: form.birth_date || null } : {}),
             });
         } else {
             await window.axios.post('/cdrrmo/api/residents', {
@@ -196,10 +232,30 @@ async function save(confirmDuplicate = false) {
                 <div class="registry-field"><label for="resident-middle-name">Middle name</label><InputText id="resident-middle-name" v-model="form.middle_name" maxlength="191" autocomplete="off" size="small" :disabled="saving" :invalid="!!fieldErrors.middle_name" :aria-invalid="!!fieldErrors.middle_name" :aria-describedby="fieldErrors.middle_name ? 'resident-middle-name-error' : undefined" /><small v-if="fieldErrors.middle_name" id="resident-middle-name-error" class="registry-field-error">{{ fieldErrors.middle_name[0] }}</small></div>
                 <div class="registry-field"><label for="resident-last-name">Last name <span aria-hidden="true">*</span></label><InputText id="resident-last-name" v-model="form.last_name" required maxlength="191" autocomplete="off" size="small" :disabled="saving" :invalid="!!fieldErrors.last_name" :aria-invalid="!!fieldErrors.last_name" :aria-describedby="fieldErrors.last_name ? 'resident-last-name-error' : undefined" /><small v-if="fieldErrors.last_name" id="resident-last-name-error" class="registry-field-error">{{ fieldErrors.last_name[0] }}</small></div>
                 <div class="registry-field"><label for="resident-sex">Sex <span class="registry-optional">(optional)</span></label><InputText id="resident-sex" v-model="form.sex" maxlength="32" autocomplete="off" size="small" :disabled="saving" :invalid="!!fieldErrors.sex" :aria-describedby="fieldErrors.sex ? 'resident-sex-error' : undefined" /><small v-if="fieldErrors.sex" id="resident-sex-error" class="registry-field-error">{{ fieldErrors.sex[0] }}</small></div>
-                <div class="registry-field registry-field-wide"><label for="resident-birth-date">Birth date <span class="registry-optional">(optional)</span></label><DatePicker input-id="resident-birth-date" :model-value="isoToDate(form.birth_date)" date-format="dd M yy" placeholder="Select or enter a date" show-icon icon-display="input" size="small" :disabled="saving" :invalid="!!fieldErrors.birth_date" panel-class="cdrrmo-residents-overlay registry-calendar" :pt="{ transition: { css: false }, pcInputText: { root: { 'aria-invalid': !!fieldErrors.birth_date, 'aria-describedby': fieldErrors.birth_date ? 'resident-birth-date-error' : undefined } } }" @update:model-value="form.birth_date = dateToIso($event)" /><small v-if="fieldErrors.birth_date" id="resident-birth-date-error" class="registry-field-error">{{ fieldErrors.birth_date[0] }}</small></div>
+                <div class="registry-field registry-field-wide" @input.capture="birthDateAccepted = false">
+                    <label for="resident-birth-date">Birth date <span class="registry-optional">(optional)</span></label>
+                    <DatePicker
+                        input-id="resident-birth-date" :model-value="birthDate" date-format="dd M yy" placeholder="Select or enter a date"
+                        show-icon icon-display="input" size="small" :disabled="saving" :invalid="!!fieldErrors.birth_date"
+                        panel-class="cdrrmo-residents-overlay registry-calendar"
+                        :pt="{
+                            transition: { css: false },
+                            pcInputText: { root: {
+                                ...(invalidBirthDate ? { value: invalidBirthDate } : {}),
+                                'aria-invalid': !!fieldErrors.birth_date,
+                                'aria-describedby': fieldErrors.birth_date ? 'resident-birth-date-error' : undefined,
+                            } },
+                        }"
+                        @update:model-value="updateBirthDate" @input="captureBirthDate" @blur="onBirthDateBlur"
+                    />
+                    <small v-if="fieldErrors.birth_date" id="resident-birth-date-error" class="registry-field-error" role="status">{{ fieldErrors.birth_date[0] }}</small>
+                </div>
             </div>
             <div class="registry-field"><label for="resident-household-search">Household reference <span aria-hidden="true">*</span></label><div class="registry-search"><MapIcon name="search" /><InputText id="resident-household-search" v-model="householdQuery" placeholder="Search an active household reference" autocomplete="off" size="small" :disabled="saving" :invalid="!!fieldErrors.household_id" :aria-invalid="!!fieldErrors.household_id" :aria-describedby="fieldErrors.household_id ? 'resident-household-error' : 'resident-household-help'" @compositionstart="householdComposing = true; clearTimeout(householdTimer)" @compositionend="householdComposing = false; searchHouseholds()" /><Button v-if="householdQuery" aria-label="Clear household search" size="small" text severity="secondary" :disabled="saving" @click="clearHouseholdSearch"><MapIcon name="x" /></Button></div><small id="resident-household-help" class="registry-muted">Search at least two characters, then select a household below.</small><small v-if="fieldErrors.household_id" id="resident-household-error" class="registry-field-error">{{ fieldErrors.household_id[0] }}</small></div>
             <Message v-if="householdError" severity="error" :closable="false">{{ householdError }}</Message>
+            <p v-if="householdEmpty" class="registry-muted" role="status">
+                No active households match this search. {{ chosenHousehold ? 'Try a different reference to change the selection.' : 'Select an active household to save this record.' }}
+            </p>
             <ul v-if="householdOptions.length" class="registry-household-options" aria-label="Matching households"><li v-for="option in householdOptions" :key="option.id"><Button type="button" size="small" severity="secondary" text :aria-pressed="String(option.id) === form.household_id" :disabled="saving" @click="chooseHousehold(option)"><span>{{ option.household_reference }}<small>{{ option.barangay || 'Barangay unavailable' }} · {{ option.building_reference || 'No building' }}</small></span><MapIcon v-if="String(option.id) === form.household_id" name="check" /></Button></li></ul>
             <p v-if="chosenHousehold" class="registry-household-selected"><MapIcon name="home" /><span>Selected household: <strong>{{ chosenHousehold.household_reference }}</strong></span></p>
             <div v-if="!editing" class="registry-field"><label for="resident-record-source">Record source <span aria-hidden="true">*</span></label><InputText id="resident-record-source" v-model="form.record_source" required maxlength="191" placeholder="Authorized source of this record" size="small" :disabled="saving" :invalid="!!fieldErrors.record_source" :aria-invalid="!!fieldErrors.record_source" :aria-describedby="fieldErrors.record_source ? 'resident-source-error' : undefined" /><small v-if="fieldErrors.record_source" id="resident-source-error" class="registry-field-error">{{ fieldErrors.record_source[0] }}</small></div>

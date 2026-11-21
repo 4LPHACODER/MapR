@@ -8,6 +8,7 @@ const props = defineProps({
     loading: { type: Boolean, default: false },
     disabled: { type: Boolean, default: false },
     placeholder: { type: String, default: 'Type to search personnel...' },
+    label: { type: String, default: 'Select RDANA Assessor Personnel' },
 });
 
 const emit = defineEmits(['update:modelValue']);
@@ -98,7 +99,7 @@ function chooseHighlighted() {
 <template>
     <div class="assessor-combobox" :data-open="menuOpen ? 'true' : 'false'">
         <label class="assessor-combobox-label" for="assessor-combobox-input">
-            <MapIcon name="users-round" /> Select RDANA Assessor Personnel
+            <MapIcon name="users-round" /> {{ label }}
         </label>
         <div class="assessor-combobox-field">
             <span class="assessor-combobox-search" aria-hidden="true"><MapIcon name="search" /></span>

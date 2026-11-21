@@ -411,20 +411,20 @@ class BarangayReportController extends Controller
         if ($request->exists('estimated_repair_cost')) {
             abort(422, 'BDRRM cannot record the estimated repair cost.');
         }
-        $request->validate([
-            'confirmed' => ['accepted'],
-            'content_revision' => ['required', 'string', 'size:64'],
-            'use_saved_signature' => ['sometimes', 'boolean'],
-            'signature' => ['nullable', 'file'],
-        ]);
+            $request->validate([
+                'confirmed' => ['accepted'],
+                'content_revision' => ['required', 'string', 'size:64'],
+                'use_saved_signature' => ['sometimes', 'boolean'],
+                'signature' => ['nullable', 'file'],
+            ]);
         if (! $request->hasFile('signature') && ! $request->boolean('use_saved_signature')) {
             abort(422, 'Draw a signature or choose your saved signature before accepting.');
         }
-        $endorsement = [
-            'revision' => $request->string('content_revision')->toString(),
-            'use_saved' => $request->boolean('use_saved_signature'),
-            'file' => $request->file('signature'),
-        ];
+            $endorsement = [
+                'revision' => $request->string('content_revision')->toString(),
+                'use_saved' => $request->boolean('use_saved_signature'),
+                'file' => $request->file('signature'),
+            ];
         $barangayReportId = $this->residentReports->acceptSubmission($request->user(), $row, $this->workflow, $endorsement);
 
         return response()->json([
@@ -623,6 +623,22 @@ class BarangayReportController extends Controller
             $verificationLabel = 'Returned for Correction';
         }
 
+        $signatures = $this->signatures('barangay_report_id', (int) $row->id);
+        $roles = collect($signatures)->pluck('signature_role');
+        $stage = $row->workflow_stage ?? null;
+        $canEdit = in_array($row->report_status, ['draft', 'returned'], true);
+        $captainSigned = $roles->contains('barangay_signer');
+        $secretarySigned = $roles->contains('barangay_secretary');
+        $user = auth()->user();
+        $signingAction = null;
+        if ($canEdit && ! $captainSigned && $user?->role?->code === 'barangay_captain') {
+            $signingAction = match (true) {
+                $stage === 'pending_captain' && $secretarySigned => 'endorse',
+                $this->workflow->canSignBarangay($user, $row) => 'sign',
+                default => null,
+            };
+        }
+
         return [
             ...$this->reportRow($row),
             'report_description' => $row->report_description,
@@ -631,18 +647,19 @@ class BarangayReportController extends Controller
             'photos' => $photos,
             'predictions' => $predictions,
             // Raw barangay-parent rows kept for compatibility; UI should prefer signature_slots.
-            'signatures' => $this->signatures('barangay_report_id', (int) $row->id),
+            'signatures' => $signatures,
             'signature_slots' => $signaturePayload['slots'],
             'signature_signed_count' => $signaturePayload['signed_count'],
             'lineage' => $signaturePayload['lineage'],
             'timeline' => $this->timeline('barangay_report', (int) $row->id),
-            'can_edit' => in_array($row->report_status, ['draft', 'returned'], true),
+            'can_edit' => $canEdit,
+            'signing_action' => $signingAction,
             'version' => 1,
             'incident' => Schema::hasTable('disaster_incidents') ? DB::table('disaster_incidents')->where('id', $row->disaster_incident_id)->first(['id', 'incident_reference as reference', 'incident_name as name']) : null,
             'barangay' => Schema::hasTable('barangays') ? DB::table('barangays')->where('id', $row->barangay_id)->first(['id', 'barangay_name as name']) : null,
             'flags' => ReportFlagController::forSubject('barangay_report', (int) $row->id),
             'open_flags' => collect(ReportFlagController::forSubject('barangay_report', (int) $row->id))->where('status', 'open')->count(),
-            'checklist' => $this->checklist($row, $photos),
+            'checklist' => $this->checklist($row, $photos, $captainSigned, $secretarySigned, $signingAction),
             'assessment_id' => $fieldAssessment ? (int) $fieldAssessment->id : null,
             'assessment_status' => $fieldAssessment->assessment_status ?? null,
             'assessment_workflow_stage' => $fieldAssessment->workflow_stage ?? null,
@@ -657,14 +674,20 @@ class BarangayReportController extends Controller
         ];
     }
 
-    private function checklist(object $row, $photos): array
+    private function checklist(object $row, $photos, bool $captainSigned, bool $secretarySigned, ?string $signingAction): array
     {
         $description = trim((string) ($row->report_description ?? '')) !== '';
-        $signed = $this->signatures('barangay_report_id', (int) $row->id);
-        $hasSignature = collect($signed)->contains(fn ($signature) => $signature->signature_role === 'barangay_signer' && $signature->mechanism === 'authenticated_e_signature');
         $openFlags = collect(ReportFlagController::forSubject('barangay_report', (int) $row->id))->where('status', 'open')->count();
-        $user = auth()->user();
-        $canSign = $user && $this->workflow->canSignBarangay($user, $row);
+        $requiresSecretary = ($row->workflow_stage ?? null) !== null;
+        $predecessor = $requiresSecretary
+            ? ($secretarySigned ? 'The Barangay Secretary has checked and signed this report.' : 'The Barangay Secretary must check and sign this report first.')
+            : 'This report goes directly to the Barangay Captain for signing.';
+        $authority = match (true) {
+            $captainSigned => 'The Barangay Captain has signed this report.',
+            $signingAction === 'endorse' => 'This account can endorse this report as the Barangay Captain.',
+            $signingAction === 'sign' => 'This account can sign as the Barangay Captain.',
+            default => 'This account cannot sign this barangay report.',
+        };
         $successor = Schema::hasColumn('barangay_reports', 'supersedes_id')
             && DB::table('barangay_reports')->where('supersedes_id', $row->id)->exists();
 
@@ -672,8 +695,8 @@ class BarangayReportController extends Controller
             ['key' => 'fields', 'label' => 'Required fields complete', 'met' => $description, 'detail' => $description ? 'The report description is saved.' : 'Record the report description before signing.'],
             ['key' => 'evidence', 'label' => 'Required evidence attached', 'met' => $photos->isNotEmpty(), 'detail' => $photos->isNotEmpty() ? $photos->count().' photograph(s) attached.' : 'No photograph is attached.'],
             ['key' => 'verification', 'label' => 'Required location and household verification complete', 'met' => $row->barangay_id && $description, 'detail' => 'The report stays on its assigned barangay.'],
-            ['key' => 'predecessor', 'label' => 'Required predecessor signatures present', 'met' => true, 'detail' => $hasSignature ? 'The barangay captain has signed this version.' : 'A barangay report has no predecessor office. The captain signature is still required before forwarding.'],
-            ['key' => 'authority', 'label' => 'Current user has signing authority', 'met' => $canSign, 'detail' => $canSign ? 'This account can sign as the barangay captain.' : 'This account cannot sign this barangay report.'],
+            ['key' => 'predecessor', 'label' => 'Required predecessor signatures present', 'met' => ! $requiresSecretary || $secretarySigned, 'detail' => $predecessor],
+            ['key' => 'authority', 'label' => 'Captain signing authority', 'met' => $captainSigned || $signingAction !== null, 'detail' => $authority],
             ['key' => 'flags', 'label' => 'No unresolved blocking flags', 'met' => $openFlags === 0, 'detail' => $openFlags === 0 ? 'No open flags.' : $openFlags.' open flag(s).'],
             ['key' => 'current', 'label' => 'Report version is current', 'met' => ! $successor, 'detail' => $successor ? 'A newer revision exists.' : 'This is the current version.'],
         ];

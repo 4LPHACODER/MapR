@@ -46,6 +46,7 @@ defineProps({
         <path v-else-if="name === 'shield-check'" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z M9 12l2 2 4-4" />
         <path v-else-if="name === 'calculator'" d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z M8 7h8M8 11h2M12 11h2M16 11h1M8 15h2M12 15h2M16 15h1M8 19h2M12 19h2M16 19h1" />
         <path v-else-if="name === 'file-pen'" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h7M14 2v6h6M14 2l6 6M16 18l4 1-1-4-6-6-3 3 6 6Z" />
+        <path v-else-if="name === 'folder-open'" d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H4a1 1 0 0 0-1 1l1.5 8.5A2 2 0 0 0 6.5 21H19a2 2 0 0 0 2-1.7L22 10H5" />
         <path v-else-if="name === 'undo'" d="M9 14 4 9l5-5M4 9h10a6 6 0 1 1 0 12h-3" />
         <path v-else-if="name === 'send'" d="M22 2 11 13M22 2 15 22l-4-9-9-4 20-7Z" />
         <path v-else-if="name === 'user-alert'" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM19 8v6M19 18h.01" />
@@ -70,11 +71,13 @@ defineProps({
         <path v-else-if="name === 'pen-line'" d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
         <path v-else-if="name === 'rotate-ccw'" d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" />
         <path v-else-if="name === 'file-text'" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z M14 2v6h6M8 13h8M8 17h5" />
+        <path v-else-if="name === 'file-spreadsheet'" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z M14 2v6h6M8 12h8M8 16h8M12 12v8" />
         <path v-else-if="name === 'files'" d="M8 7V5a2 2 0 0 1 2-2h7l3 3v9a2 2 0 0 1-2 2h-2M4 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
         <path v-else-if="name === 'clock-3'" d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5h4" />
         <path v-else-if="name === 'user-round'" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
         <path v-else-if="name === 'user-round-plus'" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM19 8v6M16 11h6" />
         <path v-else-if="name === 'user-round-pen'" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM19 16l2 2 3-3" />
+        <path v-else-if="name === 'user-round-cog'" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09c0 .192.168.1.3 1.51a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
         <path v-else-if="name === 'user-round-x'" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM17 8l4 4M21 8l-4 4" />
         <path v-else-if="name === 'list-filter'" d="M3 6h18M6 12h12M10 18h4" />
         <path v-else-if="name === 'calendar-days'" d="M7 3v3M17 3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1ZM8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01" />

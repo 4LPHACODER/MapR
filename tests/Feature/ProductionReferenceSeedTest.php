@@ -77,16 +77,20 @@ class ProductionReferenceSeedTest extends TestCase
         foreach (RoleHome::PREFIXES as $code => $path) {
             $user = $users->get($code);
             $this->assertNotNull($user, 'Missing user for '.$code);
-            $this->assertSame($user->role->name, $user->display_name);
+            $this->assertNotEmpty($user->first_name);
+            $this->assertNotEmpty($user->last_name);
+            $this->assertNotSame($user->role->name, $user->display_name);
             $this->assertTrue(Hash::check('password', $user->password));
             $this->post('/login', ['email' => $user->email, 'password' => 'password'])->assertRedirect($path);
             $this->assertAuthenticatedAs($user);
             $this->post('/logout');
         }
+        $this->assertSame($users->count(), $users->pluck('display_name')->unique()->count());
 
         $resident = $users->get('resident');
-        $resident->update(['password' => 'changed-password']);
+        $resident->update(['first_name' => 'Marissa', 'password' => 'changed-password']);
         $this->seed(DatabaseSeeder::class);
+        $this->assertSame('Marissa', $resident->fresh()->first_name);
         $this->assertTrue(Hash::check('changed-password', $resident->fresh()->password));
         $this->assertDatabaseCount('users', count(RoleHome::PREFIXES));
     }

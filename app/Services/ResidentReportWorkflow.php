@@ -1121,7 +1121,7 @@ class ResidentReportWorkflow
             'reported_incident_type' => Schema::hasColumn('resident_incident_reports', 'reported_incident_type') ? ($this->value($row, 'reported_incident_type') ?: null) : null,
             'incident_type' => $incident['type'],
             'occurred_at' => $incident['occurred_at'],
-            'disaster_incident_id' => (int) $row->disaster_incident_id,
+            'disaster_incident_id' => ! empty($row->disaster_incident_id) ? (int) $row->disaster_incident_id : null,
             'reported_location' => $this->value($row, 'reported_location'),
             'incident_description' => $this->value($row, 'incident_description'),
             'latitude' => $point['latitude'],

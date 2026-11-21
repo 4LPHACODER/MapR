@@ -6,8 +6,10 @@ use App\Models\Auth\User;
 use App\Services\ReportAssignmentService;
 use App\Services\ReportWorkflow;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\Support\CreatesMaprAuthSchema;
 use Tests\TestCase;
@@ -210,10 +212,16 @@ class ReportWorkflowContinuityTest extends TestCase
             'updated_at' => now(),
         ]);
         $cityEarly = $this->member('rdana_city_assessor', 'Test City Assessor', $barangay);
-        $this->actingAs($cityEarly)->postJson('/rdana/api/assessments/'.$assessmentId.'/forward')->assertStatus(422);
-        $this->actingAs($assessor)->postJson('/rdana/api/assessments/'.$assessmentId.'/submit-assessed')->assertOk();
+        $this->signAssessment($cityEarly, '/rdana/api/assessments/'.$assessmentId.'/forward')->assertStatus(422);
+        $this->signAssessment($assessor, '/rdana/api/assessments/'.$assessmentId.'/submit-assessed')->assertOk();
         $this->assertSame(1, DB::table('field_assessments')->count());
         $this->assertSame('pending_admin_verification', DB::table('field_assessments')->where('id', $assessmentId)->value('workflow_stage'));
+        $this->assertNotNull(
+            DB::table('report_signatures')
+                ->where('field_assessment_id', $assessmentId)
+                ->where('signature_role', 'assessed_by')
+                ->value('user_signature_asset_id')
+        );
 
         $this->actingAs($officer)->postJson('/rdana/api/assessments/'.$assessmentId.'/return', [
             'return_reason' => 'Revisit building status before administrative verification.',
@@ -222,16 +230,16 @@ class ReportWorkflowContinuityTest extends TestCase
         $this->assertSame('assessor_draft', DB::table('field_assessments')->where('id', $assessmentId)->value('workflow_stage'));
         $this->assertSame('draft', app(ReportAssignmentService::class)->assessmentBucket($report));
 
-        $this->actingAs($assessor)->postJson('/rdana/api/assessments/'.$assessmentId.'/submit-assessed')->assertOk();
+        $this->signAssessment($assessor, '/rdana/api/assessments/'.$assessmentId.'/submit-assessed')->assertOk();
         $this->assertSame('pending_admin_verification', DB::table('field_assessments')->where('id', $assessmentId)->value('workflow_stage'));
         $this->assertNotSame('returned', DB::table('field_assessments')->where('id', $assessmentId)->value('assessment_status'));
         $this->assertSame('completed', app(ReportAssignmentService::class)->assessmentBucket($report));
 
         $city = $cityEarly;
-        $this->actingAs($city)->postJson('/rdana/api/assessments/'.$assessmentId.'/forward')->assertStatus(422);
-        $this->actingAs($officer)->postJson('/rdana/api/assessments/'.$assessmentId.'/verify-officer')->assertOk();
-        $this->actingAs($city)->postJson('/rdana/api/assessments/'.$assessmentId.'/forward')->assertOk();
-        $this->assertSame('forwarded_cdrrmo', DB::table('field_assessments')->where('id', $assessmentId)->value('workflow_stage'));
+        $this->signAssessment($city, '/rdana/api/assessments/'.$assessmentId.'/forward')->assertStatus(422);
+        $this->signAssessment($officer, '/rdana/api/assessments/'.$assessmentId.'/verify-officer')->assertOk();
+        $this->signAssessment($city, '/rdana/api/assessments/'.$assessmentId.'/forward')->assertOk();
+        $this->assertSame('ready_for_consolidation', DB::table('field_assessments')->where('id', $assessmentId)->value('workflow_stage'));
 
         DB::table('field_assessments')->insert([
             'assessment_reference' => 'FA-HIDDEN',
@@ -245,7 +253,7 @@ class ReportWorkflowContinuityTest extends TestCase
         $admin = $this->user('cdrrmo_admin', 'City Admin');
         $listed = $this->actingAs($admin)->getJson('/cdrrmo/api/reports/field')->assertOk()->json('data');
         $references = collect($listed)->pluck('reference')->all();
-        $this->assertContains(DB::table('field_assessments')->where('id', $assessmentId)->value('assessment_reference'), $references);
+        $this->assertNotContains(DB::table('field_assessments')->where('id', $assessmentId)->value('assessment_reference'), $references);
         $this->assertNotContains('FA-HIDDEN', $references);
     }
 
@@ -325,11 +333,50 @@ class ReportWorkflowContinuityTest extends TestCase
 
         $this->signOffice($secretary, '/bdrrm/api/reports/'.$report.'/endorse')->assertOk();
         $this->assertSame('pending_captain', DB::table('barangay_reports')->where('id', $report)->value('workflow_stage'));
+        $this->actingAs($captain)->getJson('/bdrrm/api/reports/'.$report)
+            ->assertOk()
+            ->assertJsonPath('data.signing_action', 'endorse');
+        DB::table('report_signatures')->where('barangay_report_id', $report)
+            ->where('signature_role', 'barangay_secretary')->update(['mechanism' => 'simulated_demo']);
+        $this->getJson('/bdrrm/api/reports/'.$report)
+            ->assertOk()
+            ->assertJsonPath('data.signing_action', 'endorse');
+        $this->actingAs($secretary)->getJson('/bdrrm/api/reports/'.$report)
+            ->assertOk()
+            ->assertJsonPath('data.signing_action', null);
         $this->actingAs($captain)->postJson('/bdrrm/api/reports/'.$report.'/sign', [
             'confirmed' => true,
             'password' => 'secret-pass',
         ])->assertForbidden();
         $this->signOffice($captain, '/bdrrm/api/reports/'.$report.'/captain-approve')->assertOk();
+        $this->getJson('/bdrrm/api/reports/'.$report)
+            ->assertOk()
+            ->assertJsonPath('data.signing_action', null);
+    }
+
+    public function test_standalone_barangay_draft_still_uses_password_signing(): void
+    {
+        [$barangay, $officer] = $this->office();
+        $captain = $this->member('barangay_captain', 'Test Captain', $barangay);
+        $report = DB::table('barangay_reports')->insertGetId([
+            'report_reference' => 'BR-STANDALONE-SIGN',
+            'report_status' => 'draft',
+            'barangay_id' => $barangay,
+            'prepared_by' => $officer->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $url = '/bdrrm/api/reports/'.$report;
+        $this->actingAs($captain)->getJson($url)
+            ->assertOk()
+            ->assertJsonPath('data.signing_action', 'sign');
+        $this->postJson($url.'/sign', ['confirmed' => true, 'password' => 'incorrect'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('password');
+        $this->postJson($url.'/sign', ['confirmed' => true, 'password' => 'secret-pass'])
+            ->assertOk()
+            ->assertJsonPath('data.signing_action', null);
     }
 
     public function test_all_prior_signatures_remain_after_captain_endorsement(): void
@@ -385,7 +432,17 @@ class ReportWorkflowContinuityTest extends TestCase
         $this->assertSame(1, DB::table('report_signatures')->where('resident_incident_report_id', $rir)->where('signature_role', 'bdrrm_reviewer')->count());
         $this->assertSame(1, DB::table('report_signatures')->where('barangay_report_id', $report)->where('signature_role', 'barangay_secretary')->count());
 
-        $this->signOffice($captain, '/bdrrm/api/reports/'.$report.'/captain-approve')->assertOk();
+        Storage::fake('local');
+        $this->actingAs($captain)->post('/bdrrm/api/reports/'.$report.'/captain-approve', [
+            'confirmed' => '1',
+            'signature' => UploadedFile::fake()->image('captain-signature.jpg', 120, 60),
+        ])->assertOk();
+        $assetId = DB::table('report_signatures')->where('barangay_report_id', $report)
+            ->where('signature_role', 'barangay_signer')->value('user_signature_asset_id');
+        $asset = DB::table('user_signature_assets')->find($assetId);
+        $this->assertSame('image/jpeg', $asset->mime_type);
+        $this->assertFalse((bool) $asset->is_current);
+        Storage::disk('local')->assertExists($asset->storage_path);
         $this->assertSame('BR-2026-RLNJ8P', DB::table('barangay_reports')->where('id', $report)->value('report_reference'));
         $this->assertSame(1, DB::table('report_signatures')->where('resident_incident_report_id', $rir)->where('signature_role', 'resident_signer')->count());
         $this->assertSame(1, DB::table('report_signatures')->where('resident_incident_report_id', $rir)->where('signature_role', 'bdrrm_reviewer')->count());
@@ -508,27 +565,44 @@ class ReportWorkflowContinuityTest extends TestCase
 
     private function signOffice(User $user, string $url)
     {
-        if (Schema::hasTable('user_signature_assets')) {
-            DB::table('user_signature_assets')->where('user_id', $user->id)->update(['is_current' => false]);
-            $payload = [
-                'user_id' => $user->id,
-                'storage_path' => 'signature-images/test-'.$user->id.'.png',
-                'is_current' => true,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ];
-            foreach (['mime_type' => 'image/png', 'byte_size' => 120, 'width' => 80, 'height' => 40, 'sha256' => str_repeat('a', 64)] as $column => $value) {
-                if (Schema::hasColumn('user_signature_assets', $column)) {
-                    $payload[$column] = $value;
-                }
-            }
-            DB::table('user_signature_assets')->insert($payload);
-        }
+        $this->ensureSavedSignature($user);
 
         return $this->actingAs($user)->post($url, [
             'confirmed' => true,
             'use_saved_signature' => '1',
         ]);
+    }
+
+    private function signAssessment(User $user, string $url)
+    {
+        $this->ensureSavedSignature($user);
+
+        return $this->actingAs($user)->post($url, [
+            'confirmed' => true,
+            'password' => 'secret-pass',
+            'use_saved_signature' => '1',
+        ]);
+    }
+
+    private function ensureSavedSignature(User $user): void
+    {
+        if (! Schema::hasTable('user_signature_assets')) {
+            return;
+        }
+        DB::table('user_signature_assets')->where('user_id', $user->id)->update(['is_current' => false]);
+        $payload = [
+            'user_id' => $user->id,
+            'storage_path' => 'signature-images/test-'.$user->id.'-'.uniqid().'.png',
+            'is_current' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+        foreach (['mime_type' => 'image/png', 'byte_size' => 120, 'width' => 80, 'height' => 40, 'sha256' => str_repeat('a', 64)] as $column => $value) {
+            if (Schema::hasColumn('user_signature_assets', $column)) {
+                $payload[$column] = $value;
+            }
+        }
+        DB::table('user_signature_assets')->insert($payload);
     }
 
     private function member(string $role, string $name, int $barangayId): User
@@ -624,6 +698,7 @@ class ReportWorkflowContinuityTest extends TestCase
             $table->unsignedBigInteger('barangay_id');
             $table->unsignedBigInteger('prepared_by')->nullable();
             $table->dateTime('submitted_at')->nullable();
+            $table->dateTime('signed_at')->nullable();
             $table->timestamps();
         });
         Schema::create('barangay_report_buildings', function (Blueprint $table) {
@@ -700,6 +775,11 @@ class ReportWorkflowContinuityTest extends TestCase
             $table->id();
             $table->unsignedBigInteger('user_id');
             $table->string('storage_path');
+            $table->string('mime_type');
+            $table->unsignedInteger('byte_size');
+            $table->unsignedInteger('width');
+            $table->unsignedInteger('height');
+            $table->string('sha256');
             $table->boolean('is_current')->default(true);
             $table->timestamps();
         });

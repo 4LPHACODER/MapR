@@ -44,7 +44,7 @@ const signLabel = computed(() => {
     const capacity = props.profile?.signing_capacity;
     if (capacity === 'assessed_by') return 'Review & Sign Assessment';
     if (capacity === 'verified_by') return 'Verify and Sign';
-    if (capacity === 'approved_by') return 'Note and Sign';
+    if (capacity === 'approved_by') return 'Review Report';
     return 'Review & Sign';
 });
 const previewHref = computed(() => `/rdana/assessments/${props.record.id}/preview`);

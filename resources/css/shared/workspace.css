@@ -563,7 +563,220 @@
 .cdrrmo-stat-card strong { display: block; margin-top: 0.35rem; font-size: 1.65rem; color: #123b70; }
 button.cdrrmo-stat-card { width: 100%; text-align: left; font: inherit; cursor: pointer; }
 .signature-preview { display: block; max-width: 16rem; max-height: 6rem; margin: 0.75rem 0; background: #fff; }
-.review-sign-dialog { max-width: 32rem; margin: 10vh auto; }
+.review-sign-dialog {
+    width: min(28rem, 100%);
+    max-width: 32rem;
+    max-height: min(90dvh, 40rem);
+    overflow: auto;
+    display: grid;
+    gap: 1rem;
+    align-content: start;
+    margin: 0;
+    padding: 1.25rem 1.35rem;
+}
+
+.review-sign-dialog--wide {
+    width: min(36rem, 100%);
+    max-width: 40rem;
+}
+
+.review-sign-dialog__tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.review-sign-dialog__tabs button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #334155;
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+}
+
+.review-sign-dialog__tabs button[aria-selected="true"] {
+    background: #1e3a8a;
+    border-color: #1e3a8a;
+    color: #fff;
+}
+
+.review-sign-dialog__panel {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.review-sign-dialog__upload {
+    gap: 0.75rem;
+}
+
+.review-sign-dialog__drop {
+    display: grid;
+    justify-items: center;
+    gap: 0.35rem;
+    width: 100%;
+    padding: 1.1rem 1rem;
+    border: 1px dashed #94a3b8;
+    border-radius: 0.85rem;
+    background: #f8fafc;
+    color: #475569;
+    font: inherit;
+    cursor: pointer;
+    text-align: center;
+}
+
+.review-sign-dialog__drop strong {
+    color: #0f172a;
+}
+
+.review-sign-dialog__drop span {
+    font-size: 0.78rem;
+}
+
+.review-sign-dialog__inline-actions,
+.review-sign-dialog__saved {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.review-sign-dialog__saved-note {
+    color: #64748b;
+    font-size: 0.8125rem;
+}
+
+.review-sign-dialog__preview-block h4 {
+    margin: 0 0 0.35rem;
+    font-size: 0.9rem;
+    color: #123b70;
+}
+
+.review-sign-dialog__header h3 {
+    margin: 0;
+    font-size: 1.125rem;
+    color: #0f172a;
+}
+
+.review-sign-dialog__header p {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.review-sign-dialog__meta {
+    display: grid;
+    gap: 0.65rem;
+    margin: 0;
+    padding: 0.85rem 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.85rem;
+    background: #f8fafc;
+}
+
+.review-sign-dialog__meta > div {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    gap: 0.5rem 0.75rem;
+    align-items: start;
+}
+
+.review-sign-dialog__meta dt {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.review-sign-dialog__meta dd {
+    margin: 0;
+    color: #0f172a;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.review-sign-dialog__confirm {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.review-sign-dialog__confirm input {
+    width: auto;
+    min-height: 0;
+    margin-top: 0.2rem;
+    accent-color: #1e3a8a;
+}
+
+.review-sign-dialog__password {
+    display: grid;
+    gap: 0.35rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #334155;
+}
+
+.review-sign-dialog__password-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.review-sign-dialog__password input {
+    width: 100%;
+    min-height: 2.5rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.65rem;
+    padding: 0.55rem 0.7rem;
+    font: inherit;
+    font-weight: 500;
+    color: #0f172a;
+    background: #fff;
+}
+
+.review-sign-dialog__password input:focus {
+    outline: 2px solid #93c5fd;
+    outline-offset: 1px;
+}
+
+.review-sign-dialog__toggle {
+    display: inline-grid;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.65rem;
+    background: #fff;
+    color: #1e3a8a;
+    cursor: pointer;
+}
+
+.review-sign-dialog__toggle:hover {
+    background: #f8fafc;
+}
+
+.review-sign-dialog__toggle[aria-pressed="true"] {
+    background: #eff6ff;
+    border-color: #93c5fd;
+}
+
+.review-sign-dialog__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    margin-top: 0.25rem;
+}
 .report-workspace { display: flex; flex-direction: column; gap: 0.75rem; min-height: 0; }
 .report-workspace-header, .report-workspace-actions, .report-workspace-toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; justify-content: space-between; }
 .report-workspace-header h2, .report-breadcrumb { margin: 0; }

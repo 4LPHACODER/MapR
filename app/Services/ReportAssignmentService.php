@@ -57,6 +57,9 @@ class ReportAssignmentService
             if ($reason === '') {
                 abort(422, 'A reason is required when replacing the assigned officer.');
             }
+            if ($subjectType === 'barangay_report' && $assignmentRole === 'rdana') {
+                $this->assertBarangayReportReassignable($subjectId);
+            }
             DB::table('report_assignments')->where('id', $current->id)->update([
                 'is_active' => false,
                 'replaced_reason' => $reason,
@@ -76,6 +79,106 @@ class ReportAssignmentService
             'updated_at' => now(),
         ]);
 
+    }
+
+    /**
+     * Block silent transfer of signed or supervisor-stage field assessments.
+     */
+    public function assertBarangayReportReassignable(int $barangayReportId): void
+    {
+        if (! Schema::hasTable('field_assessments')) {
+            return;
+        }
+
+        $assessment = DB::table('field_assessments')
+            ->where('barangay_report_id', $barangayReportId)
+            ->orderByDesc('id')
+            ->first();
+        if ($assessment === null) {
+            return;
+        }
+
+        $status = (string) ($assessment->assessment_status ?? '');
+        $stage = (string) ($assessment->workflow_stage ?? '');
+        if (in_array($status, ['submitted', 'signed'], true)
+            || in_array($stage, ['pending_admin_verification', 'pending_city_assessor', 'ready_for_consolidation', 'forwarded_cdrrmo'], true)) {
+            abort(422, 'This assessment has already been submitted for verification. Use the return or correction workflow instead of reassignment.');
+        }
+
+        if (Schema::hasTable('report_signatures')
+            && DB::table('report_signatures')
+                ->where('field_assessment_id', $assessment->id)
+                ->where('signature_role', 'assessed_by')
+                ->exists()) {
+            abort(422, 'This assessment has already been signed by the assigned assessor. Use the return or correction workflow instead of reassignment.');
+        }
+    }
+
+    /**
+     * @param  list<int>  $barangayIds
+     * @return array{total: int, with_active: int, without_active: int, personnel: list<array<string, mixed>>}
+     */
+    public function assessorSummary(array $barangayIds, string $assignmentRole = 'rdana'): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $barangayIds)));
+        if ($ids === [] || ! Schema::hasTable('user_barangay_assignments') || ! Schema::hasTable('roles')) {
+            return ['total' => 0, 'with_active' => 0, 'without_active' => 0, 'personnel' => []];
+        }
+
+        $columns = [
+            'users.id',
+            'users.first_name',
+            'users.last_name',
+            'assignments.barangay_id',
+            'barangays.barangay_name',
+        ];
+        if (Schema::hasColumn('users', 'job_title')) {
+            $columns[] = 'users.job_title';
+        }
+
+        $people = DB::table('user_barangay_assignments as assignments')
+            ->join('users', 'users.id', '=', 'assignments.user_id')
+            ->join('roles', 'roles.id', '=', 'users.role_id')
+            ->leftJoin('barangays', 'barangays.id', '=', 'assignments.barangay_id')
+            ->where('roles.code', $assignmentRole)
+            ->whereIn('assignments.barangay_id', $ids)
+            ->whereNull('assignments.revoked_at')
+            ->where('users.account_status', 'active')
+            ->orderBy('users.last_name')
+            ->get($columns);
+
+        $byUser = [];
+        foreach ($people as $row) {
+            $userId = (int) $row->id;
+            if (! isset($byUser[$userId])) {
+                $workload = $this->workload($userId, $assignmentRole);
+                $byUser[$userId] = [
+                    'id' => $userId,
+                    'name' => trim($row->first_name.' '.$row->last_name),
+                    'job_title' => Schema::hasColumn('users', 'job_title') ? ($row->job_title ?? null) : null,
+                    'barangays' => [],
+                    'active_count' => $workload['active'],
+                    'pending_count' => $workload['pending'],
+                    'assessing_count' => $workload['assessing'] ?? 0,
+                    'completed_count' => $workload['completed'] ?? ($workload['reviewed'] ?? 0),
+                    'has_active_assignment' => $workload['active'] > 0,
+                ];
+            }
+            $byUser[$userId]['barangays'][] = [
+                'id' => (int) $row->barangay_id,
+                'name' => $row->barangay_name ?? 'Barangay',
+            ];
+        }
+
+        $personnel = array_values($byUser);
+        $withActive = count(array_filter($personnel, fn (array $row) => $row['has_active_assignment']));
+
+        return [
+            'total' => count($personnel),
+            'with_active' => $withActive,
+            'without_active' => count($personnel) - $withActive,
+            'personnel' => $personnel,
+        ];
     }
 
     /**
@@ -216,7 +319,7 @@ class ReportAssignmentService
         }
 
         $stage = (string) ($assessment->workflow_stage ?? '');
-        if (in_array($stage, ['pending_admin_verification', 'pending_city_assessor', 'forwarded_cdrrmo'], true)) {
+        if (in_array($stage, ['pending_admin_verification', 'pending_city_assessor', 'ready_for_consolidation', 'forwarded_cdrrmo'], true)) {
             return 'completed';
         }
         if (in_array($status, ['signed', 'submitted'], true)) {
@@ -243,17 +346,40 @@ class ReportAssignmentService
     }
 
     /**
-     * Distribute selected unassigned barangay reports to assessors in selection order.
+     * Distribute selected barangay reports to assessors in selection order.
      *
      * @param  list<int>  $reportIds
      * @param  list<array{assignee_user_id: int, count: int}>  $distribution
      * @return list<array{report_id: int, assignee_user_id: int}>
      */
-    public function distributeBarangayReports(User $actor, array $reportIds, array $distribution, ?string $remarks): array
+    public function distributeBarangayReports(User $actor, array $reportIds, array $distribution, ?string $remarks, ?string $replacedReason = null): array
     {
         $ids = array_values(array_unique(array_map('intval', $reportIds)));
         if ($ids === []) {
             abort(422, 'Select at least one barangay report.');
+        }
+
+        $barangayIds = DB::table('barangay_reports')->whereIn('id', $ids)->pluck('barangay_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+        if (count($barangayIds) > 1) {
+            abort(422, 'Select reports from one barangay.');
+        }
+
+        $needsReason = false;
+        if (Schema::hasTable('report_assignments')) {
+            $needsReason = DB::table('report_assignments')
+                ->where('subject_type', 'barangay_report')
+                ->where('assignment_role', 'rdana')
+                ->where('is_active', true)
+                ->whereIn('subject_id', $ids)
+                ->exists();
+        }
+        if ($needsReason && trim((string) $replacedReason) === '') {
+            abort(422, 'A reason is required when replacing the assigned officer.');
+        }
+        if ($needsReason) {
+            foreach ($ids as $reportId) {
+                $this->assertBarangayReportReassignable($reportId);
+            }
         }
 
         $planned = [];
@@ -279,7 +405,7 @@ class ReportAssignmentService
             abort(422, 'Assign every selected report before confirming.');
         }
 
-        DB::transaction(function () use ($actor, $planned, $remarks) {
+        DB::transaction(function () use ($actor, $planned, $remarks, $replacedReason) {
             foreach ($planned as $row) {
                 $this->assign(
                     $actor,
@@ -288,7 +414,7 @@ class ReportAssignmentService
                     $row['assignee_user_id'],
                     'rdana',
                     $remarks,
-                    null,
+                    $replacedReason,
                 );
             }
         });

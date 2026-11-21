@@ -8,6 +8,7 @@ import MapPage from './assessor/pages/MapPage.vue';
 import QueuePage from './assessor/pages/QueuePage.vue';
 import BarangayReportDetailPage from './assessor/pages/BarangayReportDetailPage.vue';
 import FieldAssessmentDetailPage from './assessor/pages/FieldAssessmentDetailPage.vue';
+import FieldAssessmentReportsPage from './assessor/pages/FieldAssessmentReportsPage.vue';
 import RegistryPage from './assessor/pages/RegistryPage.vue';
 import ResidentsPage from './assessor/pages/ResidentsPage.vue';
 import BuildingsPage from './assessor/pages/BuildingsPage.vue';
@@ -39,7 +40,7 @@ if (root) {
             { path: '/residents', component: ResidentsPage, meta: { title: 'Residents' } },
             { path: '/reports/barangay', component: QueuePage, meta: { title: 'Barangay Reports', source: 'barangay', status: '', compact: true } },
             { path: '/reports/barangay/:id', component: BarangayReportDetailPage, meta: { title: 'Barangay Report' } },
-            { path: '/reports/field', component: QueuePage, meta: { title: 'Field Assessment Reports', source: 'field', status: '' } },
+            { path: '/reports/field', component: FieldAssessmentReportsPage, meta: { title: 'Field Assessment Reports', compact: true } },
             { path: '/reports/drafts', component: QueuePage, meta: { title: 'Drafts', source: 'field', status: 'draft' } },
             { path: '/reports/returned', component: QueuePage, meta: { title: 'Returned for Correction', source: 'field', status: 'returned' } },
             { path: '/reports/submitted', component: QueuePage, meta: { title: 'Submitted Reports', source: 'field', status: 'submitted' } },

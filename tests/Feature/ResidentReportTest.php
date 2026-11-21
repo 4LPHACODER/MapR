@@ -242,6 +242,37 @@ class ResidentReportTest extends TestCase
         $this->assertNull($cleared->json('data.building_id'));
     }
 
+    public function test_typed_incident_draft_can_patch_null_disaster_id_and_upload_photos(): void
+    {
+        $home = $this->barangay('Home');
+        $resident = $this->user('resident', 'Cara Cruz', $home);
+
+        $created = $this->actingAs($resident)->postJson('/resident/api/reports', [
+            'disaster_incident_id' => null,
+            'reported_incident_type' => 'Local wind damage',
+            'incident_description' => 'Roof sheets were blown off.',
+            'reported_location' => 'Purok 3',
+            'latitude' => 9.07,
+            'longitude' => 126.19,
+        ])->assertCreated();
+        $id = $created->json('data.id');
+        $this->assertNull($created->json('data.disaster_incident_id'));
+
+        $this->actingAs($resident)->patchJson('/resident/api/reports/'.$id, [
+            'disaster_incident_id' => null,
+            'reported_incident_type' => 'Local wind damage',
+            'incident_description' => 'Roof sheets were blown off.',
+            'reported_location' => 'Purok 3',
+            'latitude' => 9.07,
+            'longitude' => 126.19,
+        ])->assertOk()->assertJsonPath('data.disaster_incident_id', null);
+
+        $this->actingAs($resident)->postJson('/resident/api/reports/'.$id.'/photos', [
+            'photo' => UploadedFile::fake()->image('wall.jpg'),
+            'source' => 'upload',
+        ])->assertCreated();
+    }
+
     public function test_only_the_assigned_assessor_can_record_cost_after_bdrrm_submission(): void
     {
         $home = $this->barangay('Home');
@@ -431,7 +462,8 @@ class ResidentReportTest extends TestCase
             $table->dateTime('observed_at')->nullable();
             $table->boolean('observed_at_approximate')->default(false);
             $table->unsignedBigInteger('resident_user_id');
-            $table->unsignedBigInteger('disaster_incident_id');
+            $table->unsignedBigInteger('disaster_incident_id')->nullable();
+            $table->string('reported_incident_type', 120)->nullable();
             $table->unsignedBigInteger('barangay_id');
             $table->unsignedBigInteger('building_id')->nullable();
             $table->unsignedBigInteger('reviewed_by')->nullable();

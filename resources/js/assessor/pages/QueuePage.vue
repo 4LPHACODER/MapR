@@ -43,24 +43,34 @@ const progressOptions = [
 const emptyLabels = {
     unassigned: 'No unassigned barangay reports',
     pending: 'No pending assessments',
-    completed: 'No completed assessments',
+    completed: 'No completed assessments awaiting verification',
+    verified: 'No verified reports awaiting review',
 };
 
 const rows = ref([]);
 const meta = ref(emptyMeta);
 const counts = ref(null);
+const assessors = ref({ total: 0, with_active: 0, without_active: 0 });
+const assessorDirectory = ref([]);
 const barangays = ref([]);
 const error = ref('');
 const loading = ref(true);
 const actionError = ref('');
 const canAssign = ref(supervisor);
+const isAdminOfficer = computed(() => roleCode === 'rdana_admin_officer');
+const isCityAssessor = computed(() => roleCode === 'rdana_city_assessor');
 const queue = ref('');
 const selectedIds = ref([]);
 const assignOpen = ref(false);
+const reassignMode = ref(false);
+const manageOpen = ref(false);
+const manageLoading = ref(false);
+const exporting = ref(false);
 const assignmentRows = ref([]);
 const assignees = ref([]);
 const selectedAssessorId = ref(null);
 const assignRemarks = ref('');
+const replacedReason = ref('');
 const assignError = ref('');
 const assigning = ref(false);
 const loadingAssignees = ref(false);
@@ -74,32 +84,94 @@ let requestId = 0;
 let personnelRequest = 0;
 
 const isBarangay = computed(() => route.meta.source === 'barangay');
-const canSelect = computed(() => canAssign.value && queue.value === 'unassigned');
+const canSelect = computed(() => canAssign.value && (queue.value === 'unassigned' || queue.value === 'pending'));
 const filters = reactive({ search: '', barangay: '', progress: '', order: defaultOrder });
 const filtersActive = computed(() => Boolean(filters.search.trim() || filters.barangay || filters.progress || filters.order !== defaultOrder));
+const thirdQueue = computed(() => (isCityAssessor.value ? 'verified' : 'completed'));
 const queueOptions = computed(() => [
-    ...(canAssign.value ? [{ value: 'unassigned', label: 'Unassigned' }] : []),
+    ...(canAssign.value ? [{ value: 'unassigned', label: 'Unassigned', shortLabel: 'Unassigned' }] : []),
     { value: 'pending', label: 'Pending Assessment', shortLabel: 'Pending' },
-    { value: 'completed', label: 'Completed Assessments', shortLabel: 'Completed' },
+    isCityAssessor.value
+        ? { value: 'verified', label: 'Verified Reports', shortLabel: 'Verified' }
+        : { value: 'completed', label: 'Completed Assessments', shortLabel: 'Completed' },
 ]);
+const summaryCards = computed(() => {
+    if (!canAssign.value) return [];
+    const thirdKey = thirdQueue.value;
+    return [
+        {
+            key: 'unassigned',
+            label: 'Unassigned Reports',
+            value: counts.value?.unassigned ?? 0,
+            hint: 'Reports awaiting assignment to an assessor.',
+            icon: 'clipboard-list',
+            action: 'View Unassigned',
+        },
+        {
+            key: 'pending',
+            label: 'Pending Assessment',
+            value: counts.value?.pending ?? 0,
+            hint: 'Assigned reports still in assessment.',
+            icon: 'clock-3',
+            action: 'View Pending',
+        },
+        {
+            key: thirdKey,
+            label: isCityAssessor.value ? 'Verified Reports' : 'Completed Assessments',
+            value: counts.value?.[thirdKey] ?? 0,
+            hint: isCityAssessor.value
+                ? 'Verified assessments ready for review.'
+                : 'Submitted assessments awaiting verification.',
+            icon: 'clipboard-check',
+            action: isCityAssessor.value ? 'View Verified' : 'View Completed',
+        },
+        {
+            key: 'assessors',
+            label: 'Assessors',
+            value: assessors.value.total,
+            hint: `Assigned: ${assessors.value.with_active} · Unassigned: ${assessors.value.without_active}`,
+            icon: 'users-round',
+            action: 'Manage Assessors',
+            manage: true,
+        },
+    ];
+});
 const barangayOptions = computed(() => [
     { label: 'All assigned', value: '' },
     ...barangays.value.map(({ id, name }) => ({ label: name, value: String(id) })),
 ]);
 const pageSelected = computed(() => rows.value.length > 0 && selectedIds.value.length === rows.value.length);
 const first = computed(() => (meta.value.current_page - 1) * meta.value.per_page);
+const eligibleAssignees = computed(() => {
+    if (!reassignMode.value) return assignees.value;
+    const blocked = new Set(assignmentRows.value.map((row) => Number(row.assignee_user_id)).filter((id) => id > 0));
+    return assignees.value.filter((person) => !blocked.has(Number(person.id)));
+});
+const assignValid = computed(() => {
+    if (selectedAssessorId.value === null || !assignmentRows.value.length) return false;
+    if (reassignMode.value) return replacedReason.value.trim().length > 0;
+    return true;
+});
 const assignActionLabel = computed(() => {
     const count = assignmentRows.value.length;
+    if (reassignMode.value) {
+        return count === 1 ? 'Confirm reassignment' : `Reassign ${count} reports`;
+    }
     return `Assign ${count} ${count === 1 ? 'report' : 'reports'}`;
 });
 const rowActions = computed(() => {
     const row = menuRow.value;
     if (!row) return [];
-    return [
+    const items = [
+        { label: 'View details', icon: 'eye', command: () => router.push(detailHref(row)) },
         { label: 'Download PDF', icon: 'download', url: `${previewHref(row)}?format=pdf` },
         { label: 'View location', icon: 'pin', command: () => openLocation(row) },
         { label: 'View signatures', icon: 'file-check-2', url: previewHref(row) },
     ];
+    if (canAssign.value && queue.value === 'pending' && row.can_reassign) {
+        items.unshift({ label: 'Reassign assessment', icon: 'user-round-pen', command: () => openReassign(row) });
+    }
+    return items;
 });
 const dateFormat = new Intl.DateTimeFormat('en-PH', {
     timeZone: 'Asia/Manila',
@@ -127,14 +199,19 @@ function detailHref(row, query = {}) {
 
 function statusSeverity(row) {
     if (row.verification_label === 'Returned for Correction') return 'warn';
-    if (row.assessment_workflow_stage === 'forwarded_cdrrmo') return 'success';
+    if (row.assessment_workflow_stage === 'forwarded_cdrrmo' || row.assessment_workflow_stage === 'ready_for_consolidation') return 'success';
     if (row.assessment_progress === 'not_opened') return 'secondary';
     return 'info';
 }
 
 function routeQueue() {
     const requested = route.query.queue;
-    if (requested === 'pending' || requested === 'completed') return requested;
+    if (requested === 'pending' || requested === 'completed' || requested === 'verified' || requested === 'unassigned') {
+        if (requested === 'verified' && !isCityAssessor.value) return isAdminOfficer.value ? 'completed' : 'pending';
+        if (requested === 'completed' && isCityAssessor.value) return 'verified';
+        if (requested === 'unassigned' && !canAssign.value) return 'pending';
+        return requested;
+    }
     return canAssign.value ? 'unassigned' : 'pending';
 }
 
@@ -143,6 +220,14 @@ function setQueue(next) {
     queue.value = next;
     filters.progress = '';
     load(1);
+}
+
+function onSummaryCard(card) {
+    if (card.manage) {
+        openManageAssessors();
+        return;
+    }
+    setQueue(card.key);
 }
 
 async function clearFilters() {
@@ -204,20 +289,38 @@ async function openAssessment(row) {
 }
 
 async function openAssign(row = null) {
-    assignmentRows.value = row ? [row] : rows.value.filter((report) => selectedIds.value.includes(report.id));
+    await openAssignmentModal(row, false);
+}
+
+async function openReassign(row = null) {
+    await openAssignmentModal(row, true);
+}
+
+async function openAssignmentModal(row = null, asReassign = false) {
+    assignmentRows.value = row
+        ? [row]
+        : rows.value.filter((report) => selectedIds.value.includes(report.id));
     if (!assignmentRows.value.length) return;
 
+    const barangayIds = [...new Set(assignmentRows.value.map((report) => report.barangay_id).filter(Boolean))];
     const current = ++personnelRequest;
+    reassignMode.value = asReassign;
     assignError.value = '';
     assignRemarks.value = '';
+    replacedReason.value = '';
     selectedAssessorId.value = null;
     assignees.value = [];
     assignOpen.value = true;
     loadingAssignees.value = true;
 
+    if (asReassign && barangayIds.length > 1) {
+        assignError.value = 'Select reports from one barangay.';
+        loadingAssignees.value = false;
+        return;
+    }
+
     try {
-        const ids = [...new Set(assignmentRows.value.map((report) => report.barangay_id).filter(Boolean))];
-        const responses = await Promise.all(ids.map((barangay_id) => window.axios.get(`${apiBase}/personnel`, {
+        const responses = await Promise.all(barangayIds.map((barangay_id) => window.axios.get(`${apiBase}/personnel`, {
             params: { barangay_id, role: 'rdana' },
         })));
         if (current !== personnelRequest) return;
@@ -226,7 +329,7 @@ async function openAssign(row = null) {
         assignees.value = firstBarangay.filter((person) =>
             otherBarangays.every((options) => options.some(({ id }) => id === person.id)),
         );
-        if (!assignees.value.length) {
+        if (!(asReassign ? eligibleAssignees.value : assignees.value).length) {
             assignError.value = 'No RDANA assessor is eligible for the selected reports.';
         }
     } catch (exception) {
@@ -239,22 +342,82 @@ async function openAssign(row = null) {
 }
 
 async function confirmAssign() {
-    if (selectedAssessorId.value === null || !assignmentRows.value.length || assigning.value) return;
+    if (!assignValid.value || assigning.value) return;
     assignError.value = '';
     assigning.value = true;
     try {
-        await window.axios.post(`${apiBase}/barangay-reports/assign`, {
+        const payload = {
             assignee_user_id: Number(selectedAssessorId.value),
             report_ids: assignmentRows.value.map(({ id }) => Number(id)),
             remarks: assignRemarks.value.trim() || undefined,
-        });
+        };
+        if (reassignMode.value) {
+            payload.replaced_reason = replacedReason.value.trim();
+        }
+        await window.axios.post(`${apiBase}/barangay-reports/assign`, payload);
         assignOpen.value = false;
+        reassignMode.value = false;
+        selectedIds.value = [];
         setQueue('pending');
         window.dispatchEvent(new Event('mapr-nav-refresh'));
     } catch (exception) {
-        assignError.value = exception.response?.data?.message || 'Assignment could not be saved.';
+        assignError.value = exception.response?.data?.message
+            || (reassignMode.value ? 'Reassignment could not be saved.' : 'Assignment could not be saved.');
     } finally {
         assigning.value = false;
+    }
+}
+
+async function openManageAssessors() {
+    manageOpen.value = true;
+    manageLoading.value = true;
+    try {
+        const { data } = await window.axios.get(`${apiBase}/personnel`, {
+            params: { role: 'rdana', summary: 1 },
+        });
+        assessorDirectory.value = data.data || [];
+        if (data.summary) {
+            assessors.value = {
+                total: data.summary.total ?? 0,
+                with_active: data.summary.with_active ?? 0,
+                without_active: data.summary.without_active ?? 0,
+            };
+        }
+    } catch (exception) {
+        actionError.value = exception.response?.data?.message || 'Assessor directory could not be loaded.';
+        manageOpen.value = false;
+    } finally {
+        manageLoading.value = false;
+    }
+}
+
+async function exportReports() {
+    if (exporting.value || !canAssign.value) return;
+    exporting.value = true;
+    actionError.value = '';
+    try {
+        const [sort, direction] = filters.order.split(':');
+        const response = await window.axios.get(`${apiBase}/barangay-reports/export`, {
+            params: {
+                queue: queue.value,
+                search: filters.search.trim() || undefined,
+                barangay_id: filters.barangay || undefined,
+                assessment_status: queue.value === 'pending' ? filters.progress || undefined : undefined,
+                sort,
+                direction,
+            },
+            responseType: 'blob',
+        });
+        const url = URL.createObjectURL(response.data);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `barangay-reports-${queue.value}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+    } catch (exception) {
+        actionError.value = exception.response?.data?.message || 'The report list could not be exported.';
+    } finally {
+        exporting.value = false;
     }
 }
 
@@ -292,13 +455,14 @@ async function load(page = meta.value.current_page) {
         meta.value = data.meta || emptyMeta;
         if (barangay) {
             counts.value = data.counts || null;
+            assessors.value = data.assessors || { total: 0, with_active: 0, without_active: 0 };
             barangays.value = data.barangays || [];
             canAssign.value = data.can_assign ?? canAssign.value;
             queue.value = data.queue || queue.value;
         }
     } catch (exception) {
         if (current === requestId) {
-            error.value = exception.response?.data?.message || 'The report list could not be loaded.';
+        error.value = exception.response?.data?.message || 'The report list could not be loaded.';
         }
     } finally {
         if (current === requestId) loading.value = false;
@@ -330,6 +494,59 @@ onBeforeUnmount(() => {
 
 <template>
     <section v-if="isBarangay" class="rdana-report-queue" aria-label="Barangay report queues">
+        <header class="rdana-queue-heading">
+            <div>
+                <h2>Barangay Reports</h2>
+                <p>Manage barangay submissions, assessor assignments, assessment verification, and report review.</p>
+            </div>
+            <div class="rdana-queue-heading-actions">
+                <Button type="button" size="small" severity="secondary" outlined label="Refresh" :disabled="loading" @click="load()">
+                    <template #icon><MapIcon name="refresh" /></template>
+                </Button>
+                <Button
+                    v-if="canAssign"
+                    type="button"
+                    size="small"
+                    severity="secondary"
+                    outlined
+                    label="Export report list"
+                    :loading="exporting"
+                    @click="exportReports"
+                >
+                    <template #icon><MapIcon name="download" /></template>
+                </Button>
+                <Button
+                    v-if="canAssign"
+                    type="button"
+                    size="small"
+                    label="Manage assessors"
+                    @click="openManageAssessors"
+                >
+                    <template #icon><MapIcon name="users-round" /></template>
+                </Button>
+            </div>
+        </header>
+
+        <div v-if="summaryCards.length" class="rdana-summary-cards">
+            <button
+                v-for="card in summaryCards"
+                :key="card.key"
+                type="button"
+                class="rdana-summary-card"
+                :class="{ 'is-active': !card.manage && queue === card.key }"
+                :aria-pressed="!card.manage && queue === card.key"
+                @click="onSummaryCard(card)"
+            >
+                <span class="rdana-summary-icon" aria-hidden="true"><MapIcon :name="card.icon" /></span>
+                <span class="rdana-summary-copy">
+                    <span class="rdana-summary-label">{{ card.label }}</span>
+                    <strong>{{ card.value }}</strong>
+                    <span class="rdana-summary-hint">{{ card.hint }}</span>
+                    <span class="rdana-summary-action">{{ card.action }}</span>
+                </span>
+            </button>
+        </div>
+
         <div class="rdana-report-panel">
             <div class="rdana-queue-nav">
                 <SelectButton
@@ -421,8 +638,11 @@ onBeforeUnmount(() => {
 
             <div v-if="canSelect && selectedIds.length" class="rdana-queue-selection">
                 <strong aria-live="polite">{{ selectedIds.length }} selected</strong>
-                <Button type="button" size="small" label="Assign selected" @click="openAssign()">
+                <Button v-if="queue === 'unassigned'" type="button" size="small" label="Assign selected" @click="openAssign()">
                     <template #icon><MapIcon name="user-round-plus" /></template>
+                </Button>
+                <Button v-else-if="queue === 'pending'" type="button" size="small" label="Reassign selected" @click="openReassign()">
+                    <template #icon><MapIcon name="user-round-pen" /></template>
                 </Button>
                 <Button type="button" size="small" severity="secondary" text label="Clear selection" @click="selectedIds = []" />
             </div>
@@ -476,7 +696,7 @@ onBeforeUnmount(() => {
                         />
                     </template>
                 </Column>
-                <Column header="Report" class="rdana-queue-report">
+                <Column header="Report reference" class="rdana-queue-report">
                     <template #body="{ data: row }">
                         <RouterLink :to="detailHref(row)" class="rdana-reference">{{ row.reference }}</RouterLink>
                         <span class="rdana-queue-subtext">{{ row.incident_name || 'Incident not recorded' }}</span>
@@ -485,7 +705,14 @@ onBeforeUnmount(() => {
                 <Column header="Barangay">
                     <template #body="{ data: row }">
                         {{ row.barangay_name || 'Not recorded' }}
-                        <span v-if="row.reporting_resident" class="rdana-queue-subtext">{{ row.reporting_resident }}</span>
+                        <span v-if="row.reporting_resident || row.submitted_by" class="rdana-queue-subtext">{{ row.reporting_resident || row.submitted_by }}</span>
+                    </template>
+                </Column>
+                <Column v-if="queue !== 'unassigned'" header="Assigned assessor">
+                    <template #body="{ data: row }">
+                        <span class="rdana-mobile-label" aria-hidden="true">Assessor</span>
+                        {{ row.assignee_name || 'Unassigned' }}
+                        <span v-if="row.assigned_at" class="rdana-queue-subtext">{{ formatWhen(row.assigned_at) }}</span>
                     </template>
                 </Column>
                 <Column header="Submitted" class="rdana-queue-date">
@@ -494,26 +721,51 @@ onBeforeUnmount(() => {
                         {{ formatWhen(row.submitted_at) }}
                     </template>
                 </Column>
-                <Column v-if="queue !== 'unassigned'" header="Status" class="rdana-queue-status">
+                <Column v-if="queue !== 'unassigned'" header="Assessment status" class="rdana-queue-status">
                     <template #body="{ data: row }">
                         <Tag :value="row.verification_label || row.label" :severity="statusSeverity(row)" />
-                        <span v-if="row.assignee_name" class="rdana-queue-subtext">{{ row.assignee_name }}</span>
                     </template>
                 </Column>
-                <Column v-if="queue === 'completed'" header="Damage">
+                <Column header="Last updated" class="rdana-queue-date">
+                    <template #body="{ data: row }">
+                        <span class="rdana-mobile-label" aria-hidden="true">Updated</span>
+                        {{ formatWhen(row.updated_at) }}
+                    </template>
+                </Column>
+                <Column v-if="queue === 'completed' || queue === 'verified'" header="Damage">
                     <template #body="{ data: row }">
                         <span class="rdana-mobile-label" aria-hidden="true">Damage</span>
                         {{ row.building_status_label || '—' }}
                         <span v-if="row.estimated_cost_php != null" class="rdana-queue-subtext rdana-queue-amount">{{ costFormat.format(row.estimated_cost_php) }}</span>
                     </template>
                 </Column>
+                <Column v-if="queue === 'completed'" header="Verification" class="rdana-queue-verify-cell">
+                    <template #body="{ data: row }">
+                        <span class="rdana-mobile-label" aria-hidden="true">Verification</span>
+                        <Button
+                            v-if="row.can_verify_report"
+                            as="RouterLink"
+                            :to="detailHref(row, { from: 'completed', sign: 'verify-officer' })"
+                            size="small"
+                            outlined
+                            label="Verify Report"
+                        >
+                            <template #icon><MapIcon name="shield-check" /></template>
+                        </Button>
+                        <span v-else class="rdana-queue-subtext">—</span>
+                    </template>
+                </Column>
                 <Column class="rdana-queue-action-cell">
                     <template #header><span class="sr-only">Actions</span></template>
                     <template #body="{ data: row }">
                         <div class="rdana-queue-row-actions">
-                            <Button v-if="canSelect" type="button" size="small" outlined label="Assign assessor" @click="openAssign(row)" />
+                            <Button v-if="queue === 'unassigned' && canAssign" type="button" size="small" outlined label="Assign assessor" @click="openAssign(row)" />
+                            <Button v-else-if="queue === 'pending' && canAssign && row.can_reassign" type="button" size="small" outlined label="Reassign assessment" @click="openReassign(row)">
+                                <template #icon><MapIcon name="user-round-pen" /></template>
+                            </Button>
                             <Button v-else-if="queue === 'pending' && row.can_open_assessment" type="button" size="small" outlined label="Assess report" :loading="startingId === row.id" :disabled="startingId !== null" @click="openAssessment(row)" />
-                            <Button v-else-if="queue === 'completed' && canAssign" as="RouterLink" :to="detailHref(row, { from: 'completed' })" size="small" outlined label="Verify report" />
+                            <Button v-else-if="row.can_review_report" as="RouterLink" :to="detailHref(row, { from: 'verified' })" size="small" outlined label="Review report" />
+                            <Button v-else-if="queue === 'verified' || queue === 'completed'" as="RouterLink" :to="detailHref(row, { from: queue })" size="small" severity="secondary" outlined label="View details" />
                             <Button
                                 type="button"
                                 size="small"
@@ -549,7 +801,11 @@ onBeforeUnmount(() => {
 
         <Menu id="rdana-report-actions" ref="rowMenu" :model="rowActions" popup class="rdana-queue-overlay" aria-label="Report actions" @show="menuVisible = true" @hide="menuVisible = false">
             <template #item="{ item, props }">
-                <a v-bind="props.action" :href="item.url">
+                <a v-if="item.url" v-bind="props.action" :href="item.url">
+                    <MapIcon :name="item.icon" />
+                    <span>{{ item.label }}</span>
+                </a>
+                <a v-else v-bind="props.action" href="#" @click.prevent="item.command?.()">
                     <MapIcon :name="item.icon" />
                     <span>{{ item.label }}</span>
                 </a>
@@ -558,43 +814,63 @@ onBeforeUnmount(() => {
 
         <Dialog
             v-model:visible="assignOpen"
-            header="Assign RDANA assessor"
+            :header="reassignMode ? 'Reassign assessment' : 'Assign RDANA assessor'"
             modal
             :draggable="false"
             :closable="!assigning"
             :close-on-escape="!assigning"
             :close-button-props="{ size: 'small', severity: 'secondary', text: true }"
             class="rdana-assign-dialog"
+            @hide="reassignMode = false"
         >
             <form id="rdana-assign-form" class="rdana-assign-form" @submit.prevent="confirmAssign">
-                <div class="rdana-assign-list">
+                <div v-if="reassignMode && assignmentRows.length === 1" class="rdana-assign-summary">
+                    <dl>
+                        <div><dt>Reference</dt><dd>{{ assignmentRows[0].reference }}</dd></div>
+                        <div><dt>Incident</dt><dd>{{ assignmentRows[0].incident_name || '—' }}</dd></div>
+                        <div><dt>Barangay</dt><dd>{{ assignmentRows[0].barangay_name || '—' }}</dd></div>
+                        <div><dt>Submitted</dt><dd>{{ formatWhen(assignmentRows[0].submitted_at) }}</dd></div>
+                        <div><dt>Status</dt><dd>{{ assignmentRows[0].verification_label || assignmentRows[0].label || 'Pending' }}</dd></div>
+                        <div><dt>Current assessor</dt><dd>{{ assignmentRows[0].assignee_name || '—' }}</dd></div>
+                        <div><dt>Assigned</dt><dd>{{ formatWhen(assignmentRows[0].assigned_at) }}</dd></div>
+                    </dl>
+                </div>
+                <div v-else class="rdana-assign-list">
                     <table>
-                        <caption class="sr-only">Reports to assign</caption>
-                        <thead><tr><th scope="col">Report</th><th scope="col">Barangay</th><th scope="col">Incident</th></tr></thead>
+                        <caption class="sr-only">{{ reassignMode ? 'Reports to reassign' : 'Reports to assign' }}</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Report</th>
+                                <th scope="col">Barangay</th>
+                                <th scope="col">Incident</th>
+                                <th v-if="reassignMode" scope="col">Current assessor</th>
+                            </tr>
+                        </thead>
                         <tbody>
                             <tr v-for="row in assignmentRows" :key="row.id">
                                 <td>{{ row.reference }}</td>
                                 <td>{{ row.barangay_name || '—' }}</td>
                                 <td>{{ row.incident_name || '—' }}</td>
+                                <td v-if="reassignMode">{{ row.assignee_name || '—' }}</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
                 <div class="rdana-assign-field">
-                    <label id="rdana-assessor-label" for="rdana-assessor">Assessor</label>
+                    <label id="rdana-assessor-label" for="rdana-assessor">{{ reassignMode ? 'New assessor' : 'Assessor' }}</label>
                     <Select
                         input-id="rdana-assessor"
                         aria-labelledby="rdana-assessor-label"
                         v-model="selectedAssessorId"
-                        :options="assignees"
+                        :options="eligibleAssignees"
                         option-label="name"
                         option-value="id"
-                        placeholder="Select an assessor"
+                        :placeholder="reassignMode ? 'Search RDANA assessor personnel…' : 'Select an assessor'"
                         filter
                         filter-placeholder="Search by name"
                         :pt="{ pcFilter: { root: { class: 'p-inputtext-sm', 'aria-label': 'Search assessors' } } }"
                         :loading="loadingAssignees"
-                        :disabled="assigning || loadingAssignees || !assignees.length"
+                        :disabled="assigning || loadingAssignees || !eligibleAssignees.length"
                         overlay-class="rdana-queue-overlay"
                         size="small"
                     >
@@ -606,7 +882,11 @@ onBeforeUnmount(() => {
                         </template>
                     </Select>
                 </div>
-                <div class="rdana-assign-field">
+                <div v-if="reassignMode" class="rdana-assign-field">
+                    <label for="rdana-replaced-reason">Reason for reassignment</label>
+                    <Textarea id="rdana-replaced-reason" v-model="replacedReason" size="small" rows="3" maxlength="500" required :disabled="assigning" placeholder="Explain why this assessment is being reassigned…" />
+                </div>
+                <div v-else class="rdana-assign-field">
                     <label for="rdana-assignment-remarks">Remarks <span>(optional)</span></label>
                     <Textarea id="rdana-assignment-remarks" v-model="assignRemarks" size="small" rows="3" maxlength="500" :disabled="assigning" />
                 </div>
@@ -614,7 +894,53 @@ onBeforeUnmount(() => {
             </form>
             <template #footer>
                 <Button type="button" size="small" severity="secondary" text label="Cancel" :disabled="assigning" @click="assignOpen = false" />
-                <Button type="submit" form="rdana-assign-form" size="small" :label="assignActionLabel" :loading="assigning" :disabled="selectedAssessorId === null" />
+                <Button type="submit" form="rdana-assign-form" size="small" :label="assignActionLabel" :loading="assigning" :disabled="!assignValid" />
+            </template>
+        </Dialog>
+
+        <Dialog
+            v-model:visible="manageOpen"
+            header="Manage assessors"
+            modal
+            :draggable="false"
+            :close-button-props="{ size: 'small', severity: 'secondary', text: true }"
+            class="rdana-assign-dialog rdana-manage-dialog"
+        >
+            <div v-if="manageLoading" class="rdana-queue-loading" role="status">
+                <Skeleton width="60%" height="0.75rem" />
+                <Skeleton width="80%" height="0.75rem" />
+            </div>
+            <div v-else-if="!assessorDirectory.length" class="rdana-queue-state">
+                <strong>No RDANA assessors are assigned to your barangays.</strong>
+            </div>
+            <div v-else class="rdana-assign-list">
+                <table>
+                    <caption class="sr-only">RDANA assessor personnel</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Assessor</th>
+                            <th scope="col">Barangays</th>
+                            <th scope="col">Active</th>
+                            <th scope="col">Completed</th>
+                            <th scope="col">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="person in assessorDirectory" :key="person.id">
+                            <td>
+                                <strong>{{ person.name }}</strong>
+                                <span v-if="person.job_title" class="rdana-queue-subtext">{{ person.job_title }}</span>
+                            </td>
+                            <td>{{ (person.barangays || []).map((item) => item.name).join(', ') || '—' }}</td>
+                            <td>{{ person.active_count || 0 }}</td>
+                            <td>{{ person.completed_count || 0 }}</td>
+                            <td>{{ person.has_active_assignment ? 'Has active assignments' : 'No active assignments' }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <template #footer>
+                <Button type="button" size="small" severity="secondary" text label="Close" @click="manageOpen = false" />
             </template>
         </Dialog>
     </section>
@@ -652,15 +978,139 @@ onBeforeUnmount(() => {
 <style scoped>
 .rdana-report-queue {
     min-width: 0;
+    display: grid;
+    gap: 1rem;
     color: var(--resident-ink);
     font-size: 0.8125rem;
     line-height: 1.5;
+}
+
+.rdana-queue-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.rdana-queue-heading h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: var(--resident-navy);
+}
+
+.rdana-queue-heading p {
+    margin: 0.25rem 0 0;
+    max-width: 42rem;
+    color: var(--p-slate-600);
+}
+
+.rdana-queue-heading-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.rdana-summary-cards {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.rdana-summary-card {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+    min-height: 7.5rem;
+    padding: 0.875rem;
+    border: 1px solid var(--resident-line);
+    border-radius: var(--resident-radius);
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    text-align: left;
+    cursor: pointer;
+}
+
+.rdana-summary-card:hover,
+.rdana-summary-card.is-active {
+    border-color: color-mix(in srgb, var(--resident-blue) 45%, var(--resident-line));
+    background: var(--resident-wash);
+}
+
+.rdana-summary-icon {
+    display: grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.5rem;
+    background: var(--resident-wash);
+    color: var(--resident-blue);
+}
+
+.rdana-summary-copy {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.rdana-summary-label {
+    color: var(--p-slate-600);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.rdana-summary-copy strong {
+    font-size: 1.375rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--resident-navy);
+}
+
+.rdana-summary-hint,
+.rdana-summary-action {
+    color: var(--p-slate-500);
+    font-size: 0.75rem;
+}
+
+.rdana-summary-action {
+    color: var(--resident-blue);
+    font-weight: 600;
+}
+
+.rdana-assign-summary dl {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin: 0 0 1rem;
+}
+
+.rdana-assign-summary dt {
+    color: var(--p-slate-500);
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.rdana-assign-summary dd {
+    margin: 0.15rem 0 0;
+    font-weight: 600;
 }
 
 .rdana-report-panel {
     border: 1px solid var(--resident-line);
     border-radius: var(--resident-radius);
     background: var(--resident-card);
+}
+
+@media (max-width: 1100px) {
+    .rdana-summary-cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .rdana-summary-cards {
+        grid-template-columns: 1fr;
+    }
 }
 
 .rdana-queue-nav {
@@ -881,6 +1331,15 @@ onBeforeUnmount(() => {
     border-radius: var(--resident-radius);
     font-size: 0.6875rem;
     line-height: 1.375;
+}
+
+.rdana-queue-verify-cell {
+    width: 9.5rem;
+    white-space: nowrap;
+}
+
+.rdana-queue-verify-cell .p-button {
+    white-space: nowrap;
 }
 
 .rdana-queue-row-actions {
