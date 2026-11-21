@@ -16,6 +16,7 @@ export default defineConfig({
                 'resources/css/app.css',
                 'resources/js/app.js',
                 'resources/js/login.js',
+                'resources/js/pwa.js',
                 'resources/js/cdrrmo.js',
                 'resources/js/rdana.js',
                 'resources/js/bdrrm.js',

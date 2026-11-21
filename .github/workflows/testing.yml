@@ -40,6 +40,7 @@ jobs:
       - run: composer install --no-interaction --prefer-dist --no-progress
       - run: npm ci
       - run: npm run test:map
+      - run: npm run test:pwa
       - run: npm run build
       - name: Prepare environment
         run: |
