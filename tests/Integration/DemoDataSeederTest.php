@@ -48,7 +48,19 @@ class DemoDataSeederTest extends TestCase
         }
 
         $residentId = DB::table('users')->where('email', 'resident@mapr.test')->value('id');
+        $this->assertDatabaseHas('users', ['id' => $residentId, 'first_name' => 'Mariel', 'last_name' => 'Dela Cruz']);
+        $this->assertDatabaseHas('users', ['email' => 'barangay.captain@mapr.test', 'first_name' => 'Ramon', 'last_name' => 'Alcantara']);
+        $linked = DB::table('account_resident_links')->where('user_id', $residentId)->value('resident_id');
+        $this->assertDatabaseHas('residents', ['id' => $linked, 'first_name' => 'Mariel', 'last_name' => 'Dela Cruz']);
         $residentReports = DB::table('resident_incident_reports')->where('resident_user_id', $residentId)->get();
+        $this->assertDatabaseHas('disaster_incidents', ['incident_name' => 'Tandag Riverside Flooding', 'incident_status' => 'active']);
+        foreach ($residentReports as $report) {
+            $this->assertMatchesRegularExpression('/^RIR-\d{4}-\d{6}$/', $report->report_reference);
+            $this->assertStringContainsString('Tandag City', $report->reported_location);
+        }
+        $this->assertFalse(DB::table('report_signatures as signature')
+            ->join('resident_incident_reports as report', 'report.id', '=', 'signature.resident_incident_report_id')
+            ->whereColumn('signature.document_reference', '!=', 'report.report_reference')->exists());
         $workflow = app(ResidentReportWorkflow::class);
         $this->assertEqualsCanonicalizing([
             'Draft', 'Needs Correction', 'Pending BDRRM Review', 'Pending Assessor Review', 'Pending CDRRMO Review', 'Finalized',

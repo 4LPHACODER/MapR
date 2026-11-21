@@ -493,12 +493,6 @@
 .consolidated-report-list .review-report-actions-column .p-datatable-column-header-content,
 .consolidated-report-list .review-report-row-actions { justify-content: flex-end; }
 
-.consolidated-report-list .review-sign-dialog input:focus {
-    outline: none;
-    box-shadow: none;
-    border-color: var(--p-primary-600);
-}
-
 @container (width >= 560px) {
     .consolidated-report-list .report-review-list-heading p { grid-column: 1; }
 }

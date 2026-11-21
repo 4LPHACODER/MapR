@@ -4,14 +4,23 @@ namespace Database\Seeders;
 
 use App\Models\Auth\Role;
 use App\Models\Auth\User;
-use App\Support\RoleHome;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
 {
+    private const ACCOUNT_NAMES = [
+        'resident' => ['Mariel', 'Dela Cruz'],
+        'bdrrm' => ['Joel', 'Sarmiento'],
+        'rdana' => ['Leandro', 'Villanueva'],
+        'cdrrmo_admin' => ['Rina', 'Mercado'],
+        'barangay_secretary' => ['Liza', 'Abad'],
+        'barangay_captain' => ['Ramon', 'Alcantara'],
+        'rdana_admin_officer' => ['Teresa', 'Salcedo'],
+        'rdana_city_assessor' => ['Vicente', 'Ramirez'],
+    ];
+
     public function run(): void
     {
         DB::transaction(function () {
@@ -39,13 +48,13 @@ class DatabaseSeeder extends Seeder
                 return;
             }
 
-            foreach (Role::query()->whereIn('code', array_keys(RoleHome::PREFIXES))->get() as $role) {
-                $name = Str::of($role->name);
+            foreach (Role::query()->whereIn('code', array_keys(self::ACCOUNT_NAMES))->get() as $role) {
+                [$firstName, $lastName] = self::ACCOUNT_NAMES[$role->code];
                 User::withTrashed()->firstOrCreate(
                     ['email' => str_replace('_', '.', $role->code).'@mapr.test'],
                     [
-                        'first_name' => $name->contains(' ') ? (string) $name->beforeLast(' ') : $role->name,
-                        'last_name' => $name->contains(' ') ? (string) $name->afterLast(' ') : '',
+                        'first_name' => $firstName,
+                        'last_name' => $lastName,
                         'password' => 'password',
                         'account_status' => 'active',
                         'role_id' => $role->id,
