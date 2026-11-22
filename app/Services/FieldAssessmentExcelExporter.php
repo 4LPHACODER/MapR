@@ -42,7 +42,7 @@ class FieldAssessmentExcelExporter
             ? 'MapR_Consolidated_Field_Assessment_Reports.xlsx'
             : 'MapR_'.Str::of((string) $barangayName)->replace([' ', '/'], '_').'_Field_Assessment.xlsx';
 
-        $spreadsheet = new Spreadsheet();
+        $spreadsheet = new Spreadsheet;
         if ($scope === 'consolidated') {
             $this->buildConsolidatedWorkbook($spreadsheet, $user, $assessments, $hash);
         } else {

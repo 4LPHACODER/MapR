@@ -16,6 +16,8 @@ defineProps({
     collapsed: { type: Boolean, default: false },
     userName: { type: String, default: '' },
     userEmail: { type: String, default: '' },
+    logoutUrl: { type: String, required: true },
+    csrfToken: { type: String, required: true },
 });
 
 defineEmits(['toggle-collapse', 'open-menu']);
@@ -169,6 +171,14 @@ watch(() => route.fullPath, () => {
                             </span>
                             <MapIcon name="chevron" class="resident-header-update-chevron" />
                         </router-link>
+                        <form method="POST" :action="logoutUrl">
+                            <!-- native-ok: the browser includes this CSRF token in the logout POST. -->
+                            <input type="hidden" name="_token" :value="csrfToken">
+                            <Button type="submit" unstyled class="resident-header-profile-link resident-header-logout">
+                                <span class="resident-header-profile-icon"><MapIcon name="logout" /></span>
+                                <span class="resident-header-profile-copy"><strong>Log out</strong></span>
+                            </Button>
+                        </form>
                     </section>
                 </Popover>
             </div>

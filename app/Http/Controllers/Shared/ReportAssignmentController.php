@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Shared;
 
 use App\Http\Controllers\Controller;
 use App\Models\Auth\User;
+use App\Services\AssignmentScope;
 use App\Services\ReportAssignmentService;
 use App\Services\ReportWorkflow;
 use App\Services\SignatureConfirmation;
@@ -33,7 +34,7 @@ class ReportAssignmentController extends Controller
             if (! in_array($user->role?->code, ['rdana_admin_officer', 'rdana_city_assessor'], true)) {
                 abort(403, 'You cannot manage assessor personnel.');
             }
-            $scope = app(\App\Services\AssignmentScope::class);
+            $scope = app(AssignmentScope::class);
             $summary = $this->assignments->assessorSummary($scope->activeBarangayIds($user->id), 'rdana');
 
             return response()->json(['data' => $summary['personnel'], 'summary' => $summary]);

@@ -87,7 +87,7 @@ onUnmounted(() => {
         <WorkspaceSidebar v-bind="sidebarProps" :collapsed="collapsed" />
         <div class="resident-main">
             <WorkspaceHeader :title="title" :label="config.label" :user-name="userName" :user-email="userEmail"
-                :photo-url="photoUrl" :attention="attention" :collapsed="collapsed" :mobile-open="drawerOpen"
+                :logout-url="logoutUrl" :csrf-token="csrfToken" :photo-url="photoUrl" :attention="attention" :collapsed="collapsed" :mobile-open="drawerOpen"
                 :show-mobile-menu="workspace !== 'resident'" @toggle-collapse="collapsed = !collapsed" @open-menu="drawerOpen = true">
                 <template #actions><slot name="header-actions" /></template>
             </WorkspaceHeader>

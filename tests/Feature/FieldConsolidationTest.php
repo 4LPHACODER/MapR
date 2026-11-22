@@ -7,6 +7,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Tests\Support\CreatesMaprAuthSchema;
 use Tests\TestCase;
 
@@ -100,7 +101,7 @@ class FieldConsolidationTest extends TestCase
         $this->assertDatabaseCount('field_report_exports', 1);
         $diskPath = (string) DB::table('field_report_exports')->value('disk_path');
         $this->assertNotSame('', $diskPath);
-        $absolute = \Illuminate\Support\Facades\Storage::disk('local')->path($diskPath);
+        $absolute = Storage::disk('local')->path($diskPath);
         $this->assertFileExists($absolute);
         $this->assertGreaterThan(200, filesize($absolute));
     }
