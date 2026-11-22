@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
+use App\Support\SpatialSql;
 
 class ImportGeospatialCommand extends Command
 {
@@ -92,12 +93,12 @@ class ImportGeospatialCommand extends Command
 
             if ($existing) {
                 DB::update(
-                    "UPDATE barangays SET boundary_polygon = ST_GeomFromText(?, 4326, 'axis-order=long-lat'), boundary_source = ?, barangay_name = ?, city = ?, province = ?, region = ?, updated_at = ? WHERE id = ?",
+                    "UPDATE barangays SET boundary_polygon = " . SpatialSql::geomFromTextPlaceholder() . ", boundary_source = ?, barangay_name = ?, city = ?, province = ?, region = ?, updated_at = ? WHERE id = ?",
                     [$wkt, $source, $match['barangay_name'], $match['city'], $match['province'], $match['region'], now(), $existing->id]
                 );
             } else {
                 DB::insert(
-                    "INSERT INTO barangays (barangay_code, barangay_name, city, province, region, boundary_polygon, boundary_source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ST_GeomFromText(?, 4326, 'axis-order=long-lat'), ?, ?, ?)",
+                    "INSERT INTO barangays (barangay_code, barangay_name, city, province, region, boundary_polygon, boundary_source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, " . SpatialSql::geomFromTextPlaceholder() . ", ?, ?, ?)",
                     [$match['barangay_code'], $match['barangay_name'], $match['city'], $match['province'], $match['region'], $wkt, $source, now(), now()]
                 );
             }
@@ -172,12 +173,12 @@ class ImportGeospatialCommand extends Command
             DB::transaction(function () use ($buildingRef, $householdRef, $barangay, $lng, $lat, $source, $attrs, $exists, &$created, &$updated, &$residentsCreated, &$unresolved) {
                 if (! $exists) {
                     DB::insert(
-                        "INSERT INTO buildings (building_reference, address_description, geographic_point, location_source, location_verification_status, barangay_id, created_at, updated_at) VALUES (?, ?, ST_GeomFromText(CONCAT('POINT(', ?, ' ', ?, ')'), 4326, 'axis-order=long-lat'), ?, ?, ?, ?, ?)",
+                        "INSERT INTO buildings (building_reference, address_description, geographic_point, location_source, location_verification_status, barangay_id, created_at, updated_at) VALUES (?, ?, " . SpatialSql::geomFromTextExpr("CONCAT('POINT(', ?, ' ', ?, ')')") . ", ?, ?, ?, ?, ?)",
                         [$buildingRef, $attrs['HOUSENUM'] ?? null, $lng, $lat, $source, 'unverified', $barangay->id, now(), now()]
                     );
                 } else {
                     DB::update(
-                        "UPDATE buildings SET address_description = ?, geographic_point = ST_GeomFromText(CONCAT('POINT(', ?, ' ', ?, ')'), 4326, 'axis-order=long-lat'), barangay_id = ?, updated_at = ? WHERE building_reference = ?",
+                        "UPDATE buildings SET address_description = ?, geographic_point = " . SpatialSql::geomFromTextExpr("CONCAT('POINT(', ?, ' ', ?, ')')") . ", barangay_id = ?, updated_at = ? WHERE building_reference = ?",
                         [$attrs['HOUSENUM'] ?? null, $lng, $lat, $barangay->id, now(), $buildingRef]
                     );
                 }
@@ -262,7 +263,7 @@ class ImportGeospatialCommand extends Command
 
             try {
                 DB::insert(
-                    "INSERT INTO flood_hazard_polygons (source_object_id, classification, geometry, source, created_at, updated_at) VALUES (?, ?, ST_GeomFromText(?, 4326, 'axis-order=long-lat'), ?, ?, ?)",
+                    "INSERT INTO flood_hazard_polygons (source_object_id, classification, geometry, source, created_at, updated_at) VALUES (?, ?, " . SpatialSql::geomFromTextPlaceholder() . ", ?, ?, ?)",
                     [$objectId, $class, $wkt, $source, now(), now()]
                 );
                 $created++;

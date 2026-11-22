@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Shared;
 use App\Http\Controllers\Controller;
 use App\Models\Registry\Building;
 use App\Services\ActivityLogger;
+use App\Support\SpatialSql;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -30,7 +31,7 @@ class BuildingLocationCorrectionController extends Controller
         }
 
         $original = DB::selectOne(
-            'SELECT ST_Longitude(geographic_point) AS lng, ST_Latitude(geographic_point) AS lat FROM buildings WHERE id = ?',
+            'SELECT '.SpatialSql::longitudeExpr('geographic_point').' AS lng, '.SpatialSql::latitudeExpr('geographic_point').' AS lat FROM buildings WHERE id = ?',
             [$building->id],
         );
 
@@ -38,11 +39,10 @@ class BuildingLocationCorrectionController extends Controller
             return response()->json(['message' => 'This building has no original geographic point.'], 422);
         }
 
+        $pointExpr = SpatialSql::geomFromTextExpr("CONCAT('POINT(', ?, ' ', ?, ')')");
         DB::insert(
             'INSERT INTO building_location_corrections (building_id, proposed_point, original_point, reason, source_reference, status, proposed_by, created_at, updated_at)
-             VALUES (?, ST_GeomFromText(CONCAT(\'POINT(\', ?, \' \', ?, \')\'), 4326, \'axis-order=long-lat\'),
-                     ST_GeomFromText(CONCAT(\'POINT(\', ?, \' \', ?, \')\'), 4326, \'axis-order=long-lat\'),
-                     ?, ?, ?, ?, ?, ?)',
+             VALUES (?, '.$pointExpr.', '.$pointExpr.', ?, ?, ?, ?, ?, ?)',
             [
                 $building->id,
                 $data['longitude'], $data['latitude'],

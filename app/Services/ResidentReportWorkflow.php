@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Http\Controllers\Shared\ReportFlagController;
 use App\Models\Auth\User;
 use App\Policies\ResidentIncidentReportPolicy;
+use App\Support\SpatialSql;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -1349,7 +1350,7 @@ class ResidentReportWorkflow
         }
         if (DB::getDriverName() === 'mysql') {
             DB::update(
-                "UPDATE resident_incident_reports SET reported_point = ST_GeomFromText(?, 4326, 'axis-order=long-lat') WHERE id = ?",
+                'UPDATE resident_incident_reports SET reported_point = '.SpatialSql::geomFromTextPlaceholder().' WHERE id = ?',
                 [sprintf('POINT(%F %F)', (float) $longitude, (float) $latitude), $id],
             );
 
@@ -1364,7 +1365,7 @@ class ResidentReportWorkflow
     {
         if (DB::getDriverName() === 'mysql' && Schema::hasColumn('resident_incident_reports', 'reported_point')) {
             $point = DB::selectOne(
-                'SELECT ST_Longitude(reported_point) AS lng, ST_Latitude(reported_point) AS lat FROM resident_incident_reports WHERE id = ?',
+                'SELECT '.SpatialSql::longitudeExpr('reported_point').' AS lng, '.SpatialSql::latitudeExpr('reported_point').' AS lat FROM resident_incident_reports WHERE id = ?',
                 [$row->id],
             );
             if ($point && $point->lng !== null && $point->lat !== null) {
@@ -1432,8 +1433,8 @@ class ResidentReportWorkflow
         if (DB::getDriverName() !== 'mysql' || ! Schema::hasColumn('resident_incident_reports', 'reported_point')) {
             return;
         }
-        $query->addSelect(DB::raw('ST_Longitude(reports.reported_point) as report_lng'));
-        $query->addSelect(DB::raw('ST_Latitude(reports.reported_point) as report_lat'));
+        $query->addSelect(DB::raw(SpatialSql::longitudeExpr('reports.reported_point').' as report_lng'));
+        $query->addSelect(DB::raw(SpatialSql::latitudeExpr('reports.reported_point').' as report_lat'));
     }
 
     private function pointFromSelection(object $row): array
@@ -1525,8 +1526,8 @@ class ResidentReportWorkflow
             $columns[] = 'barangays.barangay_name';
             $columns[] = 'barangays.barangay_code';
             if (Schema::hasColumn('buildings', 'geographic_point') && DB::getDriverName() === 'mysql') {
-                $columns[] = DB::raw('ST_Longitude(buildings.geographic_point) as home_lng');
-                $columns[] = DB::raw('ST_Latitude(buildings.geographic_point) as home_lat');
+                $columns[] = DB::raw(SpatialSql::longitudeExpr('buildings.geographic_point').' as home_lng');
+                $columns[] = DB::raw(SpatialSql::latitudeExpr('buildings.geographic_point').' as home_lat');
             } elseif (Schema::hasColumn('buildings', 'geographic_point')) {
                 $columns[] = 'buildings.geographic_point as home_point';
             }

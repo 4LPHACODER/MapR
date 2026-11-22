@@ -9,6 +9,7 @@ use App\Services\AssignmentScope;
 use App\Services\BuildingRegistry;
 use App\Support\MapSourceLocation;
 use App\Support\SourceName;
+use App\Support\SpatialSql;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -52,7 +53,10 @@ class HouseholdController extends Controller
 
         $building = $household->building;
         $point = ($building?->id && DB::getDriverName() === 'mysql')
-            ? DB::selectOne('SELECT ST_Longitude(geographic_point) AS lng, ST_Latitude(geographic_point) AS lat FROM buildings WHERE id = ?', [$building->id])
+            ? DB::selectOne(
+                'SELECT '.SpatialSql::longitudeExpr('geographic_point').' AS lng, '.SpatialSql::latitudeExpr('geographic_point').' AS lat FROM buildings WHERE id = ?',
+                [$building->id],
+            )
             : null;
 
         $lng = $point?->lng !== null ? (float) $point->lng : null;

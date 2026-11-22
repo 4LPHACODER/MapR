@@ -19,10 +19,13 @@ final class MapSourceLocation
 
     public static function buildingSqlConstraint(string $alias = 'buildings'): string
     {
+        $lng = SpatialSql::longitudeExpr("{$alias}.geographic_point");
+        $lat = SpatialSql::latitudeExpr("{$alias}.geographic_point");
+
         return "{$alias}.geographic_point IS NOT NULL"
-            ." AND ST_Longitude({$alias}.geographic_point) BETWEEN 115 AND 130"
-            ." AND ST_Latitude({$alias}.geographic_point) BETWEEN 4 AND 15"
-            ." AND NOT (ST_Longitude({$alias}.geographic_point) = 0 AND ST_Latitude({$alias}.geographic_point) = 0)";
+            ." AND {$lng} BETWEEN 115 AND 130"
+            ." AND {$lat} BETWEEN 4 AND 15"
+            ." AND NOT ({$lng} = 0 AND {$lat} = 0)";
     }
 
     public static function unavailableReason(bool $hasBuilding, ?float $lng, ?float $lat, bool $inStudyArea = true): ?string

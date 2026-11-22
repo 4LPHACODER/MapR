@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use App\Support\SpatialSql;
 
 class MapSelectionPreviewService
 {
@@ -35,7 +36,7 @@ class MapSelectionPreviewService
 
         $bindings = [$wkt];
         $where = "buildings.geographic_point IS NOT NULL
-                  AND {$predicate}(buildings.geographic_point, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))";
+                  AND {$predicate}(buildings.geographic_point, " . SpatialSql::geomFromTextPlaceholder() . ")";
 
         if ($barangayId !== null) {
             $where .= ' AND buildings.barangay_id = ?';

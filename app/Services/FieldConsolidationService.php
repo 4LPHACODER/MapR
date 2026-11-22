@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Auth\User;
+use App\Support\SpatialSql;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -431,8 +432,8 @@ class FieldConsolidationService
                     'fa.assessment_reference',
                     'fa.workflow_stage',
                     'br.barangay_id as report_barangay_id',
-                    DB::raw('ST_Longitude(buildings.geographic_point) as lng'),
-                    DB::raw('ST_Latitude(buildings.geographic_point) as lat'),
+                    DB::raw(SpatialSql::longitudeExpr('buildings.geographic_point').' as lng'),
+                    DB::raw(SpatialSql::latitudeExpr('buildings.geographic_point').' as lat'),
                 ]);
             foreach ($points as $point) {
                 if ($point->lng === null || $point->lat === null) {
