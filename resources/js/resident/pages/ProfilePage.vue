@@ -1,5 +1,5 @@
 <script setup>
-import { computed, inject, nextTick, onMounted, ref } from 'vue';
+import { computed, inject, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { onBeforeRouteLeave } from 'vue-router';
 import Button from 'primevue/button';
 import { useConfirm } from 'primevue/useconfirm';
@@ -85,6 +85,12 @@ async function save() {
     }
 }
 
+function beforeUnload(event) {
+    if (!dirty.value) return;
+    event.preventDefault();
+    event.returnValue = '';
+}
+
 function onLogout(event) {
     if (!dirty.value) return;
     event.preventDefault();
@@ -119,7 +125,9 @@ onBeforeRouteLeave(() => {
 onMounted(() => {
     document.title = 'Profile | MapR';
     load();
+    window.addEventListener('beforeunload', beforeUnload);
 });
+onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload));
 </script>
 
 <template>
