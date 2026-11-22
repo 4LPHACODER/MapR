@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Cdrrmo;
 
 use App\Http\Controllers\Controller;
 use App\Services\ActivityLogger;
+use App\Support\SpatialSql;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,8 +22,8 @@ class BuildingLocationCorrectionController extends Controller
         DB::transaction(function () use ($row) {
             $proposed = DB::selectOne('SELECT ST_AsText(proposed_point) AS wkt FROM building_location_corrections WHERE id = ?', [$row->id]);
             DB::update(
-                "UPDATE buildings SET geographic_point = ST_GeomFromText(?, 4326, 'axis-order=long-lat'),
-                 location_verification_status = 'unverified', location_verified_by = NULL, location_verified_at = NULL, updated_at = ? WHERE id = ?",
+                'UPDATE buildings SET geographic_point = '.SpatialSql::geomFromTextPlaceholder().',
+                 location_verification_status = \'unverified\', location_verified_by = NULL, location_verified_at = NULL, updated_at = ? WHERE id = ?',
                 [$proposed->wkt, now(), $row->building_id],
             );
 

@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Throwable;
+use App\Support\SpatialSql;
 
 class DemoDataSeeder extends Seeder
 {
@@ -843,7 +844,7 @@ class DemoDataSeeder extends Seeder
     private function geometry(string $wkt): Expression
     {
         // Every WKT value comes from numeric coordinates generated in this seeder.
-        return DB::raw("ST_GeomFromText('{$wkt}', 4326, 'axis-order=long-lat')");
+        return DB::raw(SpatialSql::geomFromTextExpr("'" . str_replace("'", "''", $wkt) . "'"));
     }
 
     private function square(float $x, float $y, float $radius): Expression

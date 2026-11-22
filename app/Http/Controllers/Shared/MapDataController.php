@@ -11,6 +11,7 @@ use App\Services\ResidentReportWorkflow;
 use App\Support\DamageClassColor;
 use App\Support\MapLocationEligibility;
 use App\Support\MapSourceLocation;
+use App\Support\SpatialSql;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -119,10 +120,12 @@ class MapDataController extends Controller
 
         $source = MapSourceLocation::buildingSqlConstraint('buildings');
         [$where, $bindings] = $this->householdFilterSql($request, $source);
+        $lng = SpatialSql::longitudeExpr('buildings.geographic_point');
+        $lat = SpatialSql::latitudeExpr('buildings.geographic_point');
         $sql = "SELECT households.id AS household_id, households.household_reference,
                        buildings.id AS building_id, buildings.building_reference, buildings.barangay_id,
                        buildings.location_verification_status,
-                       ST_Longitude(buildings.geographic_point) AS lng, ST_Latitude(buildings.geographic_point) AS lat,
+                       {$lng} AS lng, {$lat} AS lat,
                        (SELECT COUNT(*) FROM households h2 WHERE h2.building_id = buildings.id AND h2.household_status = 'active') AS household_count_at_building
                 FROM households
                 JOIN buildings ON buildings.id = households.building_id
@@ -207,8 +210,10 @@ class MapDataController extends Controller
         }
 
         $source = MapSourceLocation::buildingSqlConstraint('buildings');
+        $lng = SpatialSql::longitudeExpr('buildings.geographic_point');
+        $lat = SpatialSql::latitudeExpr('buildings.geographic_point');
         $sql = "SELECT buildings.id, buildings.building_reference, damage_classes.class_name,
-                       ST_Longitude(buildings.geographic_point) AS lng, ST_Latitude(buildings.geographic_point) AS lat
+                       {$lng} AS lng, {$lat} AS lat
                 FROM building_verifications bv
                 JOIN buildings ON buildings.id = bv.building_id
                 JOIN damage_classes ON damage_classes.id = bv.verified_damage_class_id
@@ -255,8 +260,10 @@ class MapDataController extends Controller
         }
 
         $source = MapSourceLocation::buildingSqlConstraint('buildings');
+        $lng = SpatialSql::longitudeExpr('buildings.geographic_point');
+        $lat = SpatialSql::latitudeExpr('buildings.geographic_point');
         $sql = "SELECT buildings.id, buildings.building_reference, damage_classes.class_name,
-                       ST_Longitude(buildings.geographic_point) AS lng, ST_Latitude(buildings.geographic_point) AS lat
+                       {$lng} AS lng, {$lat} AS lat
                 FROM building_damage_predictions bdp
                 JOIN buildings ON buildings.id = bdp.building_id
                 JOIN damage_classes ON damage_classes.id = bdp.predicted_damage_class_id
@@ -338,7 +345,10 @@ class MapDataController extends Controller
                 ->count();
         }
         $point = DB::getDriverName() === 'mysql'
-            ? DB::selectOne('SELECT ST_Longitude(geographic_point) AS lng, ST_Latitude(geographic_point) AS lat FROM buildings WHERE id = ?', [$building->id])
+            ? DB::selectOne(
+                'SELECT '.SpatialSql::longitudeExpr('geographic_point').' AS lng, '.SpatialSql::latitudeExpr('geographic_point').' AS lat FROM buildings WHERE id = ?',
+                [$building->id],
+            )
             : null;
         $lng = $point?->lng !== null ? (float) $point->lng : null;
         $lat = $point?->lat !== null ? (float) $point->lat : null;

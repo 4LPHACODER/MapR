@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Cdrrmo;
 use App\Http\Controllers\Controller;
 use App\Models\Registry\Barangay;
 use App\Services\PolygonSpatial;
+use App\Support\SpatialSql;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -50,7 +51,7 @@ class AreaContextController extends Controller
 
         return Barangay::query()
             ->whereNotNull('boundary_polygon')
-            ->whereRaw("{$predicate}(boundary_polygon, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))", [$wkt])
+            ->whereRaw("{$predicate}(boundary_polygon, ".SpatialSql::geomFromTextPlaceholder().')', [$wkt])
             ->orderBy('barangay_name')
             ->pluck('barangay_name')
             ->all();

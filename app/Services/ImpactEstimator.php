@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
+use App\Support\SpatialSql;
 
 class ImpactEstimator
 {
@@ -60,7 +61,7 @@ class ImpactEstimator
     {
         $sql = "SELECT COUNT(DISTINCT id) AS aggregate FROM buildings
                 WHERE geographic_point IS NOT NULL
-                  AND {$predicate}(geographic_point, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))";
+                  AND {$predicate}(geographic_point, " . SpatialSql::geomFromTextPlaceholder() . ")";
         $bindings = [$wkt];
 
         if ($status !== null) {
@@ -78,7 +79,7 @@ class ImpactEstimator
                 JOIN buildings ON buildings.id = households.building_id
                 WHERE households.household_status = 'active'
                   AND buildings.geographic_point IS NOT NULL
-                  AND {$predicate}(buildings.geographic_point, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))";
+                  AND {$predicate}(buildings.geographic_point, " . SpatialSql::geomFromTextPlaceholder() . ")";
         $bindings = [$wkt];
 
         if ($status !== null) {
@@ -98,7 +99,7 @@ class ImpactEstimator
                 WHERE residents.residency_status = 'active'
                   AND households.household_status = 'active'
                   AND buildings.geographic_point IS NOT NULL
-                  AND {$predicate}(buildings.geographic_point, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))";
+                  AND {$predicate}(buildings.geographic_point, " . SpatialSql::geomFromTextPlaceholder() . ")";
         $bindings = [$wkt];
 
         if ($status !== null) {

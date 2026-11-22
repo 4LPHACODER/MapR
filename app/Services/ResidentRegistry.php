@@ -9,6 +9,7 @@ use App\Models\Registry\IncidentResidentInclusionEvent;
 use App\Models\Registry\Resident;
 use App\Support\MapSourceLocation;
 use App\Support\SourceName;
+use App\Support\SpatialSql;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -659,7 +660,7 @@ class ResidentRegistry
         $source = MapSourceLocation::buildingSqlConstraint('buildings');
         $query->whereHas('household.building', function ($building) use ($wkt, $predicate, $source) {
             $building->whereRaw(
-                "{$source} AND {$predicate}(buildings.geographic_point, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))",
+                "{$source} AND {$predicate}(buildings.geographic_point, ".SpatialSql::geomFromTextPlaceholder().')',
                 [$wkt],
             );
         });
@@ -761,7 +762,7 @@ class ResidentRegistry
         try {
             $placeholders = implode(',', array_fill(0, count($buildingIds), '?'));
             $rows = DB::select(
-                "SELECT id, ST_Longitude(geographic_point) AS lng, ST_Latitude(geographic_point) AS lat FROM buildings WHERE id IN ({$placeholders})",
+                'SELECT id, '.SpatialSql::longitudeExpr('geographic_point').' AS lng, '.SpatialSql::latitudeExpr('geographic_point')." AS lat FROM buildings WHERE id IN ({$placeholders})",
                 $buildingIds,
             );
         } catch (\Throwable) {

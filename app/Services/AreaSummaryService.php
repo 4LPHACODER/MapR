@@ -6,6 +6,7 @@ use App\Support\MapLocationEligibility;
 use App\Support\MapSourceLocation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use App\Support\SpatialSql;
 
 class AreaSummaryService
 {
@@ -70,7 +71,7 @@ class AreaSummaryService
 
         $sql = "SELECT COUNT(DISTINCT id) AS aggregate FROM buildings
                 WHERE geographic_point IS NOT NULL
-                  AND {$predicate}(geographic_point, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))";
+                  AND {$predicate}(geographic_point, " . SpatialSql::geomFromTextPlaceholder() . ")";
         $bindings = [$wkt];
 
         if ($status !== null) {
@@ -92,7 +93,7 @@ class AreaSummaryService
                 JOIN buildings ON buildings.id = households.building_id
                 WHERE households.household_status = 'active'
                   AND buildings.geographic_point IS NOT NULL
-                  AND {$predicate}(buildings.geographic_point, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))";
+                  AND {$predicate}(buildings.geographic_point, " . SpatialSql::geomFromTextPlaceholder() . ")";
         $bindings = [$wkt];
 
         if ($status !== null) {
@@ -116,7 +117,7 @@ class AreaSummaryService
                 WHERE residents.residency_status = 'active'
                   AND households.household_status = 'active'
                   AND buildings.geographic_point IS NOT NULL
-                  AND {$predicate}(buildings.geographic_point, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))";
+                  AND {$predicate}(buildings.geographic_point, " . SpatialSql::geomFromTextPlaceholder() . ")";
         $bindings = [$wkt];
 
         if ($status !== null) {
@@ -141,7 +142,7 @@ class AreaSummaryService
              JOIN buildings ON buildings.id = households.building_id
              WHERE households.household_status = 'active'
                AND {$source}
-               AND {$predicate}(buildings.geographic_point, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))",
+               AND {$predicate}(buildings.geographic_point, " . SpatialSql::geomFromTextPlaceholder() . ")",
             [$wkt],
         )->aggregate ?? 0);
     }
@@ -158,7 +159,7 @@ class AreaSummaryService
              FROM building_verifications bv
              JOIN buildings ON buildings.id = bv.building_id
              WHERE {$eligible}
-               AND {$predicate}(buildings.geographic_point, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))",
+               AND {$predicate}(buildings.geographic_point, " . SpatialSql::geomFromTextPlaceholder() . ")",
             [$wkt],
         )->aggregate ?? 0);
 
@@ -168,7 +169,7 @@ class AreaSummaryService
              JOIN buildings ON buildings.id = bv.building_id
              JOIN households ON households.building_id = buildings.id AND households.household_status = 'active'
              WHERE {$eligible}
-               AND {$predicate}(buildings.geographic_point, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))",
+               AND {$predicate}(buildings.geographic_point, " . SpatialSql::geomFromTextPlaceholder() . ")",
             [$wkt],
         )->aggregate ?? 0);
 
@@ -179,7 +180,7 @@ class AreaSummaryService
              JOIN households ON households.building_id = buildings.id AND households.household_status = 'active'
              JOIN residents ON residents.household_id = households.id AND residents.residency_status = 'active'
              WHERE {$eligible}
-               AND {$predicate}(buildings.geographic_point, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))",
+               AND {$predicate}(buildings.geographic_point, " . SpatialSql::geomFromTextPlaceholder() . ")",
             [$wkt],
         )->aggregate ?? 0);
 
@@ -206,7 +207,7 @@ class AreaSummaryService
              JOIN households ON households.id = residents.household_id AND households.household_status = 'active'
              JOIN buildings ON buildings.id = households.building_id
              WHERE {$eligible}
-               AND {$predicate}(buildings.geographic_point, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))
+               AND {$predicate}(buildings.geographic_point, " . SpatialSql::geomFromTextPlaceholder() . ")
              GROUP BY vc.category_name",
             [$wkt],
         );
@@ -218,7 +219,7 @@ class AreaSummaryService
              JOIN households ON households.id = residents.household_id
              JOIN buildings ON buildings.id = households.building_id
              WHERE {$eligible}
-               AND {$predicate}(buildings.geographic_point, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))",
+               AND {$predicate}(buildings.geographic_point, " . SpatialSql::geomFromTextPlaceholder() . ")",
             [$wkt],
         )->aggregate ?? 0);
 
@@ -241,7 +242,7 @@ class AreaSummaryService
                 $clauses = [];
                 $bindings = [];
                 foreach ($samples as [$lng, $lat]) {
-                    $clauses[] = "ST_Contains(boundary_polygon, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))";
+                    $clauses[] = "ST_Contains(boundary_polygon, " . SpatialSql::geomFromTextPlaceholder() . ")";
                     $bindings[] = sprintf('POINT(%F %F)', $lng, $lat);
                 }
                 $rows = DB::select(
@@ -259,7 +260,7 @@ class AreaSummaryService
             $rows = DB::select(
                 "SELECT barangay_name FROM barangays
                  WHERE boundary_polygon IS NOT NULL
-                   AND {$predicate}(boundary_polygon, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))
+                   AND {$predicate}(boundary_polygon, " . SpatialSql::geomFromTextPlaceholder() . ")
                  ORDER BY barangay_name",
                 [$wkt],
             );
@@ -327,7 +328,7 @@ class AreaSummaryService
         }
 
         $eligible = MapLocationEligibility::buildingSqlConstraint('buildings');
-        $inPoly = "{$predicate}(buildings.geographic_point, ST_GeomFromText(?, 4326, 'axis-order=long-lat'))";
+        $inPoly = "{$predicate}(buildings.geographic_point, " . SpatialSql::geomFromTextPlaceholder() . ")";
 
         $buildingsWithoutHousehold = Schema::hasTable('households')
             ? (int) (DB::selectOne(

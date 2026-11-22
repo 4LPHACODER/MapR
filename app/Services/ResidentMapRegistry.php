@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Support\MapSourceLocation;
 use App\Support\SourceName;
+use App\Support\SpatialSql;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -154,8 +155,8 @@ class ResidentMapRegistry
             ->join('buildings', 'buildings.id', '=', 'households.building_id')
             ->whereRaw(MapSourceLocation::buildingSqlConstraint('buildings'))
             ->select(['buildings.id as building_id'])
-            ->selectRaw('ST_Longitude(buildings.geographic_point) as lng')
-            ->selectRaw('ST_Latitude(buildings.geographic_point) as lat')
+            ->selectRaw(SpatialSql::longitudeExpr('buildings.geographic_point').' as lng')
+            ->selectRaw(SpatialSql::latitudeExpr('buildings.geographic_point').' as lat')
             ->selectRaw('CASE WHEN '.$exists.' THEN 1 ELSE 0 END as has_report', $bindings)
             ->get();
         $groups = [];
@@ -366,8 +367,8 @@ class ResidentMapRegistry
             ->whereIn('barangay_id', $ids === [] ? [0] : $ids)
             ->whereRaw(MapSourceLocation::buildingSqlConstraint('buildings'))
             ->select('buildings.id')
-            ->selectRaw('ST_Longitude(buildings.geographic_point) as lng')
-            ->selectRaw('ST_Latitude(buildings.geographic_point) as lat')
+            ->selectRaw(SpatialSql::longitudeExpr('buildings.geographic_point').' as lng')
+            ->selectRaw(SpatialSql::latitudeExpr('buildings.geographic_point').' as lat')
             ->get();
         $found = [];
         foreach ($rows as $row) {
@@ -457,7 +458,7 @@ class ResidentMapRegistry
         $row = DB::table('buildings')
             ->where('id', $buildingId)
             ->whereRaw(MapSourceLocation::buildingSqlConstraint('buildings'))
-            ->selectRaw('ST_Longitude(geographic_point) as lng, ST_Latitude(geographic_point) as lat')
+            ->selectRaw(SpatialSql::longitudeExpr('geographic_point').' as lng, '.SpatialSql::latitudeExpr('geographic_point').' as lat')
             ->first();
         if ($row === null) {
             return null;

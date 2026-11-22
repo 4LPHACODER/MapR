@@ -7,6 +7,7 @@ use App\Models\Registry\Building;
 use App\Models\Registry\BuildingLocationReview;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use App\Support\SpatialSql;
 
 class BuildingLocationReviewService
 {
@@ -122,7 +123,7 @@ class BuildingLocationReviewService
 
         $inSelection = (bool) DB::selectOne(
             "SELECT 1 AS ok FROM buildings WHERE id = ? AND geographic_point IS NOT NULL
-             AND {$predicate}(geographic_point, ST_GeomFromText(?, 4326, 'axis-order=long-lat')) LIMIT 1",
+             AND {$predicate}(geographic_point, " . SpatialSql::geomFromTextPlaceholder() . ") LIMIT 1",
             [$buildingId, $wkt],
         )?->ok;
 

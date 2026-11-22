@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use App\Support\SpatialSql;
 
 class PolygonSpatial
 {
@@ -75,7 +76,7 @@ class PolygonSpatial
         }
 
         $row = DB::selectOne(
-            "SELECT ST_IsValid(ST_GeomFromText(?, 4326, 'axis-order=long-lat')) AS valid",
+            "SELECT ST_IsValid(" . SpatialSql::geomFromTextPlaceholder() . ") AS valid",
             [$wkt],
         );
 
